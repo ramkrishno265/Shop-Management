@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CASHIER
+}
+
+model User {
+  id        Int         @id @default(autoincrement())
+  name      String
+  email     String      @unique
+  password  String
+  role      Role        @default(CASHIER)
+  createdAt DateTime    @default(now())
+  invoices  Invoice[]
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id            Int          @id @default(autoincrement())
+  name          String
+  sku           String?      @unique
+  categoryId    Int?
+  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  purchasePrice Float
+  sellingPrice  Float
+  stockQuantity Int          @default(0)
+  attributes    Json?
+  createdAt     DateTime     @default(now())
+  salesItems    SalesItem[]
+}
+
+model Invoice {
+  id            Int          @id @default(autoincrement())
+  invoiceNumber String       @unique
+  cashierId     Int
+  cashier       User         @relation(fields: [cashierId], references: [id])
+  totalAmount   Float
+  discount      Float        @default(0.0)
+  payableAmount Float
+  paymentMethod String       @default("CASH")
+  createdAt     DateTime     @default(now())
+  items         SalesItem[]
+}
+
+model SalesItem {
+  id        Int       @id @default(autoincrement())
+  invoiceId Int
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId Int?
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quantity  Int
+  unitPrice Float
+}
