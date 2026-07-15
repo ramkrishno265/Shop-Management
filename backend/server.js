@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes.js';
+import productRoutes from "./routes/productRoutes.js"; // (.js এক্সটেনশনসহ import ব্যবহার করা হয়েছে)
 
 dotenv.config();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 // Routes Middleware
 app.use('/api/auth', authRoutes);
+app.use("/api/products", productRoutes); // এন্ডপয়েন্ট এখন: http://localhost:5000/api/products
 
 // Test Base Route
 app.get('/', (req, res) => {
