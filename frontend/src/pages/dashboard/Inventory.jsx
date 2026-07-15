@@ -3,9 +3,11 @@ import axios from "axios";
 
 export default function Inventory() {
   const API_URL = "http://localhost:5000/api/products";
+  const CATEGORY_API_URL = "http://localhost:5000/api/categories";
 
   // --- States ---
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
@@ -15,39 +17,50 @@ export default function Inventory() {
   const [formData, setFormData] = useState({
     name: "",
     sku: "",
-    category: "Electronics",
-    price: "",
-    stock: "",
+    category: "",
+    purchasePrice: "",
+    sellingPrice: "",
+    quantity: "",
+    unit: "Pcs",
+    description: "",
   });
 
-  // Product Name-এর ড্রপডাউন সাজেশন ও ফোকাস কন্ট্রোল করার স্টেট
+  // সাজেশন স্টেট সমূহ
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [categorySuggestions, setCategorySuggestions] = useState([]);
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
 
-
-  // --- ১. এপিআই থেকে প্রোডাক্ট ডেটা লোড করা ---
+  // --- ১. এপিআই থেকে প্রোডাক্ট ও ক্যাটাগরি ডেটা লোড করা ---
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(API_URL);
-        if (Array.isArray(response.data)) {
-          setProducts(response.data);
+        const [productsRes, categoriesRes] = await Promise.all([
+          axios.get(API_URL),
+          axios.get(CATEGORY_API_URL).catch(() => ({ data: [] })) // ক্যাটাগরি এপিআই ফেইল করলেও ক্র্যাশ করবে না
+        ]);
+
+        if (Array.isArray(productsRes.data)) {
+          setProducts(productsRes.data);
         } else {
           setProducts([]);
         }
+
+        if (Array.isArray(categoriesRes.data)) {
+          setCategories(categoriesRes.data);
+        }
       } catch (error) {
-        console.error("Error fetching products:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProducts();
+    fetchData();
   }, [API_URL]);
 
-
-  // --- ২. ইনপুট হ্যান্ডল করা এবং সাজেশন ফিল্টার করা ---
+  // --- ২. সিঙ্গেল জেনেরিক ইনপুট হ্যান্ডলার (সাজেশন লজিক সহ) ---
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -56,45 +69,50 @@ export default function Inventory() {
       [name]: value,
     }));
 
-    // প্রোডাক্ট নাম টাইপ করার সময় সাজেশন চেক করা
+    // ক) প্রোডাক্ট নেম টাইপ করার সময় সাজেশন ফিল্টার
     if (name === "name") {
       if (value.trim() === "") {
         setSuggestions([]);
         setShowSuggestions(false);
       } else {
-        // আগের প্রোডাক্ট লিস্ট থেকে টাইপ করা অক্ষরের সাথে মিল আছে এমন ইউনিক নামগুলো ফিল্টার করা
         const matched = products
-          .filter(
-            (p) => p.name && p.name.toLowerCase().includes(value.toLowerCase())
-          )
+          .filter((p) => p.name && p.name.toLowerCase().includes(value.toLowerCase()))
           .map((p) => p.name);
-
-        // ডুপ্লিকেট নাম বাদ দিয়ে ইউনিক করা
         const uniqueSuggestions = [...new Set(matched)];
-
         setSuggestions(uniqueSuggestions);
         setShowSuggestions(uniqueSuggestions.length > 0);
       }
     }
+
+    // খ) ক্যাটাগরি টাইপ করার সময় সাজেশন ফিল্টার
+    if (name === "category") {
+      if (value.trim() === "") {
+        setCategorySuggestions([]);
+        setShowCategorySuggestions(false);
+      } else {
+        const matched = categories.filter((cat) =>
+          cat.name.toLowerCase().includes(value.toLowerCase())
+        );
+        setCategorySuggestions(matched);
+        setShowCategorySuggestions(matched.length > 0);
+      }
+    }
   };
 
-
-  // --- ৩. এপিআই কল করে প্রোডাক্ট অ্যাড করা ---
+  // --- ৩. নতুন প্রোডাক্ট অ্যাড করা ---
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const stockQty = parseInt(formData.stock) || 0;
-    let currentStatus = "In Stock";
-    if (stockQty === 0) currentStatus = "Out of Stock";
-    else if (stockQty <= 15) currentStatus = "Low Stock";
-
+    // ব্যাকএন্ড স্কিমা অনুযায়ী ডেটা অবজেক্ট তৈরি
     const productData = {
       name: formData.name,
       sku: formData.sku || `SKU-${Math.floor(Math.random() * 100000)}`,
-      category: formData.category,
-      price: parseFloat(formData.price) || 0,
-      stock: stockQty,
-      status: currentStatus,
+      category: formData.category || "General",
+      purchasePrice: parseFloat(formData.purchasePrice) || 0,
+      sellingPrice: parseFloat(formData.sellingPrice) || 0,
+      quantity: parseFloat(formData.quantity) || 0,
+      unit: formData.unit,
+      description: formData.description,
     };
 
     try {
@@ -102,46 +120,45 @@ export default function Inventory() {
 
       if (response.status === 201 || response.status === 200) {
         const savedProduct = response.data;
-        // রিলোড ছাড়াই নতুন প্রোডাক্টটি তালিকার শুরুতে যোগ করা
-        setProducts((prevProducts) => [savedProduct, ...prevProducts]);
+        
+        // রিলোড ছাড়াই প্রোডাক্ট লিস্ট এবং ক্যাটাগরি লিস্ট আপডেট করা
+        setProducts((prev) => [savedProduct, ...prev]);
+        if (savedProduct.category && !categories.some(c => c.id === savedProduct.categoryId)) {
+          setCategories((prev) => [...prev, savedProduct.category]);
+        }
 
-        // ফর্ম রিসেট ও পপআপ বন্ধ করা
+        // ফর্ম ও স্টেট রিসেট করা
         setFormData({
           name: "",
           sku: "",
-          category: "Electronics",
-          price: "",
-          stock: "",
+          category: "",
+          purchasePrice: "",
+          sellingPrice: "",
+          quantity: "",
+          unit: "Pcs",
+          description: "",
         });
         setSuggestions([]);
         setShowSuggestions(false);
+        setCategorySuggestions([]);
+        setShowCategorySuggestions(false);
         setAddProductPopup(false);
         alert("Product added successfully!");
       }
     } catch (error) {
       console.error("Error saving product:", error);
-      alert(
-        error.response?.data?.message ||
-          "Something went wrong! Please try again."
-      );
+      alert(error.response?.data?.message || "Something went wrong!");
     }
   };
 
-
   // --- ৪. প্রোডাক্ট ডিলিট করা ---
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this product?"))
-      return;
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
 
     try {
       const response = await axios.delete(`${API_URL}/${id}`);
-
       if (response.status === 200) {
-        setProducts((prevProducts) =>
-          prevProducts.filter(
-            (product) => product.id !== id && product._id !== id
-          )
-        );
+        setProducts((prev) => prev.filter((p) => p.id !== id));
         alert("Product deleted successfully!");
       }
     } catch (error) {
@@ -150,32 +167,31 @@ export default function Inventory() {
     }
   };
 
-
-  // ফিল্টারিং লজিক
+  // --- ৫. ফ্রন্টএন্ড সার্চ ও ফিল্টারিং লজিক ---
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
       product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.sku?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // ক্যাটাগরি এখন একটি অবজেক্ট: { id, name }
+    const categoryName = product.category?.name || "Uncategorized";
     const matchesCategory =
-      selectedCategory === "All" || product.category === selectedCategory;
+      selectedCategory === "All" || categoryName === selectedCategory;
+
     return matchesSearch && matchesCategory;
   });
 
-
-  // স্টকের কালার নির্ধারণ
+  // স্কিমার স্ট্যাটাস কালার হ্যান্ডলার
   const getStatusStyle = (status) => {
     switch (status) {
-      case "In Stock":
+      case "ACTIVE":
         return "bg-emerald-50 text-emerald-700 border-emerald-200";
-      case "Low Stock":
-        return "bg-amber-50 text-amber-700 border-amber-200";
-      case "Out of Stock":
+      case "INACTIVE":
         return "bg-rose-50 text-rose-700 border-rose-200";
       default:
         return "bg-slate-50 text-slate-700 border-slate-200";
     }
   };
-
 
   return (
     <div className="space-y-6">
@@ -190,7 +206,7 @@ export default function Inventory() {
           </p>
         </div>
         <button
-          className="inline-flex items-center justify-center px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-xl text-sm shadow-xs transition-all cursor-pointer"
+          className="inline-flex items-center justify-center px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-xl text-sm shadow-sm transition-all cursor-pointer"
           onClick={() => setAddProductPopup(true)}
         >
           <span>+ Add Product</span>
@@ -208,29 +224,26 @@ export default function Inventory() {
           },
           {
             title: "Total Stock Volume",
-            value: products.reduce(
-              (acc, p) => acc + (parseInt(p.stock) || 0),
-              0
-            ),
+            value: products.reduce((acc, p) => acc + (parseFloat(p.quantity) || 0), 0),
             icon: "📊",
             color: "text-emerald-600",
           },
           {
-            title: "Low Stock Items",
-            value: products.filter((p) => p.status === "Low Stock").length,
+            title: "Low Stock Items (<= 5)",
+            value: products.filter((p) => (parseFloat(p.quantity) || 0) <= 5 && (parseFloat(p.quantity) || 0) > 0).length,
             icon: "⚠️",
             color: "text-amber-600",
           },
           {
             title: "Out of Stock",
-            value: products.filter((p) => p.status === "Out of Stock").length,
+            value: products.filter((p) => (parseFloat(p.quantity) || 0) === 0).length,
             icon: "🚫",
             color: "text-rose-600",
           },
         ].map((stat, i) => (
           <div
             key={i}
-            className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs flex items-center justify-between"
+            className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between"
           >
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -240,9 +253,7 @@ export default function Inventory() {
                 {stat.value}
               </h3>
             </div>
-            <div
-              className={`text-2xl p-2 bg-slate-50 rounded-lg ${stat.color}`}
-            >
+            <div className={`text-2xl p-2 bg-slate-50 rounded-lg ${stat.color}`}>
               {stat.icon}
             </div>
           </div>
@@ -250,35 +261,35 @@ export default function Inventory() {
       </div>
 
       {/* ৩. FILTER & SEARCH BAR */}
-      <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
+      <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-4 border border-slate-200 rounded-xl shadow-xs">
         <div className="w-full sm:flex-1 relative">
-          <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">
-            🔍
-          </span>
+          <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔍</span>
           <input
             type="text"
             placeholder="Search by product name or SKU..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
           />
         </div>
         <div className="w-full sm:w-48">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-hidden focus:bg-white focus:border-slate-900 transition-all cursor-pointer"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:bg-white focus:border-slate-900 transition-all cursor-pointer"
           >
             <option value="All">All Categories</option>
-            <option value="Electronics">Electronics</option>
-            <option value="Accessories">Accessories</option>
-            <option value="Footwear">Footwear</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.name}>
+                {cat.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
-      {/* ৪. DATA TABLE CONTAINER */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+      {/* ৪. DATA TABLE */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -286,7 +297,8 @@ export default function Inventory() {
                 <th className="px-6 py-3.5">Product Info</th>
                 <th className="px-6 py-3.5">SKU</th>
                 <th className="px-6 py-3.5">Category</th>
-                <th className="px-6 py-3.5">Price</th>
+                <th className="px-6 py-3.5">Purchase Price</th>
+                <th className="px-6 py-3.5">Selling Price</th>
                 <th className="px-6 py-3.5">Stock Quantity</th>
                 <th className="px-6 py-3.5">Status</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
@@ -295,19 +307,13 @@ export default function Inventory() {
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {loading ? (
                 <tr>
-                  <td
-                    colSpan="7"
-                    className="px-6 py-10 text-center text-sm text-slate-400"
-                  >
+                  <td colSpan="8" className="px-6 py-10 text-center text-sm text-slate-400">
                     Loading products...
                   </td>
                 </tr>
               ) : filteredProducts.length > 0 ? (
                 filteredProducts.map((product) => (
-                  <tr
-                    key={product._id || product.id}
-                    className="hover:bg-slate-50/50 transition-colors"
-                  >
+                  <tr key={product.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900">
                       {product.name}
                     </td>
@@ -315,35 +321,28 @@ export default function Inventory() {
                       {product.sku}
                     </td>
                     <td className="px-6 py-4 text-slate-500">
-                      {product.category}
+                      {product.category?.name || "Uncategorized"}
                     </td>
-                    <td className="px-6 py-4 font-medium text-slate-900">
-                      ${Number(product.price).toFixed(2)}
+                    <td className="px-6 py-4 text-slate-500">
+                      ৳{Number(product.purchasePrice).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-900">
+                      ৳{Number(product.sellingPrice).toFixed(2)}
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`font-semibold ${
-                          product.stock <= 15
-                            ? "text-amber-600"
-                            : "text-slate-700"
-                        }`}
-                      >
-                        {product.stock} units
+                      <span className={`font-semibold ${product.quantity <= 5 ? "text-amber-600" : "text-slate-700"}`}>
+                        {product.quantity} {product.unit || "Pcs"}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`px-2.5 py-1 text-xs font-medium border rounded-md ${getStatusStyle(
-                          product.status
-                        )}`}
-                      >
+                      <span className={`px-2.5 py-1 text-xs font-medium border rounded-md ${getStatusStyle(product.status)}`}>
                         {product.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
                       <button
                         className="text-xs font-medium text-rose-600 hover:text-rose-900 hover:underline cursor-pointer"
-                        onClick={() => handleDelete(product._id || product.id)}
+                        onClick={() => handleDelete(product.id)}
                       >
                         Delete
                       </button>
@@ -352,10 +351,7 @@ export default function Inventory() {
                 ))
               ) : (
                 <tr>
-                  <td
-                    colSpan="7"
-                    className="px-6 py-10 text-center text-sm text-slate-400"
-                  >
+                  <td colSpan="8" className="px-6 py-10 text-center text-sm text-slate-400">
                     No products found matching the criteria.
                   </td>
                 </tr>
@@ -367,7 +363,7 @@ export default function Inventory() {
 
       {/* ৫. ADD PRODUCT POPUP */}
       {addProductPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div
             className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
             onClick={() => setAddProductPopup(false)}
@@ -375,12 +371,8 @@ export default function Inventory() {
           <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden transform transition-all max-h-[calc(100vh-2rem)] flex flex-col z-10">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Add New Product
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Fill in the item specifics to update the stock.
-                </p>
+                <h2 className="text-lg font-bold text-slate-900">Add New Product</h2>
+                <p className="text-xs text-slate-500">Fill in the item specifics to update the stock.</p>
               </div>
               <button
                 onClick={() => setAddProductPopup(false)}
@@ -390,10 +382,7 @@ export default function Inventory() {
               </button>
             </div>
 
-            <form
-              onSubmit={handleSubmit}
-              className="flex-1 overflow-y-auto p-6 space-y-4"
-            >
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
               {/* Product Name (সাজেশন ড্রপডাউন সহ) */}
               <div className="relative">
                 <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
@@ -406,17 +395,11 @@ export default function Inventory() {
                   autoComplete="off"
                   value={formData.name}
                   onChange={handleChange}
-                  onFocus={() => {
-                    if (formData.name.trim() !== "" && suggestions.length > 0) {
-                      setShowSuggestions(true);
-                    }
-                  }}
+                  onFocus={() => formData.name.trim() !== "" && suggestions.length > 0 && setShowSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  placeholder="e.g. Wireless Mouse"
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
+                  placeholder="e.g. Miniket Rice"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
                 />
-
-                {/* সাজেশন ড্রপডাউন মেনু */}
                 {showSuggestions && suggestions.length > 0 && (
                   <ul className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg divide-y divide-slate-100">
                     {suggestions.map((name, index) => (
@@ -445,58 +428,128 @@ export default function Inventory() {
                     name="sku"
                     value={formData.sku}
                     onChange={handleChange}
-                    placeholder="e.g. MS-WRLS-01"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
+                    placeholder="e.g. RC-MNKT-50"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
+                  />
+                </div>
+                <div className="relative">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Category *
+                  </label>
+                  <input
+                    type="text"
+                    name="category"
+                    required
+                    autoComplete="off"
+                    value={formData.category}
+                    onChange={handleChange}
+                    onFocus={() => formData.category.trim() !== "" && categorySuggestions.length > 0 && setShowCategorySuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowCategorySuggestions(false), 200)}
+                    placeholder="Type or select category..."
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
+                  />
+                  {showCategorySuggestions && categorySuggestions.length > 0 && (
+                    <ul className="absolute left-0 right-0 z-50 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg divide-y divide-slate-100">
+                      {categorySuggestions.map((cat) => (
+                        <li
+                          key={cat.id}
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, category: cat.name }));
+                            setShowCategorySuggestions(false);
+                          }}
+                          className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                        >
+                          {cat.name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {/* দামের হিসাব */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Purchase Price (৳) *
+                  </label>
+                  <input
+                    type="number"
+                    name="purchasePrice"
+                    step="0.01"
+                    required
+                    value={formData.purchasePrice}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Category *
+                    Selling Price (৳) *
+                  </label>
+                  <input
+                    type="number"
+                    name="sellingPrice"
+                    step="0.01"
+                    required
+                    value={formData.sellingPrice}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* স্টক ও ইউনিট */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Stock Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    step="any"
+                    required
+                    value={formData.quantity}
+                    onChange={handleChange}
+                    placeholder="0"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Unit *
                   </label>
                   <select
-                    name="category"
-                    required
-                    value={formData.category}
+                    name="unit"
+                    value={formData.unit}
                     onChange={handleChange}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-hidden focus:bg-white focus:border-slate-900 transition-all cursor-pointer"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:bg-white focus:border-slate-900 transition-all cursor-pointer"
                   >
-                    <option value="Electronics">Electronics</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Footwear">Footwear</option>
+                    <option value="Pcs">Pieces (Pcs)</option>
+                    <option value="KG">Kilogram (KG)</option>
+                    <option value="GM">Gram (GM)</option>
+                    <option value="Liter">Liter</option>
+                    <option value="Box">Box</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Selling Price ($) *
-                  </label>
-                  <input
-                    type="number"
-                    name="price"
-                    step="0.01"
-                    required
-                    value={formData.price}
-                    onChange={handleChange}
-                    placeholder="0.00"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Stock Qty *
-                  </label>
-                  <input
-                    type="number"
-                    name="stock"
-                    required
-                    value={formData.stock}
-                    onChange={handleChange}
-                    placeholder="0"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
-                  />
-                </div>
+              {/* ডেসক্রিপশন বা অতিরিক্ত তথ্য */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  rows="2"
+                  value={formData.description}
+                  onChange={handleChange}
+                  placeholder="Optional product description..."
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all resize-none"
+                />
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 bg-white sticky bottom-0 z-10">
@@ -509,7 +562,7 @@ export default function Inventory() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-sm transition-all cursor-pointer"
                 >
                   Save Product
                 </button>

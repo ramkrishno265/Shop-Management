@@ -24,22 +24,36 @@ model User {
 }
 
 model Category {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
-  products Product[]
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  products  Product[]
 }
 
 model Product {
-  id            Int          @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   name          String
-  sku           String?      @unique
-  categoryId    Int?
-  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sku           String?   @unique
+  
+  // স্টকের হিসাব
+  quantity      Float     @default(0)
+  unit          String    // e.g. KG, Liter, Pcs, GM
+  lowStockLimit Float     @default(5)
+
+  // দামের হিসাব
   purchasePrice Float
   sellingPrice  Float
-  stockQuantity Int          @default(0)
-  attributes    Json?
-  createdAt     DateTime     @default(now())
+
+  // রিলেশনশিপ (ক্যাটাগরি)
+  categoryId    Int?
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // অন্যান্য তথ্য
+  description   String?
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // 🔽 এই লাইনটি অবশ্যই যোগ করো (SalesItem এর সাথে রিলেশন ঠিক করার জন্য)
   salesItems    SalesItem[]
 }
 

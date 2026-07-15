@@ -1,69 +1,123 @@
-// রিয়েল-লাইফ ডেটাবেজ কানেক্ট না হওয়া পর্যন্ত আমরা একটি খালি অ্যারে দিয়ে শুরু করছি
-let products = [];
+import prisma from "../config/db.js";
 
-// ১. সব প্রোডাক্ট গেট করা
+// ১. সব প্রোডাক্ট ক্যাটাগরিসহ গেট করা (Database থেকে)
 export const getProducts = async (req, res) => {
   try {
+    const products = await prisma.product.findMany({
+      include: {
+        category: true, // যাতে প্রতিটি প্রোডাক্টের সাথে তার ক্যাটাগরির অবজেক্টও চলে আসে
+      },
+      orderBy: {
+        createdAt: "desc", // নতুন এড করা প্রোডাক্টগুলো লিস্টের শুরুতে দেখাবে
+      },
+    });
     res.status(200).json(products);
   } catch (error) {
-    res.status(500).json({ message: "Server error while fetching products", error: error.message });
+    res.status(500).json({ 
+      message: "Server error while fetching products", 
+      error: error.message 
+    });
   }
 };
 
-// ২. নতুন প্রোডাক্ট তৈরি করা
+// ২. নতুন প্রোডাক্ট তৈরি করা (Database-এ সংরক্ষণ)
 export const createProduct = async (req, res) => {
   try {
-    const { name, sku, category, price, stock, status } = req.body;
+    const { 
+      name, 
+      sku, 
+      category,        // ফ্রন্টএন্ড থেকে ক্যাটাগরির নাম (String) আসবে
+      quantity,        // প্রোডাক্টের স্টক বা পরিমাণ
+      unit,            // e.g. KG, Liter, Pcs, GM ইত্যাদি
+      purchasePrice,   // কেনার দাম
+      sellingPrice,    // বিক্রির দাম
+      description      // প্রোডাক্টের বিবরণ (অপশনাল)
+    } = req.body;
 
-    // ভ্যালিডেশন
-    if (!name || !category || price === undefined || stock === undefined) {
+    // ম্যান্ডেটরি ফিল্ডগুলোর ভ্যালিডেশন
+    if (!name || !category || !unit || purchasePrice === undefined || sellingPrice === undefined) {
       return res.status(400).json({ message: "Required fields are missing!" });
     }
 
-    const stockQty = parseInt(stock) || 0;
-    
-    // স্টকের উপর ভিত্তি করে স্ট্যাটাস অটো-ক্যালকুলেট করা
-    let finalStatus = status;
-    if (!finalStatus) {
-      if (stockQty === 0) finalStatus = "Out of Stock";
-      else if (stockQty <= 15) finalStatus = "Low Stock";
-      else finalStatus = "In Stock";
+    const stockQty = parseFloat(quantity) || 0;
+    const pPrice = parseFloat(purchasePrice) || 0;
+    const sPrice = parseFloat(sellingPrice) || 0;
+
+    // ১. চেক করা এই নামের ক্যাটাগরি ডেটাবেজে অলরেডি আছে কিনা (Case Insensitive)
+    let dbCategory = await prisma.category.findFirst({
+      where: {
+        name: {
+          equals: category.trim(),
+          mode: 'insensitive' // ক্যাপিটাল বা স্মল লেটার যাই হোক, মিল থাকলে সেটিই ধরবে
+        }
+      }
+    });
+
+    // ২. যদি ক্যাটাগরি না থাকে, তবে সেটি অটোমেটিক নতুন ক্যাটাগরি হিসেবে তৈরি করা
+    if (!dbCategory) {
+      dbCategory = await prisma.category.create({
+        data: {
+          name: category.trim()
+        }
+      });
     }
 
-    const newProduct = {
-      id: Date.now(), // ইউনিক আইডি জেনারেশন
-      name,
-      sku: sku || `SKU-${Math.floor(Math.random() * 100000)}`,
-      category,
-      price: parseFloat(price) || 0,
-      stock: stockQty,
-      status: finalStatus
-    };
-
-    // ডেটা এরে-র শুরুতে পুশ করা
-    products.unshift(newProduct);
+    // ৩. নতুন স্কিমা অনুযায়ী প্রোডাক্ট তৈরি করা
+    const newProduct = await prisma.product.create({
+      data: {
+        name,
+        sku: sku || `SKU-${Math.floor(Math.random() * 100000)}`,
+        quantity: stockQty,
+        unit: unit,
+        purchasePrice: pPrice,
+        sellingPrice: sPrice,
+        categoryId: dbCategory.id, // ক্যাটাগরির অটো-ক্যালকুলেটেড আইডি এখানে বসবে
+        description: description || null,
+        status: stockQty > 0 ? "ACTIVE" : "INACTIVE" // স্টক শূন্যের বেশি থাকলে ACTIVE, অন্যথায় INACTIVE
+      },
+      include: {
+        category: true // রেসপন্সে ক্যাটাগরি ইনফোও রিটার্ন করবে
+      }
+    });
 
     res.status(201).json(newProduct);
   } catch (error) {
-    res.status(500).json({ message: "Server error while saving product", error: error.message });
+    res.status(500).json({ 
+      message: "Server error while saving product", 
+      error: error.message 
+    });
   }
 };
 
-// ৩. প্রোডাক্ট ডিলিট করা
+// ৩. প্রোডাক্ট ডিলিট করা (Database থেকে)
 export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const initialLength = products.length;
+    const productId = parseInt(id);
 
-    // আইডি দিয়ে ফিল্টার করা (যেহেতু রিকোয়েস্ট থেকে আসা id একটি string, তাই parseInt করা হয়েছে)
-    products = products.filter((product) => product.id !== parseInt(id));
+    if (isNaN(productId)) {
+      return res.status(400).json({ message: "Invalid product ID!" });
+    }
 
-    if (products.length === initialLength) {
+    // প্রথমে প্রোডাক্টটি ডেটাবেজে আছে কিনা তা চেক করা
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: productId },
+    });
+
+    if (!existingProduct) {
       return res.status(404).json({ message: "Product not found!" });
     }
 
+    // ডেটাবেজ থেকে মুছে ফেলা
+    await prisma.product.delete({
+      where: { id: productId },
+    });
+
     res.status(200).json({ message: "Product deleted successfully!" });
   } catch (error) {
-    res.status(500).json({ message: "Server error while deleting product", error: error.message });
+    res.status(500).json({ 
+      message: "Server error while deleting product", 
+      error: error.message 
+    });
   }
 };
