@@ -1,10 +1,11 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/auth/Login';
-import SignUp from './pages/auth/SignUp'; 
+import SignUp from './pages/auth/SignUp';
 import DashboardHome from './pages/dashboard/DashboardHome.jsx';
 import Inventory from './pages/dashboard/Inventory.jsx';
 import DashboardLayout from './components/common/DashboardLayout.jsx';
+import SalePage from './pages/dashboard/SalePage.jsx';
 
 // Protected Route Guard Component
 const ProtectedRoute = ({ children }) => {
@@ -21,7 +22,7 @@ function App() {
       <Routes>
         {/* পাবলিক রুটস */}
         <Route path="/" element={<Login />} />
-        <Route path="/signup" element={<SignUp />} /> 
+        <Route path="/signup" element={<SignUp />} />
 
         {/* প্রোটেক্টেড ড্যাশবোর্ড রুট */}
         <Route
@@ -49,6 +50,21 @@ function App() {
 
         {/* ফলব্যাক রুট */}
         <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="/salePage"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <SalePage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ফলব্যাক রুট */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
+
       </Routes>
     </Router>
   );

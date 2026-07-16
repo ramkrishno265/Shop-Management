@@ -1,6 +1,8 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function DashboardHome() {
+  const navigate = useNavigate();
   // ডেমো ডেটা (কোনো এক্সটার্নাল আইকন লাইব্রেরি লাগবে না)
   const kpiCards = [
     { title: "Today's Sales", value: '৳ ২৫,৫০০', change: '+১২% গত কাল থেকে', icon: '💰', color: 'border-green-500 bg-green-50/50' },
@@ -30,7 +32,10 @@ export default function DashboardHome() {
           <p className="text-sm text-slate-500 mt-0.5">Real-time statistics and quick shop metrics.</p>
         </div>
         {/* কুইক অ্যাকশন বাটন */}
-        <button className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm➡️">
+        <button 
+        onClick={() => navigate('/salePage')}
+        className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm➡️">
+          
           <span>➕</span> New Sale (POS)
         </button>
       </div>
