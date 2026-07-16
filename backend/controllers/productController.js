@@ -1,16 +1,30 @@
 import prisma from "../config/db.js";
 
-// ১. সব প্রোডাক্ট ক্যাটাগরিসহ গেট করা (Database থেকে)
+// ১. সব প্রোডাক্ট ক্যাটাগরিসহ গেট করা (শপ ফিল্টারিং সহ)
+// ১. সব প্রোডাক্ট ক্যাটাগরিসহ গেট করা (প্রত্যেক ইউজার শুধুমাত্র তার নিজস্ব শপের প্রোডাক্ট দেখবে)
 export const getProducts = async (req, res) => {
   try {
+    const { shopId } = req.user; // 💡 রোল নির্বিশেষে সরাসরি ইউজারের শপ আইডি নেওয়া হলো
+    let whereCondition = {};
+
+    // 🔒 সিকিউরিটি চেক: যে কোনো ইউজার (ADMIN/MANAGER/CASHIER) এর শপ আইডি না থাকলে এরর দেবে
+    if (!shopId) {
+      return res.status(400).json({ message: "আপনার কোনো নির্দিষ্ট শপ অ্যাসাইন করা নেই।" });
+    }
+    
+    // শুধুমাত্র ওই নির্দিষ্ট শপের প্রোডাক্টগুলো ফিল্টার করবে
+    whereCondition.shopId = Number(shopId);
+
     const products = await prisma.product.findMany({
+      where: whereCondition,
       include: {
-        category: true, // যাতে প্রতিটি প্রোডাক্টের সাথে তার ক্যাটাগরির অবজেক্টও চলে আসে
+        category: true, 
       },
       orderBy: {
-        createdAt: "desc", // নতুন এড করা প্রোডাক্টগুলো লিস্টের শুরুতে দেখাবে
+        createdAt: "desc", 
       },
     });
+
     res.status(200).json(products);
   } catch (error) {
     res.status(500).json({ 
@@ -20,19 +34,33 @@ export const getProducts = async (req, res) => {
   }
 };
 
-// ২. নতুন প্রোডাক্ট তৈরি করা (Database-এ সংরক্ষণ)
+// ২. নতুন প্রোডাক্ট তৈরি করা (Database-এ সংরক্ষণ + shopId ট্যাগিং)
 export const createProduct = async (req, res) => {
   try {
     const { 
       name, 
       sku, 
-      category,        // ফ্রন্টএন্ড থেকে ক্যাটাগরির নাম (String) আসবে
-      quantity,        // প্রোডাক্টের স্টক বা পরিমাণ
-      unit,            // e.g. KG, Liter, Pcs, GM ইত্যাদি
-      purchasePrice,   // কেনার দাম
-      sellingPrice,    // বিক্রির দাম
-      description      // প্রোডাক্টের বিবরণ (অপশনাল)
+      category,        
+      quantity,        
+      unit,            
+      purchasePrice,   
+      sellingPrice,    
+      description,
+      requestShopId    
     } = req.body;
+
+    const { role, shopId } = req.user; 
+
+    // 💡 শপ আইডি নির্ধারণের লজিক (টোকেনে না থাকলে বডি থেকে নিয়ে ব্যাকআপ সেফটি নিশ্চিত করা হলো)
+    let targetShopId = role === "ADMIN" ? (requestShopId || shopId) : (shopId || requestShopId);
+
+    if (!targetShopId) {
+      return res.status(403).json({ 
+        message: "আপনার এই শপে প্রোডাক্ট যোগ করার অনুমতি নেই অথবা কোনো শপ আইডি পাওয়া যায়নি।" 
+      });
+    }
+
+    const finalShopId = Number(targetShopId);
 
     // ম্যান্ডেটরি ফিল্ডগুলোর ভ্যালিডেশন
     if (!name || !category || !unit || purchasePrice === undefined || sellingPrice === undefined) {
@@ -43,17 +71,17 @@ export const createProduct = async (req, res) => {
     const pPrice = parseFloat(purchasePrice) || 0;
     const sPrice = parseFloat(sellingPrice) || 0;
 
-    // ১. চেক করা এই নামের ক্যাটাগরি ডেটাবেজে অলরেডি আছে কিনা (Case Insensitive)
+    // ১. চেক করা এই নামের ক্যাটাগরি ডেটাবেজে অলরেডি আছে কিনা
     let dbCategory = await prisma.category.findFirst({
       where: {
         name: {
           equals: category.trim(),
-          mode: 'insensitive' // ক্যাপিটাল বা স্মল লেটার যাই হোক, মিল থাকলে সেটিই ধরবে
+          mode: 'insensitive' 
         }
       }
     });
 
-    // ২. যদি ক্যাটাগরি না থাকে, তবে সেটি অটোমেটিক নতুন ক্যাটাগরি হিসেবে তৈরি করা
+    // ২. যদি ক্যাটাগরি না থাকে, তবে তৈরি করা
     if (!dbCategory) {
       dbCategory = await prisma.category.create({
         data: {
@@ -62,7 +90,7 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // ৩. নতুন স্কিমা অনুযায়ী প্রোডাক্ট তৈরি করা
+    // ৩. প্রোডাক্ট তৈরি করা
     const newProduct = await prisma.product.create({
       data: {
         name,
@@ -71,12 +99,13 @@ export const createProduct = async (req, res) => {
         unit: unit,
         purchasePrice: pPrice,
         sellingPrice: sPrice,
-        categoryId: dbCategory.id, // ক্যাটাগরির অটো-ক্যালকুলেটেড আইডি এখানে বসবে
+        categoryId: dbCategory.id, 
+        shopId: finalShopId, 
         description: description || null,
-        status: stockQty > 0 ? "ACTIVE" : "INACTIVE" // স্টক শূন্যের বেশি থাকলে ACTIVE, অন্যথায় INACTIVE
+        status: stockQty > 0 ? "ACTIVE" : "INACTIVE" 
       },
       include: {
-        category: true // রেসপন্সে ক্যাটাগরি ইনফোও রিটার্ন করবে
+        category: true 
       }
     });
 
@@ -89,17 +118,17 @@ export const createProduct = async (req, res) => {
   }
 };
 
-// ৩. প্রোডাক্ট ডিলিট করা (Database থেকে)
+// ৩. প্রোডাক্ট ডিলিট করা (Database থেকে + সিকিউরিটি চেক)
 export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const productId = parseInt(id);
+    const { role, shopId } = req.user;
 
     if (isNaN(productId)) {
       return res.status(400).json({ message: "Invalid product ID!" });
     }
 
-    // প্রথমে প্রোডাক্টটি ডেটাবেজে আছে কিনা তা চেক করা
     const existingProduct = await prisma.product.findUnique({
       where: { id: productId },
     });
@@ -108,7 +137,11 @@ export const deleteProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found!" });
     }
 
-    // ডেটাবেজ থেকে মুছে ফেলা
+    // 🔒 সিকিউরিটি চেক: MANAGER/CASHIER অন্য শপের প্রোডাক্ট ডিলিট করতে পারবে না
+    if (role !== "ADMIN" && existingProduct.shopId !== Number(shopId)) {
+      return res.status(403).json({ message: "আপনি অন্য শপের প্রোডাক্ট ডিলিট করতে পারবেন না!" });
+    }
+
     await prisma.product.delete({
       where: { id: productId },
     });

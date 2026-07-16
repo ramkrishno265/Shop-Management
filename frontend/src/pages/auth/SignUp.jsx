@@ -8,13 +8,14 @@ export default function SignUp() {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'staff'
+    role: 'staff',
+    shopName: '', // 👈 ADMIN এর জন্য শপের নাম
+    shopId: ''    // 👈 STAFF/MANAGER এর জন্য শপ আইডি
   });
-  const [error, setError] = useState(''); // 👈 এরর মেসেজের জন্য স্টেট
-  const [loading, setLoading] = useState(false); // 👈 লোডিং ইন্ডিকেটর
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // ব্যাকএন্ড URL (.env থেকে নিবে, না থাকলে fallback localhost:5000)
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
   const handleChange = (e) => {
@@ -25,7 +26,6 @@ export default function SignUp() {
     e.preventDefault();
     setError('');
 
-    // পাসওয়ার্ড ম্যাচিং চেক
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match!");
       return;
@@ -34,21 +34,27 @@ export default function SignUp() {
     setLoading(true);
 
     try {
-      // ব্যাকএন্ডে রিয়েল POST রিকোয়েস্ট পাঠানো হচ্ছে
-      const response = await axios.post(`${API_URL}/auth/register`, {
+      // ব্যাকএন্ডে পাঠানোর জন্য অবজেক্ট রেডি করা
+      const requestData = {
         name: formData.name,
         email: formData.email,
         password: formData.password,
-        role: formData.role
-      });
+        role: formData.role.toUpperCase() // ব্যাকএন্ড এনাম (Enum) এর সাথে ম্যাচ করার জন্য
+      };
+
+      // রোল অনুযায়ী ডাটা কন্ডিশনাল ট্যাগ করা
+      if (formData.role === 'admin') {
+        requestData.shopName = formData.shopName;
+      } else {
+        requestData.shopId = formData.shopId ? parseInt(formData.shopId) : null;
+      }
+
+      const response = await axios.post(`${API_URL}/auth/register`, requestData);
 
       console.log("Registration Success:", response.data);
       alert("Registration successful! Please sign in.");
-      
-      // সফল হলে লগইন পেজে রিডাইরেক্ট করবে
       navigate('/');
     } catch (err) {
-      // ব্যাকএন্ড সার্ভার থেকে আসা নির্দিষ্ট এরর মেসেজ ক্যাচ করা
       setError(err.response?.data?.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -70,7 +76,7 @@ export default function SignUp() {
           </p>
         </div>
 
-        {/* 👈 এরর অ্যালার্ট ডিসপ্লে */}
+        {/* এরর অ্যালার্ট */}
         {error && (
           <div className="mb-4 p-3 text-xs font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-lg">
             {error}
@@ -108,7 +114,7 @@ export default function SignUp() {
             />
           </div>
 
-          {/* Role */}
+          {/* Role Choice */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Workspace Role</label>
             <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -128,6 +134,35 @@ export default function SignUp() {
               ))}
             </div>
           </div>
+
+          {/* 🌟 কন্ডিশনাল ইনপুট ফিল্ড (রোলের ওপর ভিত্তি করে বদলাবে) */}
+          {formData.role === 'admin' ? (
+            <div>
+              <label className="block text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-2">Shop Name (New Business)</label>
+              <input
+                type="text"
+                name="shopName"
+                required
+                value={formData.shopName}
+                onChange={handleChange}
+                placeholder="Melody Housing Store"
+                className="w-full px-3.5 py-2 bg-indigo-50/30 border border-indigo-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">Assigned Shop ID</label>
+              <input
+                type="number"
+                name="shopId"
+                required
+                value={formData.shopId}
+                onChange={handleChange}
+                placeholder="Enter Shop ID (e.g. 1)"
+                className="w-full px-3.5 py-2 bg-emerald-50/30 border border-emerald-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+              />
+            </div>
+          )}
 
           {/* Passwords */}
           <div className="grid grid-cols-2 gap-3">
@@ -160,7 +195,7 @@ export default function SignUp() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading} // লোড হওয়ার সময় সাবমিট ব্লক রাখবে
+            disabled={loading}
             className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-medium rounded-lg text-sm shadow-xs transition-all mt-4 cursor-pointer flex items-center justify-center"
           >
             {loading ? 'Creating Account...' : 'Create account'}

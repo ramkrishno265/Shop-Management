@@ -7,19 +7,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ১. রোলস এনাম (তোমার আগেরটাই রাখা হয়েছে)
 enum Role {
   ADMIN
   MANAGER
   CASHIER
 }
 
-model User {
-  id        Int         @id @default(autoincrement())
+// ২. নতুন Shop মডেল (এটি আমাদের মূল হাব হবে)
+model Shop {
+  id        Int       @id @default(autoincrement())
   name      String
-  email     String      @unique
+  createdAt DateTime  @default(now())
+
+  // রিলেশনশিপ
+  users     User[]    // এই শপের আন্ডারে কোন কোন ইউজার আছে
+  products  Product[] // এই শপের নিজস্ব প্রোডাক্টস
+  invoices  Invoice[] // এই শপ থেকে জেনারেট হওয়া ইনভয়েসগুলো
+}
+
+// ৩. আপডেট করা User মডেল
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
   password  String
-  role      Role        @default(CASHIER)
-  createdAt DateTime    @default(now())
+  role      Role     @default(CASHIER)
+  createdAt DateTime @default(now())
+
+  // 🔽 শপের সাথে রিলেশন (অ্যাডমিন বাদে ম্যানেজার/ক্যাশিয়ার সবার জন্য শপ আইডি মাস্ট)
+  shopId    Int?     
+  shop      Shop?    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   invoices  Invoice[]
 }
 
@@ -29,10 +48,11 @@ model Category {
   products  Product[]
 }
 
+// ৪. আপডেট করা Product মডেল
 model Product {
   id            Int       @id @default(autoincrement())
   name          String
-  sku           String?   @unique
+  sku           String?   @unique // তুমি যদি চাও প্রতি শপে স্কু ইউনিক হবে, তবে এটা হ্যান্ডেল করতে হবে
   
   // স্টকের হিসাব
   quantity      Float     @default(0)
@@ -47,35 +67,43 @@ model Product {
   categoryId    Int?
   category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
+  // 🔽 শপের সাথে রিলেশন (প্রোডাক্টটি কোন শপের তা ডিফাইন করবে)
+  shopId        Int
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   // অন্যান্য তথ্য
   description   String?
   status        String    @default("ACTIVE")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // 🔽 এই লাইনটি অবশ্যই যোগ করো (SalesItem এর সাথে রিলেশন ঠিক করার জন্য)
   salesItems    SalesItem[]
 }
 
+// ৫. আপডেট করা Invoice মডেল (শপ ওয়াইজ ইনভয়েস আলাদা করার জন্য)
 model Invoice {
-  id            Int          @id @default(autoincrement())
-  invoiceNumber String       @unique
+  id            Int         @id @default(autoincrement())
+  invoiceNumber String      @unique
   cashierId     Int
-  cashier       User         @relation(fields: [cashierId], references: [id])
+  cashier       User        @relation(fields: [cashierId], references: [id])
   totalAmount   Float
-  discount      Float        @default(0.0)
+  discount      Float       @default(0.0)
   payableAmount Float
-  paymentMethod String       @default("CASH")
-  createdAt     DateTime     @default(now())
+  paymentMethod String      @default("CASH")
+  createdAt     DateTime    @default(now())
   items         SalesItem[]
+
+  // 🔽 ইনভয়েসটিও কোন শপের তা ট্র্যাক করা জরুরি
+  shopId        Int
+  shop          Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }
 
 model SalesItem {
-  id        Int       @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   invoiceId Int
-  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   productId Int?
-  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
   quantity  Int
   unitPrice Float
 }
