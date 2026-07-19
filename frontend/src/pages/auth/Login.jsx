@@ -1,123 +1,234 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios'; // 👈 সরাসরি axios ইম্পোর্ট করো
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Building2,
+} from "lucide-react";
 
 export default function Login() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [role, setRole] = useState('admin');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const navigate = useNavigate();
+  const navigate = useNavigate();
 
-    // ব্যাকএন্ড URL কনফিগারেশন
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const API_URL =
+    import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
+  const [showPassword, setShowPassword] = useState(false);
 
-        try {
-            // 🚀 সরাসরি ব্যাকএন্ডে POST রিকোয়েস্ট পাঠানো হচ্ছে
-            const response = await axios.post(`${API_URL}/auth/login`, {
-                email,
-                password,
-                role
-            });
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
 
-            const data = response.data;
+  const [loading, setLoading] = useState(false);
 
-            // টোকেন ও ইউজার ডেটা লোকাল স্টোরেজে সেভ করা
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            localStorage.setItem('userRole', data.user.role);
+  const [error, setError] = useState("");
 
-            // সফল হলে ড্যাশবোর্ডে রিডাইরেক্ট
-            navigate('/dashboard');
-        } catch (err) {
-            // সার্ভারের কাস্টম এরর মেসেজ ডিসপ্লে করা
-            setError(err.response?.data?.message || 'Invalid email or password. Please try again.');
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleChange = (e) => {
+    setFormData((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+  };
 
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-slate-50 font-sans antialiased text-slate-900">
-            <div className="w-full max-w-md p-8 bg-white border border-slate-200 rounded-2xl shadow-xs mx-4">
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sign in</h1>
-                    <p className="text-sm text-slate-500 mt-1">
-                        New to the platform?{' '}
-                        <button type="button" onClick={() => navigate('/signup')} className="text-indigo-600 hover:text-indigo-500 font-medium hover:underline">
-                            Create an account
-                        </button>
-                    </p>
-                </div>
+    setLoading(true);
+    setError("");
 
-                {/* এরর মেসেজ অ্যালার্ট */}
-                {error && (
-                    <div className="mb-4 p-3 text-xs font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-lg">
-                        {error}
-                    </div>
-                )}
+    try {
+      const { data } = await axios.post(
+        `${API_URL}/auth/login`,
+        formData
+      );
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Role</label>
-                        <div className="flex bg-slate-100 p-1 rounded-xl">
-                            {['admin', 'manager', 'staff'].map((r) => (
-                                <button
-                                    key={r}
-                                    type="button"
-                                    onClick={() => setRole(r)}
-                                    className={`flex-1 py-2 text-xs font-medium uppercase rounded-lg transition-all ${role === r ? 'bg-white text-slate-900 shadow-xs border border-slate-200/50' : 'text-slate-500 hover:text-slate-800'
-                                        }`}
-                                >
-                                    {r}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
 
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Email address</label>
-                        <input
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="you@example.com"
-                            className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
-                        />
-                    </div>
+      navigate("/dashboard");
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Invalid email or password"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
-                    <div>
-                        <div className="flex justify-between items-center mb-2">
-                            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Password</label>
-                            <a href="#" className="text-xs text-indigo-600 hover:text-indigo-500 font-medium hover:underline">Forgot?</a>
-                        </div>
-                        <input
-                            type="password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
-                            className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
-                        />
-                    </div>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 flex items-center justify-center p-5">
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-medium rounded-lg text-sm shadow-xs transition-all mt-2 cursor-pointer flex items-center justify-center"
-                    >
-                        {loading ? 'Connecting...' : `Continue as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
-                    </button>
-                </form>
-            </div>
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8">
+
+        {/* Logo */}
+
+        <div className="flex justify-center mb-5">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg">
+
+            <Building2 className="text-white" size={30} />
+
+          </div>
         </div>
-    );
+
+        <div className="text-center">
+
+          <h1 className="text-3xl font-bold text-slate-900">
+            Welcome Back
+          </h1>
+
+          <p className="text-slate-500 mt-2">
+            Sign in to your account
+          </p>
+
+        </div>
+
+        {error && (
+          <div className="mt-6 bg-red-100 border border-red-300 text-red-600 rounded-xl p-3 text-sm">
+            {error}
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-5 mt-8"
+        >
+          {/* Email */}
+
+          <div>
+
+            <label className="text-sm font-medium text-slate-700">
+              Email Address
+            </label>
+
+            <div className="relative mt-2">
+
+              <Mail
+                size={18}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                type="email"
+                name="email"
+                required
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="Enter your email"
+                className="w-full h-12 rounded-xl border border-slate-300 pl-11 pr-4 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-200 outline-none transition"
+              />
+
+            </div>
+
+          </div>
+
+          {/* Password */}
+
+          <div>
+
+            <label className="text-sm font-medium text-slate-700">
+              Password
+            </label>
+
+            <div className="relative mt-2">
+
+              <Lock
+                size={18}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                type={
+                  showPassword
+                    ? "text"
+                    : "password"
+                }
+                name="password"
+                required
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Enter your password"
+                className="w-full h-12 rounded-xl border border-slate-300 pl-11 pr-12 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-200 outline-none transition"
+              />
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowPassword(!showPassword)
+                }
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500"
+              >
+                {showPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
+
+            </div>
+
+          </div>
+
+          {/* Remember */}
+
+          <div className="flex items-center justify-between text-sm">
+
+            <label className="flex items-center gap-2 text-slate-600">
+
+              <input type="checkbox" />
+
+              Remember me
+
+            </label>
+
+            <button
+              type="button"
+              className="text-indigo-600 hover:underline"
+            >
+              Forgot Password?
+            </button>
+
+          </div>
+
+          {/* Button */}
+
+          <button
+            disabled={loading}
+            className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex justify-center items-center gap-2 transition cursor-pointer"
+          >
+            {loading ? (
+              "Signing In..."
+            ) : (
+              <>
+                Sign In
+                <ArrowRight size={18} />
+              </>
+            )}
+          </button>
+
+        </form>
+
+        <div className="text-center mt-8 text-sm text-slate-600">
+
+          Don't have an account?
+
+          <button
+            onClick={() =>
+              navigate("/signup")
+            }
+            className="ml-2 text-indigo-600 font-semibold hover:underline cursor-pointer"
+          >
+            Create Account
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
 }

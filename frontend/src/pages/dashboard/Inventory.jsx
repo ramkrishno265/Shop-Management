@@ -34,8 +34,9 @@ export default function Inventory() {
   // 🔒 টোকেন তুলে আনার হেল্পার ফাংশন
   const getAuthHeader = () => {
     const token = localStorage.getItem("token");
+    console.log("Token:", token);
     return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+  }
 
   // --- ১. এপিআই থেকে প্রোডাক্ট ও ক্যাটাগরি ডেটা লোড করা ---
   useEffect(() => {
