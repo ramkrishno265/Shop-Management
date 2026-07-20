@@ -39,7 +39,7 @@ model User {
   password  String
   photo     String?
   status    Boolean  @default(true)
-  role      Role     @default(CASHIER) // এনামটি এখানে যুক্ত করা হয়েছে
+  role      Role     @default(CASHIER)
   
   shopId    Int      
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -49,6 +49,7 @@ model User {
   updatedAt DateTime  @updatedAt @map("updated_at")
 
   invoices  Invoice[]
+  stockLogs StockLog[] // কে স্টক আপডেট করেছে তার রেকর্ড রাখার জন্য
 
   @@map("users")
 }
@@ -60,13 +61,13 @@ model Category {
 }
 
 model Product {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   name          String
-  sku           String?  @unique
+  sku           String?   @unique
   
-  quantity      Float    @default(0)
+  quantity      Float     @default(0)
   unit          String
-  lowStockLimit Float    @default(5)
+  lowStockLimit Float     @default(5)
 
   purchasePrice Float
   sellingPrice  Float
@@ -83,10 +84,28 @@ model Product {
   updatedAt     DateTime  @updatedAt
 
   salesItems    SalesItem[]
+  stockLogs     StockLog[]  // প্রোডাক্টের স্টক হিস্ট্রি রিলেশন
 }
 
+// স্টক আপডেট এবং ডেটা সুরক্ষার জন্য অডিট লগ টেবিল
+model StockLog {
+  id              Int      @id @default(autoincrement())
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  userId          Int?     // কে স্টক আপডেট করেছে (Admin/Manager)
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  changeType      String   // যেমন: 'RESTOCK', 'SALE', 'DAMAGE', 'ADJUSTMENT'
+  quantityChanged Float    // কত পরিমাণ যোগ বা বিয়োগ হলো
+  previousStock   Float    // আগের স্টক
+  newStock        Float    // বর্তমান স্টক
+  note            String?  // নোট বা কারণ
 
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("stock_logs")
+}
 
 model Invoice {
   id            Int         @id @default(autoincrement())
