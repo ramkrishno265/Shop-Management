@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { Link } from 'react-router-dom';
 
 export default function Inventory() {
   const API_URL = "http://localhost:5000/api/products";
@@ -30,6 +31,7 @@ export default function Inventory() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [categorySuggestions, setCategorySuggestions] = useState([]);
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+  const [lowProductList, setLowProductList] = useState([]);
 
   // 🔒 টোকেন তুলে আনার হেল্পার ফাংশন
   const getAuthHeader = () => {
@@ -49,10 +51,18 @@ export default function Inventory() {
           axios.get(CATEGORY_API_URL, { headers: getAuthHeader() }).catch(() => ({ data: [] }))
         ]);
 
+
         if (Array.isArray(productsRes.data)) {
           setProducts(productsRes.data);
+
+          const lowStock = productsRes.data.filter(
+            (product) => Number(product.quantity) > 0 && Number(product.quantity) <= 5
+          );
+
+          setLowProductList(lowStock);
         } else {
           setProducts([]);
+          setLowProductList([]);
         }
 
         if (Array.isArray(categoriesRes.data)) {
@@ -238,20 +248,70 @@ export default function Inventory() {
 
       {/* ২. STATS OVERVIEW CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { title: "Total Products", value: products.length, icon: "📦", color: "text-indigo-600" },
-          { title: "Total Stock Volume", value: products.reduce((acc, p) => acc + (parseFloat(p.quantity) || 0), 0), icon: "📊", color: "text-emerald-600" },
-          { title: "Low Stock Items (<= 5)", value: products.filter((p) => (parseFloat(p.quantity) || 0) <= 5 && (parseFloat(p.quantity) || 0) > 0).length, icon: "⚠️", color: "text-amber-600" },
-          { title: "Out of Stock", value: products.filter((p) => (parseFloat(p.quantity) || 0) === 0).length, icon: "🚫", color: "text-rose-600" },
-        ].map((stat, i) => (
-          <div key={i} className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{stat.title}</p>
-              <h3 className="text-2xl font-bold text-slate-900 mt-1">{stat.value}</h3>
-            </div>
-            <div className={`text-2xl p-2 bg-slate-50 rounded-lg ${stat.color}`}>{stat.icon}</div>
+
+        {/* Total Products */}
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Total Products
+            </p>
+            <h3 className="text-2xl font-bold text-slate-900 mt-1">
+              {products.length}
+            </h3>
           </div>
-        ))}
+          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-indigo-600">
+            📦
+          </div>
+        </div>
+
+        {/* Total Stock Volume */}
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Total Stock Volume
+            </p>
+            <h3 className="text-2xl font-bold text-slate-900 mt-1">
+              {products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)}
+            </h3>
+          </div>
+          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-emerald-600">
+            📊
+          </div>
+        </div>
+
+        <Link to="/stock_low" className="block group">
+          <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between cursor-pointer transition-all duration-200 group-hover:border-blue-400 group-hover:shadow-md active:scale-[0.98]">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Low Stock Products
+              </p>
+              <h3 className="text-2xl font-bold text-slate-900 mt-1">
+                {lowProductList.length}
+              </h3>
+            </div>
+            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-amber-600">
+              ⚠️
+            </div>
+          </div>
+        </Link>
+
+        {/* Out of Stock */}
+        <Link to="/stock_low" className="block group">
+          <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between cursor-pointer transition-all duration-200 group-hover:border-blue-400 group-hover:shadow-md active:scale-[0.98]">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Out of Stock
+              </p>
+              <h3 className="text-2xl font-bold text-slate-900 mt-1">
+                {products.filter((p) => (Number(p.quantity) || 0) === 0).length}
+              </h3>
+            </div>
+            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-rose-600">
+              🚫
+            </div>
+          </div>
+        </Link>
+
       </div>
 
       {/* ৩. FILTER & SEARCH BAR */}

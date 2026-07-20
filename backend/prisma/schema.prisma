@@ -85,6 +85,9 @@ model Product {
   salesItems    SalesItem[]
 }
 
+
+
+
 model Invoice {
   id            Int         @id @default(autoincrement())
   invoiceNumber String      @unique

@@ -4,7 +4,10 @@ import { useNavigate } from 'react-router-dom';
 export default function DashboardLayout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const navigate = useNavigate();
-  const role = localStorage.getItem('userRole') || 'staff';
+
+  const role =
+    JSON.parse(localStorage.getItem("user") || "{}").role || "staff";
+  const name = JSON.parse(localStorage.getItem("user") || "{}").name || "Null";
 
   const handleLogout = () => {
     localStorage.clear();
@@ -13,18 +16,17 @@ export default function DashboardLayout({ children }) {
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans antialiased text-slate-900">
-      
+
       {/* SIDEBAR */}
-      <aside className={`bg-white border-r border-slate-200 transition-all duration-300 fixed md:sticky top-0 h-screen z-20 ${
-        isSidebarOpen ? 'w-64' : 'w-20'
-      }`}>
+      <aside className={`bg-white border-r border-slate-200 transition-all duration-300 fixed md:sticky top-0 h-screen z-20 ${isSidebarOpen ? 'w-64' : 'w-20'
+        }`}>
         {/* Sidebar Header */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200">
           <div className="flex items-center gap-2 overflow-hidden">
             <span className="text-xl">🛒</span>
             {isSidebarOpen && <span className="font-bold tracking-tight text-sm">ShopManager</span>}
           </div>
-          <button 
+          <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
           >
@@ -54,13 +56,18 @@ export default function DashboardLayout({ children }) {
 
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0">
-        
+
         {/* TOP NAVBAR */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-10">
-          <div className="text-sm font-medium text-slate-500 uppercase tracking-wider">
-            Workspace: <span className="text-slate-800 font-bold">{role}</span>
+          <div>
+            <div className="text-xl font-medium text-slate-500 uppercase tracking-wider">
+               <span className="text-slate-800 font-bold">{name}</span>
+            </div>
+            <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+              Workspace: <span className="text-slate-800 font-bold">{role}</span>
+            </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700">
               {role.charAt(0).toUpperCase()}

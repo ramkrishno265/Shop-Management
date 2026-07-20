@@ -6,6 +6,7 @@ import DashboardHome from './pages/dashboard/DashboardHome.jsx';
 import Inventory from './pages/dashboard/Inventory.jsx';
 import DashboardLayout from './components/common/DashboardLayout.jsx';
 import SalePage from './pages/dashboard/SalePage.jsx';
+import StockLowPage from './pages/dashboard/LowStockPage.jsx'
 
 // Protected Route Guard Component
 const ProtectedRoute = ({ children }) => {
@@ -56,6 +57,16 @@ function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <SalePage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/stock_low"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <StockLowPage />
               </DashboardLayout>
             </ProtectedRoute>
           }
