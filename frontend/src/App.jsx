@@ -10,10 +10,14 @@ import StockLowPage from './pages/dashboard/LowStockPage.jsx'
 
 // Protected Route Guard Component
 const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem("token");
+
+  console.log("Token:", token);
+
   if (!token) {
     return <Navigate to="/" replace />;
   }
+
   return children;
 };
 
