@@ -123,11 +123,11 @@ export const createSale = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Sale transaction critical error:", error);
+        console.error("Sale transaction critical error details:", error);
         return res.status(500).json({ 
             success: false, 
-            message: "সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে।", 
-            error: error.message 
+            message: `সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে: ${error.message}`, // মূল এরর মেসেজ সহ পাঠানো
+            errorStack: error.stack 
         });
     }
 };
