@@ -137,3 +137,41 @@ export const createSale = async (req, res) => {
         });
     }
 };
+
+
+export const getSales = async (req, res) => {
+    try {
+        const { shopId } = req.query; // URL থেকে shopId নিতে পারেন (যেমন: /sales?shopId=1)
+        
+        // কুয়েরিতে শপ আইডি না থাকলে লগইন করা ইউজারের shopId বা টোকেন থেকে নিতে পারেন
+        const filterShopId = shopId ? Number(shopId) : (req.user?.shopId ? Number(req.user.shopId) : undefined);
+
+        const sales = await prisma.sale.findMany({
+            where: filterShopId ? { shopId: filterShopId } : {},
+            include: {
+                saleItems: {
+                    include: {
+                        product: true // প্রোডাক্টের নাম বা ডিটেইলস সহ দেখতে চাইলে
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc' // নতুন সেলগুলো সবার উপরে দেখানোর জন্য
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            count: sales.length,
+            data: sales
+        });
+
+    } catch (error) {
+        console.error("Error fetching sales:", error);
+        return res.status(500).json({
+            success: false,
+            message: "সেলস ডেটা লোড করতে সমস্যা হয়েছে।",
+            error: error.message
+        });
+    }
+};
