@@ -8,24 +8,24 @@ const generateInvoiceNo = () => {
 
 export const createSale = async (req, res) => {
     try {
-        const { 
-            shopId,           
+        const {
+            shopId,
             customerId,
-            customerName,      
-            items,               
-            subTotal, 
-            discount,          
-            discountType,         
-            discountValue,        
-            discountAmount,       
-            vatPercentage, 
-            vatAmount, 
-            payableAmount,       
-            receivedAmount,      
-            changeAmount, 
-            paymentMethod,       
-            paymentStatus,       
-            notes 
+            customerName,
+            items,
+            subTotal,
+            discount,
+            discountType,
+            discountValue,
+            discountAmount,
+            vatPercentage,
+            vatAmount,
+            payableAmount,
+            receivedAmount,
+            changeAmount,
+            paymentMethod,
+            paymentStatus,
+            notes
         } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
@@ -45,7 +45,7 @@ export const createSale = async (req, res) => {
         const totalDiscount = Number(discountAmount) !== undefined && discountAmount !== '' ? Number(discountAmount) : (Number(discount) || 0);
         const grandTotalVal = Number(payableAmount) || (subTotalVal - totalDiscount);
         const paidAmountVal = Number(receivedAmount) || 0;
-        
+
         let dueAmountVal = grandTotalVal - paidAmountVal;
         if (dueAmountVal < 0) dueAmountVal = 0;
 
@@ -100,14 +100,20 @@ export const createSale = async (req, res) => {
                 }
             });
 
+            // স্টক আপডেট করা
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
+
+                // প্রথমে বর্তমান প্রোডাক্টের তথ্য বা কুয়ান্টিটি বের করে নিতে পারেন অথবা সরাসরি মাইনাস করতে পারেন
+                // যদি আপনার প্রোডাক্ট টেবিলে ফিল্ডের নাম 'quantity' হয়:
+                const product = await tx.product.findUnique({ where: { id: prodId } });
+                const currentQty = product ? product.quantity : 0;
+                const buyQty = Number(item.quantity) || 0;
+
                 await tx.product.update({
                     where: { id: prodId },
                     data: {
-                        stock: {
-                            decrement: Number(item.quantity) || 0
-                        }
+                        quantity: Math.max(0, currentQty - buyQty) // সরাসরি নতুন পরিমাণ সেট করে দেওয়া নিরাপদ
                     }
                 });
             }
@@ -124,10 +130,10 @@ export const createSale = async (req, res) => {
 
     } catch (error) {
         console.error("Sale transaction critical error details:", error);
-        return res.status(500).json({ 
-            success: false, 
+        return res.status(500).json({
+            success: false,
             message: `সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে: ${error.message}`, // মূল এরর মেসেজ সহ পাঠানো
-            errorStack: error.stack 
+            errorStack: error.stack
         });
     }
 };
