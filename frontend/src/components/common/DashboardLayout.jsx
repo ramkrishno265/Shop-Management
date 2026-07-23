@@ -5,9 +5,11 @@ export default function DashboardLayout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const navigate = useNavigate();
 
-  const role =
-    JSON.parse(localStorage.getItem("user") || "{}").role || "staff";
-  const name = JSON.parse(localStorage.getItem("user") || "{}").name || "Null";
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+  const role = user.role || "STAFF";
+  const name = user.name || "Unknown";
+  const shopId = user.shopId || "N/A";
 
   const handleLogout = () => {
     localStorage.clear();
@@ -58,13 +60,20 @@ export default function DashboardLayout({ children }) {
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* TOP NAVBAR */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-10">
-          <div>
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 py-12 sticky top-0 z-10">
+          <div >
             <div className="text-xl font-medium text-slate-500 uppercase tracking-wider">
-               <span className="text-slate-800 font-bold">{name}</span>
+              <span className="text-slate-800 font-bold">{name}</span>
             </div>
-            <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-              Workspace: <span className="text-slate-800 font-bold">{role}</span>
+            <div className='flex'>
+              <div className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">
+                Workspace: <span className="text-slate-800 font-bold">{role}</span>
+              </div>
+              {role === "ADMIN" && (
+                <div className="text-[12px] mx-4 font-medium text-slate-500 uppercase tracking-wider">
+                  Shop Id: <span className="text-slate-800 font-bold">{shopId}</span>
+                </div>
+              )}
             </div>
           </div>
 
