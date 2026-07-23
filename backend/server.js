@@ -14,7 +14,7 @@ app.use(express.json());
 
 // Routes Middleware
 app.use('/api/auth', authRoutes);
-app.use("/api/products", productRoutes); // এন্ডপয়েন্ট এখন: http://localhost:5000/api/products
+app.use("/api/products", productRoutes); 
 app.use("/api/categories",categoriesRouters);
 
 

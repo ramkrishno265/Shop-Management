@@ -4,7 +4,7 @@ import { Search, Edit3, AlertTriangle, XCircle, Package } from 'lucide-react';
 import axios from 'axios';
 
 const LowStockPage = () => {
-    const API_URL = "http://localhost:5000/api/products";
+    const API_URL = `${import.meta.env.VITE_API_URL}/products`;
     
     // States
     const [allProducts, setAllProducts] = useState([]);

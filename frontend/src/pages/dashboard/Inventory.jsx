@@ -3,8 +3,8 @@ import axios from "axios";
 import { Link } from 'react-router-dom';
 
 export default function Inventory() {
-  const API_URL = "http://localhost:5000/api/products";
-  const CATEGORY_API_URL = "http://localhost:5000/api/categories";
+  const API_URL = `${import.meta.env.VITE_API_URL}/products`;
+  const CATEGORY_API_URL = `${import.meta.env.VITE_API_URL}/categories`;
 
   // --- States ---
   const [products, setProducts] = useState([]);
