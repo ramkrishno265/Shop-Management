@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }) {
           {[
             { name: 'Dashboard', icon: '📊', path: '/dashboard' },
             { name: 'Inventory', icon: '📦', path: '/inventory' },
-            { name: 'Sales & Billing', icon: '💼', path: '#' },
+            { name: 'Sales & Billing', icon: '💼', path: '/salePage' },
             { name: 'Staff Management', icon: '👥', path: '#' },
           ].map((item, idx) => (
             <a
