@@ -10,9 +10,11 @@ export const createSale = async (req, res) => {
     try {
         const { 
             shopId,           
-            customerId,           
+            customerId,
+            customerName,      
             items,               
             subTotal, 
+            discount,          
             discountType,         
             discountValue,        
             discountAmount,       
@@ -26,7 +28,6 @@ export const createSale = async (req, res) => {
             notes 
         } = req.body;
 
-        // ১. বেসিক ভ্যালিডেশন
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ success: false, message: "❌ কার্ট সম্পূর্ণ খালি!" });
         }
@@ -35,14 +36,16 @@ export const createSale = async (req, res) => {
             return res.status(400).json({ success: false, message: "❌ শপ আইডি পাওয়া যায়নি!" });
         }
 
-        // লগইন করা ইউজারের আইডি মিডলওয়্যার থেকে নিশ্চিত করা
         const userId = req.user?.id;
         if (!userId) {
             return res.status(401).json({ success: false, message: "❌ অথেন্টিকেশন এরর: ইউজার আইডি পাওয়া যায়নি!" });
         }
 
-        const grandTotalVal = Number(payableAmount) || 0;
+        const subTotalVal = Number(subTotal) || 0;
+        const totalDiscount = Number(discountAmount) !== undefined && discountAmount !== '' ? Number(discountAmount) : (Number(discount) || 0);
+        const grandTotalVal = Number(payableAmount) || (subTotalVal - totalDiscount);
         const paidAmountVal = Number(receivedAmount) || 0;
+        
         let dueAmountVal = grandTotalVal - paidAmountVal;
         if (dueAmountVal < 0) dueAmountVal = 0;
 
@@ -53,7 +56,6 @@ export const createSale = async (req, res) => {
             else finalPaymentStatus = "DUE";
         }
 
-        // ২. ট্রানজেকশন শুরু
         const result = await prisma.$transaction(async (tx) => {
             const newSale = await tx.sale.create({
                 data: {
@@ -61,10 +63,10 @@ export const createSale = async (req, res) => {
                     shopId: Number(shopId),
                     customerId: customerId ? Number(customerId) : null,
                     createdBy: Number(userId),
-                    subtotal: Number(subTotal) || 0,
-                    discountType: discountType || null,
-                    discountValue: Number(discountValue) || 0,
-                    discountAmount: Number(discountAmount) || 0,
+                    subtotal: subTotalVal,
+                    discountType: discountType || 'FIXED',
+                    discountValue: Number(discountValue) || totalDiscount,
+                    discountAmount: totalDiscount,
                     vatPercentage: Number(vatPercentage) || 0,
                     vatAmount: Number(vatAmount) || 0,
                     grandTotal: grandTotalVal,
@@ -73,7 +75,7 @@ export const createSale = async (req, res) => {
                     changeAmount: Number(changeAmount) || 0,
                     paymentMethod: paymentMethod || "CASH",
                     paymentStatus: finalPaymentStatus,
-                    notes: notes || null,
+                    notes: notes || (customerName ? `Customer: ${customerName}` : null),
 
                     saleItems: {
                         create: items.map(item => {
@@ -83,7 +85,7 @@ export const createSale = async (req, res) => {
                             const itemSubtotal = (price * qty) - itemDiscount;
 
                             return {
-                                productId: Number(item.productId),
+                                productId: Number(item.productId || item.id),
                                 quantity: qty,
                                 unitPrice: price,
                                 purchasePrice: Number(item.purchasePrice) || 0,
@@ -98,10 +100,10 @@ export const createSale = async (req, res) => {
                 }
             });
 
-            // স্টক আপডেট করা
             for (let item of items) {
+                const prodId = Number(item.productId || item.id);
                 await tx.product.update({
-                    where: { id: Number(item.productId) },
+                    where: { id: prodId },
                     data: {
                         stock: {
                             decrement: Number(item.quantity) || 0

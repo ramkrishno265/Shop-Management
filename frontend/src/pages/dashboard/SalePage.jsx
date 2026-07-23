@@ -91,8 +91,6 @@ export default function SalePage() {
             return;
         }
 
-        // লোকালস্টোরেজ থেকে শপ আইডি সংগ্রহ করা (আপনার প্রজেক্টে যেভাবে সেভ করা আছে: shopId অথবা user অবজেক্টের ভেতর)
-        // যদি আপনার লোকালস্টোরেজে সরাসরি shopId নামে থাকে:
         const currentShopId = localStorage.getItem('shopId') || JSON.parse(localStorage.getItem('user') || '{}')?.shopId;
 
         if (!currentShopId) {
@@ -101,22 +99,30 @@ export default function SalePage() {
         }
 
         const orderData = {
-            shopId: currentShopId, // শপ আইডি যুক্ত করা হলো
+            shopId: Number(currentShopId),
+            customerId: null,
             customerName: customer,
             items: cart.map(item => ({
-                productId: item.id,
+                productId: item.id || item.productId,
                 name: item.name,
-                sku: item.sku,
+                sku: item.sku || '',
                 price: item.price,
+                purchasePrice: item.purchasePrice || 0,
                 quantity: item.quantity,
-                totalPrice: item.price * item.quantity
+                discount: 0
             })),
             subTotal: subTotal,
-            discount: Number(discount),
+            discountType: 'FIXED',
+            discountValue: Number(discount) || 0,
+            discountAmount: Number(discount) || 0,
+            vatPercentage: 0,
+            vatAmount: 0,
             payableAmount: payableAmount,
+            receivedAmount: receivedAmount ? Number(receivedAmount) : payableAmount,
+            changeAmount: changeAmount,
             paymentMethod: paymentMethod,
-            receivedAmount: receivedAmount ? Number(receivedAmount) : 0,
-            changeAmount: changeAmount
+            paymentStatus: Number(receivedAmount) >= payableAmount ? 'PAID' : (Number(receivedAmount) > 0 ? 'PARTIAL' : 'DUE'),
+            notes: ''
         };
 
         try {
@@ -348,11 +354,10 @@ export default function SalePage() {
                                         key={method}
                                         type="button"
                                         onClick={() => setPaymentMethod(method)}
-                                        className={`py-2 text-xs font-bold rounded-xl border transition-all ${
-                                            paymentMethod === method
+                                        className={`py-2 text-xs font-bold rounded-xl border transition-all ${paymentMethod === method
                                                 ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                                                 : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                                        }`}
+                                            }`}
                                     >
                                         {method === 'CASH' ? '💵 Cash' : method === 'BKASH' ? '📱 bKash' : '💳 Card'}
                                     </button>
