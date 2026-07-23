@@ -478,7 +478,7 @@ export default function Inventory() {
               >
                 Previous
               </button>
-              
+
               <span className="text-xs font-medium text-slate-600 px-2">
                 Page {currentPage} of {totalPages || 1}
               </span>
@@ -642,6 +642,7 @@ export default function Inventory() {
                     <option value="GM">Gram (GM)</option>
                     <option value="Liter">Liter</option>
                     <option value="Box">Box</option>
+                    <option value="Box">Bag</option>
                   </select>
                 </div>
               </div>
@@ -781,7 +782,7 @@ export default function Inventory() {
                     <option value="GM">Gram (GM)</option>
                     <option value="Liter">Liter</option>
                     <option value="Box">Box</option>
-                    <option value="Box">Bag</option>
+
                   </select>
                 </div>
                 <div>
