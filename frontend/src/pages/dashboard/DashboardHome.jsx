@@ -84,7 +84,7 @@ export default function DashboardHome() {
     { title: "Today's Sales", value: `৳ ${stats.todaySales.toLocaleString()}`, change: 'আজকের মোট বিক্রি', icon: '💰', color: 'border-green-500 bg-green-50/50' },
     { title: "Today's Invoices", value: `${stats.todayInvoicesCount} টি বিল`, change: 'আজ সম্পন্ন হয়েছে', icon: '🛍️', color: 'border-blue-500 bg-blue-50/50' },
     { title: 'Low Stock Items', value: `${stats.lowStockCount} টি প্রোডাক্ট`, change: 'দ্রুত রি-অর্ডার করুন', icon: '⚠️', color: 'border-amber-500 bg-amber-50/50' },
-    { title: 'Total Products', value: `${stats.totalProductsCount} টি আইটেম`, change: 'স্টকে موجود', icon: '📦', color: 'border-purple-500 bg-purple-50/50' },
+    { title: 'Total Products', value: `${stats.totalProductsCount} টি আইটেম`, change: 'স্টকে', icon: '📦', color: 'border-purple-500 bg-purple-50/50' },
   ];
 
   return (
