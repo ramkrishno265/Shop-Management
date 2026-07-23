@@ -91,7 +91,17 @@ export default function SalePage() {
             return;
         }
 
+        // লোকালস্টোরেজ থেকে শপ আইডি সংগ্রহ করা (আপনার প্রজেক্টে যেভাবে সেভ করা আছে: shopId অথবা user অবজেক্টের ভেতর)
+        // যদি আপনার লোকালস্টোরেজে সরাসরি shopId নামে থাকে:
+        const currentShopId = localStorage.getItem('shopId') || JSON.parse(localStorage.getItem('user') || '{}')?.shopId;
+
+        if (!currentShopId) {
+            alert("❌ শপ আইডি পাওয়া যায়নি! অনুগ্রহ করে আবার লগইন করুন।");
+            return;
+        }
+
         const orderData = {
+            shopId: currentShopId, // শপ আইডি যুক্ত করা হলো
             customerName: customer,
             items: cart.map(item => ({
                 productId: item.id,

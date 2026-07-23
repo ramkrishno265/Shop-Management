@@ -1,6 +1,5 @@
 import prisma from "../config/db.js";
 
-// ইনভয়েস নম্বর জেনারেট করার একটি ছোট ফাংশন (যেমন: INV-171928374)
 const generateInvoiceNo = () => {
     const timestamp = Date.now().toString().slice(-6);
     const randomNum = Math.floor(100 + Math.random() * 900);
@@ -10,39 +9,43 @@ const generateInvoiceNo = () => {
 export const createSale = async (req, res) => {
     try {
         const { 
-            shopId,              // কোন শপ থেকে বিক্রি হচ্ছে
-            customerId,          // কাস্টমার আইডি (অপশনাল হতে পারে)
-            items,               // কার্ট আইটেমগুলোর অ্যারে
+            shopId,           
+            customerId,           
+            items,               
             subTotal, 
-            discountType,        // 'FIXED' অথবা 'PERCENTAGE'
-            discountValue,       // ডিসকাউন্টের পরিমাণ বা পার্সেন্টেজ
-            discountAmount,      // মোট ডিসকাউন্ট টাকা
+            discountType,         
+            discountValue,        
+            discountAmount,       
             vatPercentage, 
             vatAmount, 
-            payableAmount,       // এটি grandTotal হিসেবে যাবে
-            receivedAmount,      // এটি paidAmount হিসেবে যাবে
+            payableAmount,       
+            receivedAmount,      
             changeAmount, 
-            paymentMethod,       // 'CASH', 'BKASH', 'CARD'
-            paymentStatus,       // 'PAID', 'DUE', 'PARTIAL'
+            paymentMethod,       
+            paymentStatus,       
             notes 
         } = req.body;
 
         // ১. বেসিক ভ্যালিডেশন
-        if (!items || items.length === 0) {
-            return res.status(400).json({ message: "❌ কার্ট সম্পূর্ণ খালি!" });
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, message: "❌ কার্ট সম্পূর্ণ খালি!" });
         }
 
         if (!shopId) {
-            return res.status(400).json({ message: "❌ শপ আইডি পাওয়া যায়নি!" });
+            return res.status(400).json({ success: false, message: "❌ শপ আইডি পাওয়া যায়নি!" });
         }
 
-        // ২. ডিউ অ্যামাউন্ট ও পেমেন্ট স্ট্যাটাস ক্যালকুলেশন
+        // লগইন করা ইউজারের আইডি মিডলওয়্যার থেকে নিশ্চিত করা
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "❌ অথেন্টিকেশন এরর: ইউজার আইডি পাওয়া যায়নি!" });
+        }
+
         const grandTotalVal = Number(payableAmount) || 0;
         const paidAmountVal = Number(receivedAmount) || 0;
         let dueAmountVal = grandTotalVal - paidAmountVal;
         if (dueAmountVal < 0) dueAmountVal = 0;
 
-        // যদি পেমেন্ট স্ট্যাটাস ফ্রন্টএন্ড থেকে না আসে তবে অটো নির্ধারণ করা
         let finalPaymentStatus = paymentStatus;
         if (!finalPaymentStatus) {
             if (paidAmountVal >= grandTotalVal) finalPaymentStatus = "PAID";
@@ -50,15 +53,14 @@ export const createSale = async (req, res) => {
             else finalPaymentStatus = "DUE";
         }
 
-        // ৩. Prisma Transaction ব্যবহার করে একসাথে Sale এবং SaleItem তৈরি করা এবং স্টক কমানো
+        // ২. ট্রানজেকশন শুরু
         const result = await prisma.$transaction(async (tx) => {
-            // ক. মূল 'Sale' টেবিলে ডাটা ইনসার্ট করা (Nested Create দিয়ে SaleItem সহ)
             const newSale = await tx.sale.create({
                 data: {
                     invoiceNo: generateInvoiceNo(),
                     shopId: Number(shopId),
                     customerId: customerId ? Number(customerId) : null,
-                    createdBy: Number(req.user.id), // মিডলওয়্যার থেকে লগইন করা ইউজারের আইডি
+                    createdBy: Number(userId),
                     subtotal: Number(subTotal) || 0,
                     discountType: discountType || null,
                     discountValue: Number(discountValue) || 0,
@@ -73,20 +75,18 @@ export const createSale = async (req, res) => {
                     paymentStatus: finalPaymentStatus,
                     notes: notes || null,
 
-                    // আপনার স্কিমার 'saleItems' রিলেশনের সাথে ম্যাপ করা হলো
                     saleItems: {
                         create: items.map(item => {
                             const qty = Number(item.quantity) || 1;
                             const price = Number(item.price) || 0;
                             const itemDiscount = Number(item.discount) || 0;
-                            // সাবটোটাল হিসাব: (একক দাম * পরিমাণ) - ডিসকাউন্ট
                             const itemSubtotal = (price * qty) - itemDiscount;
 
                             return {
                                 productId: Number(item.productId),
                                 quantity: qty,
                                 unitPrice: price,
-                                purchasePrice: Number(item.purchasePrice) || 0, // প্রোডাক্ট টেবিল থেকে থাকলে দিতে পারেন
+                                purchasePrice: Number(item.purchasePrice) || 0,
                                 discount: itemDiscount,
                                 subtotal: itemSubtotal
                             };
@@ -98,7 +98,7 @@ export const createSale = async (req, res) => {
                 }
             });
 
-            // খ. স্টক আপডেট করা (প্রতিটি বিক্রিত পণ্যের জন্য স্টক থেকে পরিমাণ কমিয়ে দেওয়া)
+            // স্টক আপডেট করা
             for (let item of items) {
                 await tx.product.update({
                     where: { id: Number(item.productId) },
@@ -113,19 +113,18 @@ export const createSale = async (req, res) => {
             return newSale;
         });
 
-        // ৪. সফল রেসপন্স পাঠানো
         return res.status(201).json({
             success: true,
-            message: "সেল এবং ইনভয়েস সফলভাবে তৈরি হয়েছে!",
+            message: "সেল এবং ইনভয়েস সফলভাবে তৈরি হয়েছে!",
             invoiceNo: result.invoiceNo,
             data: result
         });
 
     } catch (error) {
-        console.error("Sale transaction error:", error);
+        console.error("Sale transaction critical error:", error);
         return res.status(500).json({ 
             success: false, 
-            message: "সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে।", 
+            message: "সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে।", 
             error: error.message 
         });
     }
