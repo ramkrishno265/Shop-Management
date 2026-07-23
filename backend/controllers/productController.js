@@ -4,7 +4,7 @@ import prisma from "../config/db.js";
 const validateShopAccess = (user, requestShopId) => {
   const userShopId = Number(user.shopId);
   const targetShopId = requestShopId ? Number(requestShopId) : userShopId;
-  
+
   // ADMIN সব শপ অ্যাক্সেস করতে পারবে, অন্যরা শুধু তাদের নিজস্ব শপ
   if (user.role !== "ADMIN" && targetShopId !== userShopId) {
     return null;
@@ -44,16 +44,26 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
-    // ক্যাটাগরি হ্যান্ডলিং
+    const categoryName = typeof category === 'string' ? category.trim() : category.name;
+
+    // ক্যাটাগরি হ্যান্ডলিং (নির্দিষ্ট শপের আন্ডারে ক্যাটাগরি চেক এবং ক্রিয়েট করা)
     let dbCategory = await prisma.category.findFirst({
-      where: { name: { equals: category.trim(), mode: 'insensitive' } }
+      where: {
+        name: { equals: categoryName, mode: 'insensitive' },
+        shopId: finalShopId // অত্যন্ত গুরুত্বপূর্ণ: শপ আইডি চেক করতে হবে
+      }
     });
 
     if (!dbCategory) {
-      dbCategory = await prisma.category.create({ data: { name: category.trim() } });
+      dbCategory = await prisma.category.create({
+        data: {
+          name: categoryName,
+          shopId: finalShopId // নতুন ক্যাটাগরি ওই শপের আন্ডারেই তৈরি হবে
+        }
+      });
     }
 
-    // প্রোডাক্ট ক্রিয়েশন
+    // প্রোডাক্ট ক্রিয়েশন
     const newProduct = await prisma.product.create({
       data: {
         name,
@@ -72,6 +82,7 @@ export const createProduct = async (req, res) => {
 
     res.status(201).json(newProduct);
   } catch (error) {
+    console.error("Error creating product:", error);
     res.status(500).json({ message: "Error creating product", error: error.message });
   }
 };
