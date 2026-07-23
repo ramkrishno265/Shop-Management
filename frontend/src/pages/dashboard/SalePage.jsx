@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { use } from 'react';
-const API_URL = 'http://localhost:5000/api/products';
+const API_URL = `${import.meta.env.VITE_API_URL}/products`;
 
 export default function SalePage() {
     // ডেমো কার্ট স্টেট (টেস্ট করার জন্য ২টি প্রোডাক্ট ডিফল্ট রাখা হলো)
