@@ -782,6 +782,7 @@ export default function Inventory() {
                     <option value="GM">Gram (GM)</option>
                     <option value="Liter">Liter</option>
                     <option value="Box">Box</option>
+                    <option value="Box">Bag</option>
 
                   </select>
                 </div>
