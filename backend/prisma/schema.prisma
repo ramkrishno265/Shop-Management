@@ -14,19 +14,26 @@ enum Role {
 }
 
 model Shop {
-  id        Int      @id @default(autoincrement())
-  name      String?
-  logo      String?
-  phone     String?
-  email     String?
-  address   String?
-  status    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         Int      @id @default(autoincrement())
+  name       String
+  logo       String?
+  phone      String?
+  email      String?
+  address    String?
+  status     Boolean  @default(true)
 
-  users     User[]
-  products  Product[]
-  invoices  Invoice[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  products         Product[]
+  sales            Sale[]
+  customers        Customer[]
+  categories       Category[]
+  suppliers        Supplier[]
+  purchases        Purchase[]
+  expenses         Expense[]
+  customerPayments CustomerPayment[]
 
   @@map("shops")
 }
@@ -38,53 +45,102 @@ model User {
   phone     String
   password  String
   photo     String?
-  status    Boolean  @default(true)
-  role      Role     @default(CASHIER)
-  
-  shopId    Int      
-  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  
-  lastLogin DateTime? @map("last_login")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
 
-  invoices  Invoice[]
-  stockLogs StockLog[] // কে স্টক আপডেট করেছে তার রেকর্ড রাখার জন্য
+  role      Role     @default(CASHIER)
+  status    Boolean  @default(true)
+
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  sales            Sale[]
+  purchases        Purchase[]
+  stockLogs        StockLog[]
+  expenses         Expense[]
+  customerPayments CustomerPayment[]
+
+  lastLogin DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
 
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  sales            Sale[]
+  customerPayments CustomerPayment[]
+
+  @@map("customers")
+}
+
+// নতুন সংযোজন: সাপ্লায়ার বা পাইকারি বিক্রেতাদের তথ্য রাখার জন্য
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  company   String?
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  purchases Purchase[]
+
+  @@map("suppliers")
+}
+
+// ক্যাটাগরি মডেলে shopId যুক্ত করায় এখন একই ক্যাটাগরি নাম আলাদা শপে থাকতে পারবে
 model Category {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
-  products  Product[]
+  id       Int       @id @default(autoincrement())
+  name     String
+  shopId   Int
+  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  products Product[]
+
+  @@unique([name, shopId]) 
+  @@map("categories")
 }
 
 model Product {
-  id            Int       @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   name          String
-  sku           String?   @unique
-  
-  quantity      Float     @default(0)
+  sku           String?  @unique
+  barcode       String?  @unique 
+  quantity      Float    @default(0)
   unit          String
-  lowStockLimit Float     @default(5)
-
+  lowStockLimit Float    @default(5)
   purchasePrice Float
   sellingPrice  Float
+  description   String?
+  status        String   @default("ACTIVE")
 
   categoryId    Int?
   category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   shopId        Int
-  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  description   String?
-  status        String    @default("ACTIVE")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  saleItems     SaleItem[]
+  purchaseItems PurchaseItem[]
+  stockLogs     StockLog[]
 
-  salesItems    SalesItem[]
-  stockLogs     StockLog[]  // প্রোডাক্টের স্টক হিস্ট্রি রিলেশন
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("products")
 }
 
 // স্টক আপডেট এবং ডেটা সুরক্ষার জন্য অডিট লগ টেবিল
@@ -92,43 +148,159 @@ model StockLog {
   id              Int      @id @default(autoincrement())
   productId       Int
   product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
-  userId          Int?     // কে স্টক আপডেট করেছে (Admin/Manager)
+
+  userId          Int?
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  changeType      String   // যেমন: 'RESTOCK', 'SALE', 'DAMAGE', 'ADJUSTMENT'
-  quantityChanged Float    // কত পরিমাণ যোগ বা বিয়োগ হলো
-  previousStock   Float    // আগের স্টক
-  newStock        Float    // বর্তমান স্টক
-  note            String?  // নোট বা কারণ
+  changeType      String   // PURCHASE, SALE, RETURN, DAMAGE, ADJUST
+  quantityChanged Float
+  previousStock   Float
+  newStock        Float
+  note            String?
 
-  createdAt       DateTime @default(now()) @map("created_at")
+  createdAt       DateTime @default(now())
 
   @@map("stock_logs")
 }
 
-model Invoice {
-  id            Int         @id @default(autoincrement())
-  invoiceNumber String      @unique
-  cashierId     Int
-  cashier       User        @relation(fields: [cashierId], references: [id])
-  totalAmount   Float
-  discount      Float       @default(0.0)
-  payableAmount Float
-  paymentMethod String      @default("CASH")
-  createdAt     DateTime    @default(now())
-  items         SalesItem[]
+// নতুন সংযোজন: সাপ্লায়ারের কাছ থেকে স্টক বা পণ্য কেনার ইনভয়েস টেবিল
+model Purchase {
+  id            Int      @id @default(autoincrement())
+  invoiceNo     String   @unique
 
   shopId        Int
-  shop          Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  supplierId    Int
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  createdBy     Int
+  user          User     @relation(fields: [createdBy], references: [id])
+
+  subtotal      Float
+  discountAmount Float   @default(0)
+  grandTotal    Float
+  paidAmount    Float
+  dueAmount     Float    @default(0)
+  paymentStatus String   @default("PAID") // PAID, DUE, PARTIAL
+
+  notes         String?
+  purchaseItems PurchaseItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("purchases")
 }
 
-model SalesItem {
-  id        Int      @id @default(autoincrement())
-  invoiceId Int
-  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  productId Int?
-  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  quantity  Int
-  unitPrice Float
+// ক্রয়ের ভেতরের পণ্যের তালিকা
+model PurchaseItem {
+  id            Int      @id @default(autoincrement())
+  purchaseId    Int
+  purchase      Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id])
+
+  quantity      Float
+  purchasePrice Float
+  subtotal      Float
+
+  createdAt     DateTime @default(now())
+
+  @@map("purchase_items")
+}
+
+model SaleItem {
+  id            Int      @id @default(autoincrement())
+  saleId        Int
+  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id])
+
+  quantity      Float
+  unitPrice     Float
+  purchasePrice Float
+  discount      Float    @default(0)
+  subtotal      Float
+
+  createdAt     DateTime @default(now())
+
+  @@map("sale_items")
+}
+
+model Sale {
+  id             Int      @id @default(autoincrement())
+  invoiceNo      String   @unique
+
+  shopId         Int
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  customerId     Int?
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdBy      Int
+  user           User     @relation(fields: [createdBy], references: [id])
+
+  subtotal       Float
+  discountType   String?  // FIXED or PERCENTAGE
+  discountValue  Float    @default(0)
+  discountAmount Float    @default(0)
+  vatPercentage  Float    @default(0)
+  vatAmount      Float    @default(0)
+  grandTotal     Float
+  paidAmount     Float
+  dueAmount      Float    @default(0)
+  changeAmount   Float    @default(0)
+  paymentMethod  String   // CASH, BKASH, CARD
+  paymentStatus  String   @default("PAID") // PAID, DUE, PARTIAL
+
+  notes          String?
+
+  saleItems      SaleItem[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("sales")
+}
+
+// কাস্টমারের বাকি (Due) টাকা পরিশোধ ট্র্যাক করার জন্য
+model CustomerPayment {
+  id            Int      @id @default(autoincrement())
+  shopId        Int
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  customerId    Int
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id])
+
+  amount        Float    
+  paymentMethod String   
+  notes         String?
+
+  createdAt     DateTime @default(now())
+
+  @@map("customer_payments")
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  shopId      Int
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  title       String   // যেমন: দোকান ভাড়া, বিদ্যুৎ বিল ইত্যাদি
+  amount      Float
+  category    String   // Rent, Utilities, Salary ইত্যাদি
+  note        String?
+
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+
+  @@map("expenses")
 }
