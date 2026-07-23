@@ -13,7 +13,11 @@ export default function Inventory() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
 
-  // Popup & Form Control State
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
+
+  // Popup & Form Control State (Add)
   const [addProductPopup, setAddProductPopup] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -26,6 +30,21 @@ export default function Inventory() {
     description: "",
   });
 
+  // Popup & Form Control State (Edit)
+  const [editProductPopup, setEditProductPopup] = useState(false);
+  const [editProductId, setEditProductId] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    sku: "",
+    category: "",
+    purchasePrice: "",
+    sellingPrice: "",
+    quantity: "",
+    unit: "Pcs",
+    description: "",
+    status: "ACTIVE"
+  });
+
   // সাজেশন স্টেট সমূহ
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -36,9 +55,8 @@ export default function Inventory() {
   // 🔒 টোকেন তুলে আনার হেল্পার ফাংশন
   const getAuthHeader = () => {
     const token = localStorage.getItem("token");
-    console.log("Token:", token);
     return token ? { Authorization: `Bearer ${token}` } : {};
-  }
+  };
 
   // --- ১. এপিআই থেকে প্রোডাক্ট ও ক্যাটাগরি ডেটা লোড করা ---
   useEffect(() => {
@@ -50,7 +68,6 @@ export default function Inventory() {
           axios.get(API_URL, { headers: getAuthHeader() }),
           axios.get(CATEGORY_API_URL, { headers: getAuthHeader() }).catch(() => ({ data: [] }))
         ]);
-
 
         if (Array.isArray(productsRes.data)) {
           setProducts(productsRes.data);
@@ -116,8 +133,16 @@ export default function Inventory() {
     }
   };
 
-  // --- ৩. নতুন প্রোডাক্ট অ্যাড করা (shopId সেফ ইনজেকশন সহ) ---
-  // --- ৩. নতুন প্রোডাক্ট অ্যাড করা (SKU ডুপ্লিকেট অ্যালার্ট হ্যান্ডলিং সহ) ---
+  // --- এডিট ফর্ম ইনপুট হ্যান্ডলার ---
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // --- ৩. নতুন প্রোডাক্ট অ্যাড করা ---
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -134,7 +159,7 @@ export default function Inventory() {
 
     const productData = {
       name: formData.name,
-      sku: formData.sku, // ইউজার যা ইনপুট দেবে সেটাই যাবে, ফাঁকা থাকলে ব্যাকএন্ড হ্যান্ডেল করবে
+      sku: formData.sku,
       category: formData.category || "General",
       purchasePrice: parseFloat(formData.purchasePrice) || 0,
       sellingPrice: parseFloat(formData.sellingPrice) || 0,
@@ -157,7 +182,6 @@ export default function Inventory() {
           setCategories((prev) => [...prev, { id: savedProduct.categoryId || Date.now(), name: catName }]);
         }
 
-        // ফর্ম রিসেট
         setFormData({
           name: "",
           sku: "",
@@ -177,16 +201,62 @@ export default function Inventory() {
       }
     } catch (error) {
       console.error("Error saving product:", error);
-
-      // 🚨 SKU ডুপ্লিকেট এরর চেক এবং কাস্টম অ্যালার্ট সিস্টেম
       const errorMessage = error.response?.data?.error || "";
-
-      if (errorMessage.includes("Unique constraint failed on the fields: (`sku`)") || errorMessage.includes("sku")) {
-        alert("❌ This SKU Already Used Plese Change ");
+      if (errorMessage.includes("Unique constraint failed") || errorMessage.includes("sku")) {
+        alert("❌ This SKU Already Used Please Change");
       } else {
-        // অন্য কোনো সাধারণ এরর হলে সেটার মেসেজ দেখাবে
         alert(error.response?.data?.message || "Something went wrong! Please try again.");
       }
+    }
+  };
+
+  // --- এডিট পপআপ ওপেন করার ফাংশন ---
+  const handleEditClick = (product) => {
+    setEditProductId(product.id);
+    const catName = product.category?.name || (typeof product.category === 'string' ? product.category : "");
+    setEditFormData({
+      name: product.name || "",
+      sku: product.sku || "",
+      category: catName,
+      purchasePrice: product.purchasePrice || "",
+      sellingPrice: product.sellingPrice || "",
+      quantity: product.quantity || "",
+      unit: product.unit || "Pcs",
+      description: product.description || "",
+      status: product.status || "ACTIVE"
+    });
+    setEditProductPopup(true);
+  };
+
+  // --- প্রোডাক্ট আপডেট সাবমিট হ্যান্ডলার ---
+  const handleUpdateSubmit = async (e) => {
+    e.preventDefault();
+
+    const updatedData = {
+      name: editFormData.name,
+      sku: editFormData.sku,
+      category: editFormData.category || "General",
+      purchasePrice: parseFloat(editFormData.purchasePrice) || 0,
+      sellingPrice: parseFloat(editFormData.sellingPrice) || 0,
+      quantity: parseFloat(editFormData.quantity) || 0,
+      unit: editFormData.unit,
+      description: editFormData.description,
+      status: editFormData.status
+    };
+
+    try {
+      const response = await axios.put(`${API_URL}/${editProductId}`, updatedData, { headers: getAuthHeader() });
+      if (response.status === 200) {
+        const updatedProduct = response.data;
+        setProducts((prev) =>
+          prev.map((p) => (p.id === editProductId ? updatedProduct : p))
+        );
+        setEditProductPopup(false);
+        alert("Product updated successfully!");
+      }
+    } catch (error) {
+      console.error("Error updating product:", error);
+      alert(error.response?.data?.message || "Could not update the product.");
     }
   };
 
@@ -219,6 +289,17 @@ export default function Inventory() {
     return matchesSearch && matchesCategory;
   });
 
+  // --- পেজিনেশন লজিক ---
+  const totalPages = Math.ceil(filteredProducts.length / rowsPerPage);
+  const indexOfLastRow = currentPage * rowsPerPage;
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+  const currentProducts = filteredProducts.slice(indexOfFirstRow, indexOfLastRow);
+
+  // সার্চ বা ক্যাটাগরি পরিবর্তন করলে পেজ ১ এ নিয়ে যাওয়া
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
+
   const getStatusStyle = (status) => {
     switch (status?.toUpperCase()) {
       case "ACTIVE":
@@ -248,50 +329,34 @@ export default function Inventory() {
 
       {/* ২. STATS OVERVIEW CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-
         {/* Total Products */}
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Total Products
-            </p>
-            <h3 className="text-2xl font-bold text-slate-900 mt-1">
-              {products.length}
-            </h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Products</p>
+            <h3 className="text-2xl font-bold text-slate-900 mt-1">{products.length}</h3>
           </div>
-          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-indigo-600">
-            📦
-          </div>
+          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-indigo-600">📦</div>
         </div>
 
         {/* Total Stock Volume */}
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Total Stock Volume
-            </p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Stock Volume</p>
             <h3 className="text-2xl font-bold text-slate-900 mt-1">
               {products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)}
             </h3>
           </div>
-          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-emerald-600">
-            📊
-          </div>
+          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-emerald-600">📊</div>
         </div>
 
+        {/* Low Stock Products */}
         <Link to="/stock_low" className="block group">
           <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between cursor-pointer transition-all duration-200 group-hover:border-blue-400 group-hover:shadow-md active:scale-[0.98]">
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Low Stock Products
-              </p>
-              <h3 className="text-2xl font-bold text-slate-900 mt-1">
-                {lowProductList.length}
-              </h3>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Low Stock Products</p>
+              <h3 className="text-2xl font-bold text-slate-900 mt-1">{lowProductList.length}</h3>
             </div>
-            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-amber-600">
-              ⚠️
-            </div>
+            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-amber-600">⚠️</div>
           </div>
         </Link>
 
@@ -299,19 +364,14 @@ export default function Inventory() {
         <Link to="/stock_low" className="block group">
           <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between cursor-pointer transition-all duration-200 group-hover:border-blue-400 group-hover:shadow-md active:scale-[0.98]">
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Out of Stock
-              </p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Out of Stock</p>
               <h3 className="text-2xl font-bold text-slate-900 mt-1">
                 {products.filter((p) => (Number(p.quantity) || 0) === 0).length}
               </h3>
             </div>
-            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-rose-600">
-              🚫
-            </div>
+            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-rose-600">🚫</div>
           </div>
         </Link>
-
       </div>
 
       {/* ৩. FILTER & SEARCH BAR */}
@@ -340,7 +400,7 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* ৪. DATA TABLE */}
+      {/* ৪. DATA TABLE & PAGINATION */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -361,8 +421,8 @@ export default function Inventory() {
                 <tr>
                   <td colSpan="8" className="px-6 py-10 text-center text-sm text-slate-400">Loading products...</td>
                 </tr>
-              ) : filteredProducts.length > 0 ? (
-                filteredProducts.map((product) => (
+              ) : currentProducts.length > 0 ? (
+                currentProducts.map((product) => (
                   <tr key={product.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900">{product.name}</td>
                     <td className="px-6 py-4 text-xs font-mono text-slate-500">{product.sku}</td>
@@ -370,7 +430,7 @@ export default function Inventory() {
                     <td className="px-6 py-4 text-slate-500">৳{Number(product.purchasePrice).toFixed(2)}</td>
                     <td className="px-6 py-4 font-semibold text-slate-900">৳{Number(product.sellingPrice).toFixed(2)}</td>
                     <td className="px-6 py-4">
-                      <span className={`font-semibold ${product.quantity <= 5 ? "text-amber-600" : "text-slate-700"}`}>
+                      <span className={`font-semibold ${Number(product.quantity) <= 5 ? "text-amber-600" : "text-slate-700"}`}>
                         {product.quantity} {product.unit || "Pcs"}
                       </span>
                     </td>
@@ -379,7 +439,13 @@ export default function Inventory() {
                         {product.status || "ACTIVE"}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right space-x-2">
+                    <td className="px-6 py-4 text-right space-x-3">
+                      <button
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-900 hover:underline cursor-pointer"
+                        onClick={() => handleEditClick(product)}
+                      >
+                        Edit
+                      </button>
                       <button
                         className="text-xs font-medium text-rose-600 hover:text-rose-900 hover:underline cursor-pointer"
                         onClick={() => handleDelete(product.id)}
@@ -397,6 +463,36 @@ export default function Inventory() {
             </tbody>
           </table>
         </div>
+
+        {/* --- Pagination Controls --- */}
+        {!loading && filteredProducts.length > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50">
+            <span className="text-xs text-slate-500">
+              Showing <span className="font-semibold text-slate-700">{indexOfFirstRow + 1}</span> to <span className="font-semibold text-slate-700">{Math.min(indexOfLastRow, filteredProducts.length)}</span> of <span className="font-semibold text-slate-700">{filteredProducts.length}</span> results
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                Previous
+              </button>
+              
+              <span className="text-xs font-medium text-slate-600 px-2">
+                Page {currentPage} of {totalPages || 1}
+              </span>
+
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ৫. ADD PRODUCT POPUP */}
@@ -575,6 +671,156 @@ export default function Inventory() {
                   className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-sm transition-all cursor-pointer"
                 >
                   Save Product
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ৬. EDIT PRODUCT POPUP */}
+      {editProductPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onClick={() => setEditProductPopup(false)}></div>
+          <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden transform transition-all max-h-[calc(100vh-2rem)] flex flex-col z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Edit Product</h2>
+                <p className="text-xs text-slate-500">Update product specifications.</p>
+              </div>
+              <button onClick={() => setEditProductPopup(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-all cursor-pointer">✕</button>
+            </div>
+
+            <form onSubmit={handleUpdateSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Product Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  value={editFormData.name}
+                  onChange={handleEditChange}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-slate-900 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">SKU / Barcode</label>
+                  <input
+                    type="text"
+                    name="sku"
+                    value={editFormData.sku}
+                    onChange={handleEditChange}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-slate-900 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Category *</label>
+                  <input
+                    type="text"
+                    name="category"
+                    required
+                    value={editFormData.category}
+                    onChange={handleEditChange}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-slate-900 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Purchase Price (৳) *</label>
+                  <input
+                    type="number"
+                    name="purchasePrice"
+                    step="0.01"
+                    required
+                    value={editFormData.purchasePrice}
+                    onChange={handleEditChange}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-slate-900 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Selling Price (৳) *</label>
+                  <input
+                    type="number"
+                    name="sellingPrice"
+                    step="0.01"
+                    required
+                    value={editFormData.sellingPrice}
+                    onChange={handleEditChange}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-slate-900 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Stock Quantity *</label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    step="any"
+                    required
+                    value={editFormData.quantity}
+                    onChange={handleEditChange}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-slate-900 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Unit *</label>
+                  <select
+                    name="unit"
+                    value={editFormData.unit}
+                    onChange={handleEditChange}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:bg-white focus:border-slate-900 transition-all cursor-pointer"
+                  >
+                    <option value="Pcs">Pieces (Pcs)</option>
+                    <option value="KG">Kilogram (KG)</option>
+                    <option value="GM">Gram (GM)</option>
+                    <option value="Liter">Liter</option>
+                    <option value="Box">Box</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Status *</label>
+                  <select
+                    name="status"
+                    value={editFormData.status}
+                    onChange={handleEditChange}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:bg-white focus:border-slate-900 transition-all cursor-pointer"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Description</label>
+                <textarea
+                  name="description"
+                  rows="2"
+                  value={editFormData.description}
+                  onChange={handleEditChange}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:bg-white focus:border-slate-900 transition-all resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 bg-white sticky bottom-0 z-10">
+                <button
+                  type="button"
+                  onClick={() => setEditProductPopup(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-sm transition-all cursor-pointer"
+                >
+                  Update Product
                 </button>
               </div>
             </form>

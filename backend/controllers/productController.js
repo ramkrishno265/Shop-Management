@@ -96,3 +96,117 @@ export const deleteProduct = async (req, res) => {
     res.status(500).json({ message: "Error deleting product", error: error.message });
   }
 };
+
+// ৪. Update Product
+export const updateProduct = async (req, res) => {
+  try {
+    const productId = parseInt(req.params.id);
+
+    const {
+      name,
+      sku,
+      category,
+      quantity,
+      unit,
+      purchasePrice,
+      sellingPrice,
+      description,
+      status,
+    } = req.body;
+
+    const { role, shopId } = req.user;
+
+    // Product exists কিনা চেক
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { category: true },
+    });
+
+    if (!existingProduct) {
+      return res.status(404).json({
+        message: "Product not found.",
+      });
+    }
+
+    // Security Check
+    if (
+      role !== "ADMIN" &&
+      existingProduct.shopId !== Number(shopId)
+    ) {
+      return res.status(403).json({
+        message: "Unauthorized: Access denied.",
+      });
+    }
+
+    // Category Handle
+    let categoryId = existingProduct.categoryId;
+
+    if (category && category.trim() !== "") {
+      let dbCategory = await prisma.category.findFirst({
+        where: {
+          name: {
+            equals: category.trim(),
+            mode: "insensitive",
+          },
+        },
+      });
+
+      if (!dbCategory) {
+        dbCategory = await prisma.category.create({
+          data: {
+            name: category.trim(),
+          },
+        });
+      }
+
+      categoryId = dbCategory.id;
+    }
+
+    // Product Update
+    const updatedProduct = await prisma.product.update({
+      where: {
+        id: productId,
+      },
+      data: {
+        name: name ?? existingProduct.name,
+        sku: sku ?? existingProduct.sku,
+        quantity:
+          quantity !== undefined
+            ? parseFloat(quantity)
+            : existingProduct.quantity,
+        unit: unit ?? existingProduct.unit,
+        purchasePrice:
+          purchasePrice !== undefined
+            ? parseFloat(purchasePrice)
+            : existingProduct.purchasePrice,
+        sellingPrice:
+          sellingPrice !== undefined
+            ? parseFloat(sellingPrice)
+            : existingProduct.sellingPrice,
+        description:
+          description ?? existingProduct.description,
+        status:
+          status ??
+          (quantity !== undefined
+            ? parseFloat(quantity) > 0
+              ? "ACTIVE"
+              : "INACTIVE"
+            : existingProduct.status),
+        categoryId,
+      },
+      include: {
+        category: true,
+      },
+    });
+
+    res.status(200).json({
+      message: "Product updated successfully.",
+      product: updatedProduct,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating product",
+      error: error.message,
+    });
+  }
+};

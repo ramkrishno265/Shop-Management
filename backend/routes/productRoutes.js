@@ -1,9 +1,10 @@
 import express from "express";
-import { 
-  getProducts, 
-  createProduct, 
-  deleteProduct 
-} from "../controllers/productController.js"; 
+import {
+  getProducts,
+  createProduct,
+  deleteProduct,
+  updateProduct
+} from "../controllers/productController.js";
 import { protect } from "../middleware/authMiddleware.js"; // 👈 মিডলওয়্যারটি ইমপোর্ট করো
 
 const router = express.Router();
@@ -12,6 +13,7 @@ const router = express.Router();
 router.get("/", protect, getProducts);
 router.post("/", protect, createProduct);
 router.delete("/:id", protect, deleteProduct);
+router.put("/:id", protect, updateProduct);
 
 // এই লাইনটি নিশ্চিত করো (export default থাকতে হবে)
 export default router;
