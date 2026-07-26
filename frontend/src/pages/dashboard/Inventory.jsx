@@ -643,6 +643,15 @@ export default function Inventory() {
                     <option value="Liter">Liter</option>
                     <option value="Box">Box</option>
                     <option value="Bag">Bag</option>
+                    <option value="Packet">Packet</option>
+                    <option value="Carton">Carton</option>
+                    <option value="Dozen">Dozen</option>
+                    <option value="Pair">Pair</option>
+                    <option value="Bundle">Bundle</option>
+                    <option value="Meter">Meter</option>
+                    <option value="Feet">Feet</option>
+                    <option value="Ml">Milliliter (ml)</option>
+                    <option value="Ton">Ton</option>
                   </select>
                 </div>
               </div>
@@ -782,7 +791,16 @@ export default function Inventory() {
                     <option value="GM">Gram (GM)</option>
                     <option value="Liter">Liter</option>
                     <option value="Box">Box</option>
-                    <option value="Bog">Bag</option>
+                    <option value="Bag">Bag</option>
+                    <option value="Packet">Packet</option>
+                    <option value="Carton">Carton</option>
+                    <option value="Dozen">Dozen</option>
+                    <option value="Pair">Pair</option>
+                    <option value="Bundle">Bundle</option>
+                    <option value="Meter">Meter</option>
+                    <option value="Feet">Feet</option>
+                    <option value="Ml">Milliliter (ml)</option>
+                    <option value="Ton">Ton</option>
 
                   </select>
                 </div>
