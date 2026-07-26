@@ -642,7 +642,7 @@ export default function Inventory() {
                     <option value="GM">Gram (GM)</option>
                     <option value="Liter">Liter</option>
                     <option value="Box">Box</option>
-                    <option value="Box">Bag</option>
+                    <option value="Bag">Bag</option>
                   </select>
                 </div>
               </div>
@@ -782,7 +782,7 @@ export default function Inventory() {
                     <option value="GM">Gram (GM)</option>
                     <option value="Liter">Liter</option>
                     <option value="Box">Box</option>
-                    <option value="Box">Bag</option>
+                    <option value="Bog">Bag</option>
 
                   </select>
                 </div>
