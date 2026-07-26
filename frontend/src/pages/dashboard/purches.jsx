@@ -168,16 +168,31 @@ export default function PurchaseManagement() {
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
     
-    // আপনার লোকাল স্টোরেজ বা ইউজার স্টেট থেকে current shopId এখানে নিয়ে আসবেন
-    // উদাহরণস্বরূপ: localStorage.getItem('shopId') অথবা আপনার অ্যাপের শপ আইডি ভেরিয়েবল
-    const currentShopId = localStorage.getItem('shopId'); // বা আপনার প্রজেক্ট অনুযায়ী শপ আইডি পাওয়ার পদ্ধতি
+    // 'user' অবজেক্ট পার্স করে সেখান থেকে shopId বের করা হচ্ছে
+    let currentShopId = null;
+    const userString = localStorage.getItem('user');
+    if (userString) {
+      try {
+        const userData = JSON.parse(userString);
+        currentShopId = userData.shopId;
+      } catch (err) {
+        console.error("Error parsing user data:", err);
+      }
+    }
+
+    console.log("Extracted Shop ID:", currentShopId);
+
+    if (!currentShopId) {
+      alert("Shop ID not found in user data!");
+      return;
+    }
 
     const supplierData = {
       name: supName,
       phone: supPhone,
       address: supAddress,
       note: supNote,
-      shopId: Number(currentShopId), // shopId এখানে যোগ করা হলো
+      shopId: Number(currentShopId),
     };
 
     try {
@@ -189,23 +204,20 @@ export default function PurchaseManagement() {
 
       const response = await fetch(url, {
         method: method,
-        headers: { 
-          "Content-Type": "application/json",
-          // যদি টোকেন বা অথেন্টিকেশন লাগে তা এখানে দিতে পারেন
-          // "Authorization": `Bearer ${token}` 
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(supplierData),
       });
 
-      if (response.ok) {
+      const result = await response.json();
+
+      if (response.ok && result.success) {
         alert(editingSupplierId ? "Supplier updated successfully!" : "Supplier added successfully!");
         fetchSuppliers();
         resetSupplierForm();
         setActiveTab("suppliers");
       } else {
-        const errorData = await response.json();
-        console.error("Server error:", errorData);
-        alert("Failed to save supplier.");
+        console.error("Server error:", result);
+        alert(result.message || "Failed to save supplier.");
       }
     } catch (error) {
       console.error("Error saving supplier:", error);
