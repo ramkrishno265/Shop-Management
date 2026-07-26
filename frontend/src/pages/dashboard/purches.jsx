@@ -47,9 +47,25 @@ export default function PurchaseManagement() {
 
   const fetchSuppliers = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/suppliers`);
-      const data = await response.json();
-      setSuppliers(data);
+      const currentShopId = localStorage.getItem('shopId'); // শপ আইডি নিয়ে আসা হচ্ছে
+      
+      // শপ আইডি যুক্ত করে রিকোয়েস্ট পাঠানো (যদি ব্যাকএন্ডে কুয়েরি ফিল্টার থাকে)
+      const url = currentShopId 
+        ? `${API_BASE_URL}/suppliers?shopId=${currentShopId}` 
+        : `${API_BASE_URL}/suppliers`;
+
+      const response = await fetch(url);
+      const result = await response.json();
+      
+      // ব্যাকএন্ড থেকে যদি { success: true, data: [...] } আকারে ডেটা আসে
+      if (result.success && Array.isArray(result.data)) {
+        setSuppliers(result.data);
+      } else if (Array.isArray(result)) {
+        // যদি সরাসরি অ্যারে রিটার্ন করে
+        setSuppliers(result);
+      } else {
+        setSuppliers([]);
+      }
     } catch (error) {
       console.error("Error fetching suppliers:", error);
     }
@@ -151,11 +167,17 @@ export default function PurchaseManagement() {
 
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
+    
+    // আপনার লোকাল স্টোরেজ বা ইউজার স্টেট থেকে current shopId এখানে নিয়ে আসবেন
+    // উদাহরণস্বরূপ: localStorage.getItem('shopId') অথবা আপনার অ্যাপের শপ আইডি ভেরিয়েবল
+    const currentShopId = localStorage.getItem('shopId'); // বা আপনার প্রজেক্ট অনুযায়ী শপ আইডি পাওয়ার পদ্ধতি
+
     const supplierData = {
       name: supName,
       phone: supPhone,
       address: supAddress,
       note: supNote,
+      shopId: Number(currentShopId), // shopId এখানে যোগ করা হলো
     };
 
     try {
@@ -167,7 +189,11 @@ export default function PurchaseManagement() {
 
       const response = await fetch(url, {
         method: method,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          // যদি টোকেন বা অথেন্টিকেশন লাগে তা এখানে দিতে পারেন
+          // "Authorization": `Bearer ${token}` 
+        },
         body: JSON.stringify(supplierData),
       });
 
@@ -177,6 +203,8 @@ export default function PurchaseManagement() {
         resetSupplierForm();
         setActiveTab("suppliers");
       } else {
+        const errorData = await response.json();
+        console.error("Server error:", errorData);
         alert("Failed to save supplier.");
       }
     } catch (error) {

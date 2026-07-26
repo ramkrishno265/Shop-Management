@@ -87,10 +87,9 @@ model Customer {
 model Supplier {
   id        Int      @id @default(autoincrement())
   name      String
-  company   String?
   phone     String?
-  email     String?
   address   String?
+  note      String?
   createdAt DateTime @default(now())
 
   shopId    Int

@@ -23,29 +23,29 @@ export const getSuppliers = async (req, res) => {
 
 // ২. নতুন সাপ্লায়ার যোগ করা (POST)
 export const createSupplier = async (req, res) => {
-  try {
-    const { name, company, phone, email, address, shopId } = req.body;
-
-    if (!name || !shopId) {
-      return res.status(400).json({ success: false, message: 'Name and shopId are required' });
+    try {
+      const { name, phone, address, note, shopId } = req.body;
+  
+      // ফ্রন্টএন্ড এবং নতুন স্কিমা অনুযায়ী name এবং shopId বাধ্যতামূলক করা হলো
+      if (!name || !shopId) {
+        return res.status(400).json({ success: false, message: 'Name and shopId are required' });
+      }
+  
+      const newSupplier = await prisma.supplier.create({
+        data: {
+          name,
+          phone,
+          address,
+          note, // নতুন ফিল্ড যুক্ত করা হলো
+          shopId: Number(shopId)
+        },
+      });
+  
+      res.status(201).json({ success: true, message: 'Supplier added successfully', data: newSupplier });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
     }
-
-    const newSupplier = await prisma.supplier.create({
-      data: {
-        name,
-        company,
-        phone,
-        email,
-        address,
-        shopId: Number(shopId)
-      },
-    });
-
-    res.status(201).json({ success: true, message: 'Supplier added successfully', data: newSupplier });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+  };
 
 // ৩. সাপ্লায়ার আপডেট করা (PUT)
 export const updateSupplier = async (req, res) => {
