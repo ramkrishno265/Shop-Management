@@ -5,6 +5,7 @@ import authRoutes from './routes/authRoutes.js';
 import productRoutes from "./routes/productRoutes.js"; // (.js এক্সটেনশনসহ import ব্যবহার করা হয়েছে)
 import categoriesRouters from "./routes/categoryRouter.js";
 import salesRouter from './routes/salesRoutes.js';
+import purchaseRoutes from './routes/purchaseRoutes.js';
 dotenv.config();
 
 const app = express();
@@ -18,6 +19,7 @@ app.use('/api/auth', authRoutes);
 app.use("/api/products", productRoutes); 
 app.use("/api/categories",categoriesRouters);
 app.use('/api/sales', salesRouter);
+app.use('/api', purchaseRoutes);
 
 
 // Test Base Route
