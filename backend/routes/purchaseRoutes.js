@@ -8,7 +8,7 @@ import {
   createPurchase,
   updatePurchase,
   deletePurchase
-} from '../controllers/purchaseController';
+} from '../controllers/purchaseController.js';
 
 const router = express.Router();
 
