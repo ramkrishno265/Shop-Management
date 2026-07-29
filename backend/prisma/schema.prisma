@@ -14,13 +14,13 @@ enum Role {
 }
 
 model Shop {
-  id         Int      @id @default(autoincrement())
-  name       String
-  logo       String?
-  phone      String?
-  email      String?
-  address    String?
-  status     Boolean  @default(true)
+  id        Int      @id @default(autoincrement())
+  name      String
+  logo      String?
+  phone     String?
+  email     String?
+  address   String?
+  status    Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -83,7 +83,6 @@ model Customer {
   @@map("customers")
 }
 
-// নতুন সংযোজন: সাপ্লায়ার বা পাইকারি বিক্রেতাদের তথ্য রাখার জন্য
 model Supplier {
   id        Int      @id @default(autoincrement())
   name      String
@@ -100,12 +99,11 @@ model Supplier {
   @@map("suppliers")
 }
 
-// ক্যাটাগরি মডেলে shopId যুক্ত করায় এখন একই ক্যাটাগরি নাম আলাদা শপে থাকতে পারবে
 model Category {
-  id       Int       @id @default(autoincrement())
+  id       Int      @id @default(autoincrement())
   name     String
   shopId   Int
-  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   products Product[]
 
@@ -142,7 +140,6 @@ model Product {
   @@map("products")
 }
 
-// স্টক আপডেট এবং ডেটা সুরক্ষার জন্য অডিট লগ টেবিল
 model StockLog {
   id              Int      @id @default(autoincrement())
   productId       Int
@@ -162,7 +159,6 @@ model StockLog {
   @@map("stock_logs")
 }
 
-// নতুন সংযোজন: সাপ্লায়ারের কাছ থেকে স্টক বা পণ্য কেনার ইনভয়েস টেবিল
 model Purchase {
   id             Int          @id @default(autoincrement())
   invoiceNo      String       @unique
@@ -186,7 +182,6 @@ model Purchase {
   createdBy      Int?
   user           User?        @relation(fields: [createdBy], references: [id])
 
-  // বিপরীত রিলেশন ফিল্ড (এটি অবশ্যই থাকতে হবে)
   purchaseItems  PurchaseItem[]
 
   createdAt      DateTime     @default(now())
@@ -196,35 +191,20 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id          Int      @id @default(autoincrement())
-  purchaseId  Int
-  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-
-  productName String
-  quantity    Float
-  unitPrice   Float
-  totalPrice  Float
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("purchase_items")
-}
-
-// ক্রয়ের ভেতরের পণ্যের তালিকা
-model PurchaseItem {
   id            Int      @id @default(autoincrement())
   purchaseId    Int
   purchase      Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
 
-  productId     Int
-  product       Product  @relation(fields: [productId], references: [id])
+  productId     Int?
+  product       Product? @relation(fields: [productId], references: [id])
 
+  productName   String?
   quantity      Float
-  purchasePrice Float
-  subtotal      Float
+  unitPrice     Float
+  totalPrice    Float
 
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("purchase_items")
 }
@@ -284,7 +264,6 @@ model Sale {
   @@map("sales")
 }
 
-// কাস্টমারের বাকি (Due) টাকা পরিশোধ ট্র্যাক করার জন্য
 model CustomerPayment {
   id            Int      @id @default(autoincrement())
   shopId        Int
@@ -306,19 +285,19 @@ model CustomerPayment {
 }
 
 model Expense {
-  id          Int      @id @default(autoincrement())
-  shopId      Int
-  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id       Int      @id @default(autoincrement())
+  shopId   Int
+  shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  title       String   // যেমন: দোকান ভাড়া, বিদ্যুৎ বিল ইত্যাদি
-  amount      Float
-  category    String   // Rent, Utilities, Salary ইত্যাদি
-  note        String?
+  title    String   // যেমন: দোকান ভাড়া, বিদ্যুৎ বিল ইত্যাদি
+  amount   Float
+  category String   // Rent, Utilities, Salary ইত্যাদি
+  note     String?
 
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id])
+  userId   Int
+  user     User     @relation(fields: [userId], references: [id])
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@map("expenses")
 }
