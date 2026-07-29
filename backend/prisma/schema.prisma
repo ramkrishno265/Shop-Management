@@ -164,30 +164,30 @@ model StockLog {
 
 // নতুন সংযোজন: সাপ্লায়ারের কাছ থেকে স্টক বা পণ্য কেনার ইনভয়েস টেবিল
 model Purchase {
-  id            Int      @id @default(autoincrement())
-  invoiceNo     String   @unique
+  id             Int      @id @default(autoincrement())
+  invoiceNo      String   @unique
 
-  shopId        Int
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId         Int
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  supplierId    Int
-  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplier_id    Int
+  supplier       Supplier @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
 
-  createdBy     Int
-  user          User     @relation(fields: [createdBy], references: [id])
+  date           String   // অথবা DateTime টাইপ রাখতে পারেন (যাতে ফ্রন্টএন্ডের ডেট ফরম্যাট ইজি হয়)
+  payment_status String   @default("Paid") // Paid, Due, Partial ইত্যাদি
+  product        String
+  quantity       Float
+  unit_price     Float
+  total_amount   Float
+  paid_amount    Float    @default(0)
+  due_amount     Float    @default(0)
+  note           String?
 
-  subtotal      Float
-  discountAmount Float   @default(0)
-  grandTotal    Float
-  paidAmount    Float
-  dueAmount     Float    @default(0)
-  paymentStatus String   @default("PAID") // PAID, DUE, PARTIAL
+  createdBy      Int?
+  user           User?    @relation(fields: [createdBy], references: [id])
 
-  notes         String?
-  purchaseItems PurchaseItem[]
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("purchases")
 }
