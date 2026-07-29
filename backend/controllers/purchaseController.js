@@ -125,19 +125,24 @@ export const createPurchase = async (req, res) => {
       supplier_id,
       date,
       payment_status,
-      product,
+      product, // এটি পণ্যের নাম হতে পারে
       quantity,
       unit_price,
       total_amount,
       paid_amount,
       due_amount,
       note,
-      createdBy = 1 // ফলব্যাক ইউজার আইডি (অথবা রিকোয়েস্ট থেকে নিতে পারেন)
+      createdBy = req.user?.id || 1 // লগইন করা ইউজারের আইডি থাকলে তা নিবে, না হলে ফলব্যাক
     } = req.body;
 
-    // অটো ইউনিক ইনভয়েস নম্বর জেনারেট
+    // অটো ইউনিক ইনভয়েস নম্বর জেনারেট
     const invoiceNo = `INV-${Date.now().toString().slice(-8)}`;
 
+    const parsedQuantity = Number(quantity) || 0;
+    const parsedUnitPrice = Number(unit_price) || 0;
+    const parsedTotalAmount = Number(total_amount) || 0;
+
+    // ১. পারচেজ রেকর্ড এবং পারচেজ আইটেম একসাথে তৈরি
     const newPurchase = await prisma.purchase.create({
       data: {
         invoiceNo,
@@ -145,23 +150,22 @@ export const createPurchase = async (req, res) => {
         supplier_id: Number(supplier_id),
         date: date || new Date().toISOString().split('T')[0],
         payment_status: payment_status || "Paid",
-        product,
-        quantity: Number(quantity) || 0,
-        unit_price: Number(unit_price) || 0,
-        total_amount: Number(total_amount) || 0,
+        product: product,
+        quantity: parsedQuantity,
+        unit_price: parsedUnitPrice,
+        total_amount: parsedTotalAmount,
         paid_amount: Number(paid_amount) || 0,
         due_amount: Number(due_amount) || 0,
         note: note || "",
         createdBy: Number(createdBy),
         
-        // যেহেতু PurchaseItem স্কিমাতে আছে, তাই এখানে একটি ডিফল্ট আইটেম এন্ট্রি করা হলো
         purchaseItems: {
           create: [
             {
               productName: product || "General Product",
-              quantity: Number(quantity) || 1,
-              unitPrice: Number(unit_price) || 0,
-              totalPrice: Number(total_amount) || 0,
+              quantity: parsedQuantity,
+              unitPrice: parsedUnitPrice,
+              totalPrice: parsedTotalAmount,
             }
           ]
         }
@@ -172,7 +176,39 @@ export const createPurchase = async (req, res) => {
       }
     });
 
-    res.status(201).json({ success: true, message: 'Purchase saved successfully', data: newPurchase });
+    // ২. প্রোডাক্ট টেবিল থেকে ওই শপের আন্ডারে প্রোডাক্টটি খুঁজে স্টক আপডেট করা
+    const existingProduct = await prisma.product.findFirst({
+      where: {
+        shopId: Number(shopId),
+        name: product, // নাম দিয়ে ম্যাচ করা হচ্ছে (যদি নাম হুবহু মিলে যায়)
+      },
+    });
+
+    if (existingProduct) {
+      const previousStock = existingProduct.quantity;
+      const newStock = previousStock + parsedQuantity;
+
+      // প্রোডাক্টের পরিমাণ (quantity) আপডেট করা
+      await prisma.product.update({
+        where: { id: existingProduct.id },
+        data: { quantity: newStock },
+      });
+
+      // স্টক লগে (StockLog) এন্ট্রি রাখা যাতে হিস্ট্রি থাকে
+      await prisma.stockLog.create({
+        data: {
+          productId: existingProduct.id,
+          userId: Number(createdBy),
+          changeType: "PURCHASE",
+          quantityChanged: parsedQuantity,
+          previousStock: previousStock,
+          newStock: newStock,
+          note: `Purchase Invoice: ${invoiceNo}`,
+        },
+      });
+    }
+
+    res.status(201).json({ success: true, message: 'Purchase saved and stock updated successfully', data: newPurchase });
   } catch (err) {
     console.error("Create Purchase Error:", err);
     res.status(500).json({ success: false, message: err.message });
