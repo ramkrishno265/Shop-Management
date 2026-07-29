@@ -58,9 +58,13 @@ export default function InventoryManagement() {
 
   const fetchPurchases = async () => {
     try {
+      const token = localStorage.getItem("token") || "";
       const currentShopId = localStorage.getItem('shopId');
       const url = currentShopId ? `${API_BASE_URL}/purchases?shopId=${currentShopId}` : `${API_BASE_URL}/purchases`;
-      const response = await fetch(url);
+      
+      const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       const data = await response.json();
       setPurchases(data.success && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []));
     } catch (error) {
@@ -70,9 +74,13 @@ export default function InventoryManagement() {
 
   const fetchSuppliers = async () => {
     try {
+      const token = localStorage.getItem("token") || "";
       const currentShopId = localStorage.getItem('shopId');
       const url = currentShopId ? `${API_BASE_URL}/suppliers?shopId=${currentShopId}` : `${API_BASE_URL}/suppliers`;
-      const response = await fetch(url);
+      
+      const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       const result = await response.json();
       setSuppliers(result.success && Array.isArray(result.data) ? result.data : (Array.isArray(result) ? result : []));
     } catch (error) {
@@ -91,7 +99,6 @@ export default function InventoryManagement() {
   const handleSavePurchase = async (e) => {
     e.preventDefault();
 
-    // শপ আইডি সংগ্রহ (সাপ্লাইয়ারের মতোই লোকালস্টোরেজ বা ইউজার অবজেক্ট থেকে)
     let currentShopId = localStorage.getItem('shopId') || localStorage.getItem('shop_id');
 
     if (!currentShopId) {
@@ -112,7 +119,7 @@ export default function InventoryManagement() {
     }
 
     const purchaseData = {
-      shopId: currentShopId, // এখানে শপ আইডি যুক্ত করা হলো
+      shopId: currentShopId,
       supplier_id: supplierId,
       date,
       payment_status: paymentStatus,
@@ -155,11 +162,10 @@ export default function InventoryManagement() {
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
 
-    // ১. প্রথমে সরাসরি shopId চেক করবে, না পেলে user অবজেক্ট থেকে বের করবে
     let currentShopId = localStorage.getItem('shopId') || localStorage.getItem('shop_id');
 
     if (!currentShopId) {
-      const storedUser = localStorage.getItem('user'); // অথবা আপনার ইউজার ডেটার কি (key) নাম যা থাকে
+      const storedUser = localStorage.getItem('user');
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
@@ -245,7 +251,11 @@ export default function InventoryManagement() {
   const handleDeletePurchase = async (id) => {
     if (!window.confirm("Are you sure you want to delete this purchase?")) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/purchases/${id}`, { method: "DELETE" });
+      const token = localStorage.getItem("token") || "";
+      const response = await fetch(`${API_BASE_URL}/purchases/${id}`, { 
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       if (response.ok) {
         alert("Purchase deleted successfully!");
         fetchPurchases();
@@ -258,7 +268,11 @@ export default function InventoryManagement() {
   const handleDeleteSupplier = async (id) => {
     if (!window.confirm("Are you sure you want to delete this supplier?")) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/suppliers/${id}`, { method: "DELETE" });
+      const token = localStorage.getItem("token") || "";
+      const response = await fetch(`${API_BASE_URL}/suppliers/${id}`, { 
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       if (response.ok) {
         alert("Supplier deleted successfully!");
         fetchSuppliers();
@@ -288,7 +302,6 @@ export default function InventoryManagement() {
     setSupAddress("");
     setSupNote("");
   };
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 bg-gray-50/50 min-h-screen">
       {/* Standard Header Navigation Tabs */}
