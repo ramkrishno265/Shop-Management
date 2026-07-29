@@ -8,10 +8,15 @@ import prisma from "../config/db.js";
 // Example: GET /api/suppliers?shopId=1
 export const getSuppliers = async (req, res) => {
   try {
-    const { shopId } = req.query;
+    const shopId = req.query.shopId || req.user?.shopId;
+
+    // যদি শপ আইডি না থাকে, তবে খালি অ্যারে রিটার্ন করবে
+    if (!shopId) {
+      return res.status(200).json({ success: true, data: [] });
+    }
 
     const suppliers = await prisma.supplier.findMany({
-      where: shopId ? { shopId: Number(shopId) } : {}, // নির্দিষ্ট শপের সাপ্লায়ার ফিল্টার
+      where: { shopId: Number(shopId) }, // বাধ্যতামূলকভাবে নির্দিষ্ট শপ আইডি ফিল্টার
       orderBy: { id: 'desc' },
     });
 
@@ -87,11 +92,15 @@ export const deleteSupplier = async (req, res) => {
 /// ১. সব পারচেজ নিয়ে আসা (GET)
 export const getPurchases = async (req, res) => {
   try {
-    const { shopId } = req.query;
+    const shopId = req.query.shopId || req.user?.shopId;
 
-    // যদি shopId পাঠানো না হয়, তবে খালি অ্যারে বা এরর রিটার্ন করতে পারেন
+    // যদি কোনো শপ আইডি পাওয়া না যায়, তবে সিকিউরিটির জন্য খালি লিস্ট রিটার্ন করবে
+    if (!shopId) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
     const purchases = await prisma.purchase.findMany({
-      where: shopId ? { shopId: Number(shopId) } : {}, // শপ আইডি দিয়ে ফিল্টার করা হচ্ছে
+      where: { shopId: Number(shopId) }, // বাধ্যতামূলকভাবে নির্দিষ্ট শপ আইডি ফিল্টার
       include: {
         supplier: true,
         user: {
