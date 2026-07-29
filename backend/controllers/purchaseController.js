@@ -28,29 +28,29 @@ export const getSuppliers = async (req, res) => {
 
 // ২. নতুন সাপ্লায়ার যোগ করা (POST)
 export const createSupplier = async (req, res) => {
-    try {
-      const { name, phone, address, note, shopId } = req.body;
-  
-      // ফ্রন্টএন্ড এবং নতুন স্কিমা অনুযায়ী name এবং shopId বাধ্যতামূলক করা হলো
-      if (!name || !shopId) {
-        return res.status(400).json({ success: false, message: 'Name and shopId are required' });
-      }
-  
-      const newSupplier = await prisma.supplier.create({
-        data: {
-          name,
-          phone,
-          address,
-          note, // নতুন ফিল্ড যুক্ত করা হলো
-          shopId: Number(shopId)
-        },
-      });
-  
-      res.status(201).json({ success: true, message: 'Supplier added successfully', data: newSupplier });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+  try {
+    const { name, phone, address, note, shopId } = req.body;
+
+    // ফ্রন্টএন্ড এবং নতুন স্কিমা অনুযায়ী name এবং shopId বাধ্যতামূলক করা হলো
+    if (!name || !shopId) {
+      return res.status(400).json({ success: false, message: 'Name and shopId are required' });
     }
-  };
+
+    const newSupplier = await prisma.supplier.create({
+      data: {
+        name,
+        phone,
+        address,
+        note, // নতুন ফিল্ড যুক্ত করা হলো
+        shopId: Number(shopId)
+      },
+    });
+
+    res.status(201).json({ success: true, message: 'Supplier added successfully', data: newSupplier });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 // ৩. সাপ্লায়ার আপডেট করা (PUT)
 export const updateSupplier = async (req, res) => {
@@ -158,7 +158,7 @@ export const createPurchase = async (req, res) => {
         due_amount: Number(due_amount) || 0,
         note: note || "",
         createdBy: Number(createdBy),
-        
+
         purchaseItems: {
           create: [
             {
@@ -220,6 +220,7 @@ export const updatePurchase = async (req, res) => {
   try {
     const { id } = req.params;
     const {
+      shopId,
       supplier_id,
       date,
       payment_status,
@@ -229,45 +230,71 @@ export const updatePurchase = async (req, res) => {
       total_amount,
       paid_amount,
       due_amount,
-      note
+      note,
     } = req.body;
 
+    // ১. প্রথমে ডাটাবেজ থেকে পুরনো পারচেজ রেকর্ডটি খুঁজে বের করা
+    const existingPurchase = await prisma.purchase.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!existingPurchase) {
+      return res.status(404).json({ success: false, message: "Purchase record not found" });
+    }
+
+    const oldQuantity = Number(existingPurchase.quantity) || 0;
+    const newQuantity = Number(quantity) || 0;
+    const quantityDifference = newQuantity - oldQuantity; // পরিমাণের পার্থক্য বের করা
+
+    const parsedUnitPrice = Number(unit_price) || 0;
+    const parsedTotalAmount = Number(total_amount) || 0;
+
+    // ২. পারচেজ রেকর্ড আপডেট করা
     const updatedPurchase = await prisma.purchase.update({
       where: { id: Number(id) },
       data: {
-        ...(supplier_id && { supplier_id: Number(supplier_id) }),
-        ...(date && { date }),
-        ...(payment_status && { payment_status }),
-        ...(product && { product }),
-        ...(quantity !== undefined && { quantity: Number(quantity) }),
-        ...(unit_price !== undefined && { unit_price: Number(unit_price) }),
-        ...(total_amount !== undefined && { total_amount: Number(total_amount) }),
-        ...(paid_amount !== undefined && { paid_amount: Number(paid_amount) }),
-        ...(due_amount !== undefined && { due_amount: Number(due_amount) }),
-        ...(note !== undefined && { note }),
-
-        // আইটেম আপডেট করার সময় আগেরগুলো ডিলিট করে নতুনটা আপডেট করা
-        ...(product && {
-          purchaseItems: {
-            deleteMany: {},
-            create: [
-              {
-                productName: product,
-                quantity: Number(quantity) || 1,
-                unitPrice: Number(unit_price) || 0,
-                totalPrice: Number(total_amount) || 0,
-              }
-            ]
-          }
-        })
+        supplier_id: Number(supplier_id),
+        date: date || existingPurchase.date,
+        payment_status: payment_status || existingPurchase.payment_status,
+        product: product || existingPurchase.product,
+        quantity: newQuantity,
+        unit_price: parsedUnitPrice,
+        total_amount: parsedTotalAmount,
+        paid_amount: Number(paid_amount) || 0,
+        due_amount: Number(due_amount) || 0,
+        note: note || "",
       },
       include: {
         supplier: true,
-        purchaseItems: true
-      }
+        purchaseItems: true,
+      },
     });
 
-    res.status(200).json({ success: true, message: 'Purchase updated successfully', data: updatedPurchase });
+    // ৩. সংশ্লিষ্ট প্রোডাক্টের স্টক আপডেট করা (পার্থক্য অনুযায়ী যোগ বা বিয়োগ হবে)
+    if (quantityDifference !== 0) {
+      const existingProduct = await prisma.product.findFirst({
+        where: {
+          shopId: Number(shopId || existingPurchase.shopId),
+          name: product || existingPurchase.product,
+        },
+      });
+
+      if (existingProduct) {
+        const previousStock = existingProduct.quantity;
+        const updatedStock = previousStock + quantityDifference; // নতুন পরিমাণ বেশি হলে স্টক বাড়বে, কমলে কমবে
+
+        await prisma.product.update({
+          where: { id: existingProduct.id },
+          data: { quantity: Math.max(0, updatedStock) }, // স্টক যেন মাইনাস না হয়
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Purchase updated and stock adjusted successfully!",
+      data: updatedPurchase,
+    });
   } catch (err) {
     console.error("Update Purchase Error:", err);
     res.status(500).json({ success: false, message: err.message });
