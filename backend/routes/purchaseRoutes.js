@@ -9,8 +9,13 @@ import {
   updatePurchase,
   deletePurchase
 } from '../controllers/purchaseController.js';
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+
+// সব রাউটের জন্য প্রটেক্ট মিডলওয়্যার বাধ্যতামূলক করা হলো, 
+// যাতে লগইন করা ইউজারের তথ্য (req.user এবং shopId) কন্ট্রোলারে পাওয়া যায়
+router.use(protect);
 
 // Supplier Routes
 router.get('/suppliers', getSuppliers);
