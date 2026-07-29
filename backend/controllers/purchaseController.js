@@ -11,11 +11,11 @@ export const getSuppliers = async (req, res) => {
     const { shopId } = req.query;
 
     const suppliers = await prisma.supplier.findMany({
-      where: shopId ? { shopId: Number(shopId) } : {},
+      where: shopId ? { shopId: Number(shopId) } : {}, // নির্দিষ্ট শপের সাপ্লায়ার ফিল্টার
       orderBy: { id: 'desc' },
     });
 
-    res.status(200).json(suppliers);
+    res.status(200).json({ success: true, data: suppliers });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -89,8 +89,9 @@ export const getPurchases = async (req, res) => {
   try {
     const { shopId } = req.query;
 
+    // যদি shopId পাঠানো না হয়, তবে খালি অ্যারে বা এরর রিটার্ন করতে পারেন
     const purchases = await prisma.purchase.findMany({
-      where: shopId ? { shopId: Number(shopId) } : {},
+      where: shopId ? { shopId: Number(shopId) } : {}, // শপ আইডি দিয়ে ফিল্টার করা হচ্ছে
       include: {
         supplier: true,
         user: {

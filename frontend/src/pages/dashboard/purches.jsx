@@ -58,7 +58,9 @@ export default function InventoryManagement() {
 
   const fetchPurchases = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/purchases`);
+      const currentShopId = localStorage.getItem('shopId');
+      const url = currentShopId ? `${API_BASE_URL}/purchases?shopId=${currentShopId}` : `${API_BASE_URL}/purchases`;
+      const response = await fetch(url);
       const data = await response.json();
       setPurchases(data.success && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []));
     } catch (error) {
@@ -127,9 +129,9 @@ export default function InventoryManagement() {
       const url = editingPurchaseId ? `${API_BASE_URL}/purchases/${editingPurchaseId}` : `${API_BASE_URL}/purchases`;
       const response = await fetch(url, {
         method: editingPurchaseId ? "PUT" : "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}` 
+          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`
         },
         body: JSON.stringify(purchaseData),
       });
@@ -150,7 +152,7 @@ export default function InventoryManagement() {
   };
 
   // Save / Update Supplier
- const handleSaveSupplier = async (e) => {
+  const handleSaveSupplier = async (e) => {
     e.preventDefault();
 
     // ১. প্রথমে সরাসরি shopId চেক করবে, না পেলে user অবজেক্ট থেকে বের করবে
@@ -187,15 +189,15 @@ export default function InventoryManagement() {
     };
 
     try {
-      const url = editingSupplierId 
-        ? `${API_BASE_URL}/suppliers/${editingSupplierId}` 
+      const url = editingSupplierId
+        ? `${API_BASE_URL}/suppliers/${editingSupplierId}`
         : `${API_BASE_URL}/suppliers`;
 
       const response = await fetch(url, {
         method: editingSupplierId ? "PUT" : "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}` 
+          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`
         },
         body: JSON.stringify(supplierData),
       });
