@@ -164,32 +164,51 @@ model StockLog {
 
 // নতুন সংযোজন: সাপ্লায়ারের কাছ থেকে স্টক বা পণ্য কেনার ইনভয়েস টেবিল
 model Purchase {
-  id             Int      @id @default(autoincrement())
-  invoiceNo      String   @unique
+  id             Int          @id @default(autoincrement())
+  invoiceNo      String       @unique
 
   shopId         Int
-  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop           Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   supplier_id    Int
-  supplier       Supplier @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
+  supplier       Supplier     @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
 
   date           String
-  payment_status String   @default("Paid")
+  payment_status String       @default("Paid")
   product        String
   quantity       Float
   unit_price     Float
   total_amount   Float
-  paid_amount    Float    @default(0)
-  due_amount     Float    @default(0)
+  paid_amount    Float        @default(0)
+  due_amount     Float        @default(0)
   note           String?
 
   createdBy      Int?
-  user           User?    @relation(fields: [createdBy], references: [id])
+  user           User?        @relation(fields: [createdBy], references: [id])
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  // বিপরীত রিলেশন ফিল্ড (এটি অবশ্যই থাকতে হবে)
+  purchaseItems  PurchaseItem[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@map("purchases")
+}
+
+model PurchaseItem {
+  id          Int      @id @default(autoincrement())
+  purchaseId  Int
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  productName String
+  quantity    Float
+  unitPrice   Float
+  totalPrice  Float
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("purchase_items")
 }
 
 // ক্রয়ের ভেতরের পণ্যের তালিকা
