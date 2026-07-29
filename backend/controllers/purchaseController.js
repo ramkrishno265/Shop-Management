@@ -84,7 +84,7 @@ export const deleteSupplier = async (req, res) => {
 // PURCHASE CONTROLLERS
 // ==========================================
 
-// ১. সব পারচেজ নিয়ে আসা (GET)
+/// ১. সব পারচেজ নিয়ে আসা (GET)
 export const getPurchases = async (req, res) => {
   try {
     const { shopId } = req.query;
@@ -95,7 +95,8 @@ export const getPurchases = async (req, res) => {
         supplier: true,
         user: {
           select: { id: true, name: true, email: true }
-        }
+        },
+        purchaseItems: true
       },
       orderBy: { id: 'desc' },
     });
@@ -121,9 +122,10 @@ export const createPurchase = async (req, res) => {
       paid_amount,
       due_amount,
       note,
-      createdBy = 1
+      createdBy = 1 // ফলব্যাক ইউজার আইডি (অথবা রিকোয়েস্ট থেকে নিতে পারেন)
     } = req.body;
 
+    // অটো ইউনিক ইনভয়েস নম্বর জেনারেট
     const invoiceNo = `INV-${Date.now().toString().slice(-8)}`;
 
     const newPurchase = await prisma.purchase.create({
@@ -134,16 +136,29 @@ export const createPurchase = async (req, res) => {
         date: date || new Date().toISOString().split('T')[0],
         payment_status: payment_status || "Paid",
         product,
-        quantity: Number(quantity),
-        unit_price: Number(unit_price),
-        total_amount: Number(total_amount),
+        quantity: Number(quantity) || 0,
+        unit_price: Number(unit_price) || 0,
+        total_amount: Number(total_amount) || 0,
         paid_amount: Number(paid_amount) || 0,
         due_amount: Number(due_amount) || 0,
         note: note || "",
-        createdBy: Number(createdBy)
+        createdBy: Number(createdBy),
+        
+        // যেহেতু PurchaseItem স্কিমাতে আছে, তাই এখানে একটি ডিফল্ট আইটেম এন্ট্রি করা হলো
+        purchaseItems: {
+          create: [
+            {
+              productName: product || "General Product",
+              quantity: Number(quantity) || 1,
+              unitPrice: Number(unit_price) || 0,
+              totalPrice: Number(total_amount) || 0,
+            }
+          ]
+        }
       },
       include: {
-        supplier: true
+        supplier: true,
+        purchaseItems: true
       }
     });
 
@@ -183,15 +198,31 @@ export const updatePurchase = async (req, res) => {
         ...(total_amount !== undefined && { total_amount: Number(total_amount) }),
         ...(paid_amount !== undefined && { paid_amount: Number(paid_amount) }),
         ...(due_amount !== undefined && { due_amount: Number(due_amount) }),
-        ...(note !== undefined && { note })
+        ...(note !== undefined && { note }),
+
+        // আইটেম আপডেট করার সময় আগেরগুলো ডিলিট করে নতুনটা আপডেট করা
+        ...(product && {
+          purchaseItems: {
+            deleteMany: {},
+            create: [
+              {
+                productName: product,
+                quantity: Number(quantity) || 1,
+                unitPrice: Number(unit_price) || 0,
+                totalPrice: Number(total_amount) || 0,
+              }
+            ]
+          }
+        })
       },
       include: {
-        supplier: true
+        supplier: true,
+        purchaseItems: true
       }
     });
 
     res.status(200).json({ success: true, message: 'Purchase updated successfully', data: updatedPurchase });
-  }, catch (err) {
+  } catch (err) {
     console.error("Update Purchase Error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
