@@ -173,8 +173,8 @@ model Purchase {
   supplier_id    Int
   supplier       Supplier @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
 
-  date           String   // অথবা DateTime টাইপ রাখতে পারেন (যাতে ফ্রন্টএন্ডের ডেট ফরম্যাট ইজি হয়)
-  payment_status String   @default("Paid") // Paid, Due, Partial ইত্যাদি
+  date           String
+  payment_status String   @default("Paid")
   product        String
   quantity       Float
   unit_price     Float
