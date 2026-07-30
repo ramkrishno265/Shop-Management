@@ -205,7 +205,7 @@ export const getSalesSummary = async (req, res) => {
       };
     }
 
-    // ডাটাবেজ থেকে সেলস রেকর্ড কুয়েরি করা
+    // ডাটাবেজ থেকে সেলস রেকর্ড কুয়েরি করা (shopId কে Number এ রূপান্তর)
     const sales = await prisma.sales.findMany({
       where: {
         shopId: Number(shopId),
@@ -218,11 +218,14 @@ export const getSalesSummary = async (req, res) => {
     let digitalSales = 0;
 
     // টোটাল, ক্যাশ এবং ডিজিটাল আলাদা করা
+    // টোটাল, ক্যাশ এবং ডিজিটাল আলাদা করা
     sales.forEach((sale) => {
-      const amount = Number(sale.grand_total || 0);
+      const amount = Number(sale.grand_total || sale.totalAmount || 0);
       totalSales += amount;
 
-      const paymentMethod = (sale.paymentMethod || sale.paymentType || '').toLowerCase();
+      // পেমেন্ট মেথড বড়হাতে রূপান্তর করে চেক করা হচ্ছে
+      const paymentMethod = (sale.paymentMethod || sale.paymentType || '').trim().toUpperCase();
+      
       if (paymentMethod === 'CASH') {
         cashSales += amount;
       } else {
@@ -230,7 +233,7 @@ export const getSalesSummary = async (req, res) => {
       }
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
         totalSales,
@@ -241,6 +244,6 @@ export const getSalesSummary = async (req, res) => {
 
   } catch (err) {
     console.error("Sales Summary Error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 };

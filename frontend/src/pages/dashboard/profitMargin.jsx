@@ -11,17 +11,19 @@ import {
   Filter
 } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 const ShopDashboard = () => {
   // স্টেট ম্যানেজমেন্ট
   const [filterType, setFilterType] = useState('today'); // 'today' | 'custom'
   const [startDate, setStartDate] = useState('2026-07-27');
   const [endDate, setEndDate] = useState('2026-07-27');
 
-  // ডেমো বা রিয়েল ডাটা স্টেট
+  // সেলস ডাটা স্টেট
   const [salesData, setSalesData] = useState({
-    totalSales: 25400,
-    cashSales: 18000,
-    digitalSales: 7400
+    totalSales: 0,
+    cashSales: 0,
+    digitalSales: 0
   });
 
   const [expenseData, setExpenseData] = useState(3200);
@@ -39,6 +41,53 @@ const ShopDashboard = () => {
     { id: 2, category: 'বিদ্যুৎ বিল', note: 'সাব-মিটার অ্যাডভান্স', time: 'আজ, সকাল ১০:০০', amount: 1500 },
     { id: 3, category: 'অন্যান্য', note: 'দোকান পরিষ্কারের সামগ্রী', time: 'গতকাল', amount: 300 },
   ]);
+
+  // ব্যাকএন্ড থেকে সেলস ডাটা ফেচ করার ফাংশন
+const fetchSalesData = async () => {
+    try {
+      // ১. user অবজেক্টটি লোকাল স্টোরেজ থেকে এনে পার্স করুন
+      const userStr = localStorage.getItem('user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      
+      // ২. user অবজেক্টের ভেতর থেকে shopId নিন
+      const shopId = user ? user.shopId : '';
+      const token = localStorage.getItem('token');
+
+      if (!shopId) {
+        console.warn("Shop ID পাওয়া যায়নি!");
+        return;
+      }
+
+      const headers = { 
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}` 
+      };
+
+      let url = `${API_URL}/sales?shopId=${shopId}&filter=${filterType}`;
+
+      if (filterType === 'custom' && startDate && endDate) {
+        url += `&startDate=${startDate}&endDate=${endDate}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: headers
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSalesData(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching sales data:", error);
+    }
+  };
+
+  // ফিল্টার বা ডেট পরিবর্তন হলে বা কম্পোনেন্ট লোড হলে ডাটা ফেচ হবে
+  useEffect(() => {
+    fetchSalesData();
+  }, [filterType, startDate, endDate]);
 
   // খরচ সাবমিট হ্যান্ডলার
   const handleAddExpense = (e) => {
@@ -116,13 +165,19 @@ const ShopDashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
 
         {/* মোট বিক্রি */}
+        {/* মোট বিক্রি */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">মোট বিক্রি (Total Sales)</p>
-            <h3 className="text-2xl font-bold text-slate-800 mt-2">৳ {salesData.totalSales.toLocaleString()}</h3>
+            <h3 className="text-2xl font-bold text-slate-800 mt-2">
+              ৳ {salesData?.totalSales ? salesData.totalSales.toLocaleString() : 0}
+            </h3>
             <div className="flex items-center gap-1 text-emerald-600 text-xs mt-2 font-medium">
               <ArrowUpRight size={14} />
-              <span>ক্যাশ: ৳ {salesData.cashSales.toLocaleString()} | ডিজিটাল: ৳ {salesData.digitalSales.toLocaleString()}</span>
+              <span>
+                ক্যাশ: ৳ {salesData?.cashSales ? salesData.cashSales.toLocaleString() : 0} | 
+                ডিজিটাল: ৳ {salesData?.digitalSales ? salesData.digitalSales.toLocaleString() : 0}
+              </span>
             </div>
           </div>
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
@@ -181,7 +236,7 @@ const ShopDashboard = () => {
           <form onSubmit={handleAddExpense} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">খরচের খাত (Category)</label>
-              <select 
+              <select
                 value={expenseCategory}
                 onChange={(e) => setExpenseCategory(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500"
