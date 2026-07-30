@@ -191,7 +191,6 @@ export const getSalesSummary = async (req, res) => {
 
     // ফিল্টার লজিক
     if (filter === 'today') {
-      // আজকের দিনের শুরু এবং শেষ সময় নিখুঁতভাবে নির্ধারণ
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
@@ -200,7 +199,6 @@ export const getSalesSummary = async (req, res) => {
         lte: endOfDay,
       };
     } else if (filter === 'custom' && startDate && endDate) {
-      // কাস্টম ডেটের ক্ষেত্রে লোকাল টাইম জোনের ঝামেলা এড়াতে সঠিক ফরম্যাট
       const startCustom = new Date(startDate);
       startCustom.setHours(0, 0, 0, 0);
 
@@ -213,27 +211,29 @@ export const getSalesSummary = async (req, res) => {
       };
     }
 
-    // ডিবাগ করার জন্য টার্মিনালে কুয়েরি দেখতে পারেন
     console.log("Shop ID:", shopId);
     console.log("Date Filter applied:", dateFilter);
 
-    // ডাটাবেজ থেকে সেলস রেকর্ড কুয়েরি করা
+    // প্রফিট হিসাব করার জন্য saleItems সহ ডাটা কুয়েরি করা
     const sales = await prisma.sales.findMany({
       where: {
         shopId: Number(shopId),
         ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
       },
+      include: {
+        saleItems: true, // প্রফিট বের করার জন্য আইটেমগুলোর ক্রয়মূল্য ও পরিমাণ দরকার
+      },
     });
 
-    console.log("Sales found from DB:", sales.length); // ডাটা কয়টা পেলো এখানে দেখাবে
+    console.log("Sales found from DB:", sales.length);
 
     let totalSales = 0;
     let cashSales = 0;
     let digitalSales = 0;
+    let totalProfit = 0; // প্রফিট ট্র্যাক করার জন্য
 
-    // টোটাল, ক্যাশ এবং ডিজিটাল আলাদা করা
     sales.forEach((sale) => {
-      const amount = Number(sale.grand_total || sale.totalAmount || 0);
+      const amount = Number(sale.grand_total || sale.grandTotal || 0);
       totalSales += amount;
 
       const paymentMethod = (sale.paymentMethod || sale.paymentType || '').trim().toUpperCase();
@@ -243,6 +243,20 @@ export const getSalesSummary = async (req, res) => {
       } else {
         digitalSales += amount; 
       }
+
+      // প্রতিটি বিক্রয় আইটেম থেকে প্রফিট হিসাব করা
+      if (sale.saleItems && Array.isArray(sale.saleItems)) {
+        sale.saleItems.forEach((item) => {
+          const qty = Number(item.quantity) || 0;
+          const unitPrice = Number(item.unitPrice) || 0;
+          const purchasePrice = Number(item.purchasePrice) || 0;
+          const discount = Number(item.discount) || 0;
+
+          // প্রফিট = (বিক্রয়মূল্য - ক্রয়মূল্য) * পরিমাণ - ডিসকাউন্ট
+          const itemProfit = ((unitPrice - purchasePrice) * qty) - discount;
+          totalProfit += itemProfit;
+        });
+      }
     });
 
     return res.status(200).json({
@@ -251,6 +265,7 @@ export const getSalesSummary = async (req, res) => {
         totalSales,
         cashSales,
         digitalSales,
+        totalProfit: Math.round(totalProfit * 100) / 100, // দশমিকের পর দুই ঘর পর্যন্ত নিখুঁত রাখার জন্য
       },
     });
 
@@ -259,3 +274,4 @@ export const getSalesSummary = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
