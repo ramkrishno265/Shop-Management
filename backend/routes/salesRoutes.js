@@ -1,5 +1,5 @@
 import express from 'express';
-import { createSale, getSales } from '../controllers/salesController.js';
+import { createSale, getSales, getSalesSummary } from '../controllers/salesController.js';
 // আপনার প্রজেক্টের অথেন্টিকেশন মিডলওয়্যার পাথ এখানে বসাবেন
 import { protect } from "../middleware/authMiddleware.js";
 
@@ -8,5 +8,6 @@ const router = express.Router();
 // POST: /api/sales/create
 router.post('/', protect, createSale);
 router.get('/', protect, getSales);
+router.get('/', protect, getSalesSummary);
 
 export default router;

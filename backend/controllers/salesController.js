@@ -175,3 +175,72 @@ export const getSales = async (req, res) => {
         });
     }
 };
+
+
+export const getSalesSummary = async (req, res) => {
+  try {
+    const shopId = req.query.shopId || req.user?.shopId;
+    const { filter, startDate, endDate } = req.query;
+
+    if (!shopId) {
+      return res.status(400).json({ success: false, message: "Shop ID is required" });
+    }
+
+    let dateFilter = {};
+    const today = new Date();
+
+    // ফিল্টার লজিক
+    if (filter === 'today') {
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+      dateFilter = {
+        gte: startOfDay,
+        lte: endOfDay,
+      };
+    } else if (filter === 'custom' && startDate && endDate) {
+      dateFilter = {
+        gte: new Date(startDate),
+        lte: new Date(endDate + 'T23:59:59.999Z'),
+      };
+    }
+
+    // ডাটাবেজ থেকে সেলস রেকর্ড কুয়েরি করা
+    const sales = await prisma.sales.findMany({
+      where: {
+        shopId: Number(shopId),
+        ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
+      },
+    });
+
+    let totalSales = 0;
+    let cashSales = 0;
+    let digitalSales = 0;
+
+    // টোটাল, ক্যাশ এবং ডিজিটাল আলাদা করা
+    sales.forEach((sale) => {
+      const amount = Number(sale.grand_total || 0);
+      totalSales += amount;
+
+      const paymentMethod = (sale.paymentMethod || sale.paymentType || '').toLowerCase();
+      if (paymentMethod === 'CASH') {
+        cashSales += amount;
+      } else {
+        digitalSales += amount; // বিকাশ, নগদ, কার্ড বা অন্যান্য অনলাইন পেমেন্ট
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalSales,
+        cashSales,
+        digitalSales,
+      },
+    });
+
+  } catch (err) {
+    console.error("Sales Summary Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
