@@ -142,7 +142,7 @@ export const createSale = async (req, res) => {
 export const getSales = async (req, res) => {
     try {
         const { shopId } = req.query; // URL থেকে shopId নিতে পারেন (যেমন: /sales?shopId=1)
-        
+
         // কুয়েরিতে শপ আইডি না থাকলে লগইন করা ইউজারের shopId বা টোকেন থেকে নিতে পারেন
         const filterShopId = shopId ? Number(shopId) : (req.user?.shopId ? Number(req.user.shopId) : undefined);
 
@@ -178,98 +178,87 @@ export const getSales = async (req, res) => {
 
 
 export const getSalesSummary = async (req, res) => {
-  try {
-    const shopId = req.query.shopId || req.user?.shopId;
-    const { filter, startDate, endDate } = req.query;
+    try {
+        const shopId = req.query.shopId || req.user?.shopId;
+        const { filter, startDate, endDate } = req.query;
 
-    if (!shopId) {
-      return res.status(400).json({ success: false, message: "Shop ID is required" });
-    }
+        if (!shopId) {
+            return res.status(400).json({ success: false, message: "Shop ID is required" });
+        }
 
-    let dateFilter = {};
-    const today = new Date();
+        let dateFilter = {};
+        const today = new Date();
 
-    if (filter === 'today') {
-      const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-      const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+        if (filter === 'today') {
+            const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
-      dateFilter = {
-        gte: startOfDay,
-        lte: endOfDay,
-      };
-    } else if (filter === 'custom' && startDate && endDate) {
-      const startCustom = new Date(startDate);
-      startCustom.setHours(0, 0, 0, 0);
+            dateFilter = {
+                gte: startOfDay,
+                lte: endOfDay,
+            };
+        } else if (filter === 'custom' && startDate && endDate) {
+            const startCustom = new Date(startDate);
+            startCustom.setHours(0, 0, 0, 0);
 
-      const endCustom = new Date(endDate);
-      endCustom.setHours(23, 59, 59, 999);
+            const endCustom = new Date(endDate);
+            endCustom.setHours(23, 59, 59, 999);
 
-      dateFilter = {
-        gte: startCustom,
-        lte: endCustom,
-      };
-    }
+            dateFilter = {
+                gte: startCustom,
+                lte: endCustom,
+            };
+        }
 
-    // Prisma মডেলে সাধারণত singular নাম (prisma.sale) হয়, আপনার প্রজেক্ট অনুযায়ী 'sale' বা 'sales' দিন
-    const sales = await prisma.sales.findMany({
-      where: {
-        shopId: Number(shopId),
-        ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
-      },
-      include: {
-        saleItems: {
-          include: {
-            product: true // প্রোডাক্ট টেবিল যুক্ত করা হলো যাতে ক্রয়মূল্য ব্যাকআপ হিসেবে পাওয়া যায়
-          }
-        },
-      },
-    });
-
-    let totalSales = 0;
-    let cashSales = 0;
-    let digitalSales = 0;
-    let totalProfit = 0;
-
-    sales.forEach((sale) => {
-      const amount = Number(sale.grandTotal || sale.grand_total || 0);
-      totalSales += amount;
-
-      const paymentMethod = (sale.paymentMethod || sale.paymentType || '').trim().toUpperCase();
-      
-      if (paymentMethod === 'CASH') {
-        cashSales += amount;
-      } else {
-        digitalSales += amount; 
-      }
-
-      if (sale.saleItems && Array.isArray(sale.saleItems)) {
-        sale.saleItems.forEach((item) => {
-          const qty = Number(item.quantity) || 0;
-          const unitPrice = Number(item.unitPrice) || 0;
-          
-          // যদি saleItem-এ purchasePrice না থাকে, তবে মূল Product টেবিল থেকে ক্রয়মূল্য নেবে
-          const purchasePrice = Number(item.purchasePrice) || Number(item.product?.purchasePrice) || Number(item.product?.costPrice) || 0;
-          const discount = Number(item.discount) || 0;
-
-          // প্রফিট হিসাব
-          const itemProfit = ((unitPrice - purchasePrice) * qty) - discount;
-          totalProfit += itemProfit;
+        // Prisma মডেলে সাধারণত singular নাম (prisma.sale) হয়, আপনার প্রজেক্ট অনুযায়ী 'sale' বা 'sales' দিন
+        const sales = await prisma.sales.findMany({
+            where: {
+                shopId: Number(shopId),
+                ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
+            },
+            include: {
+                saleItems: {
+                    include: {
+                        product: true // প্রোডাক্ট টেবিল যুক্ত করা হলো যাতে ক্রয়মূল্য ব্যাকআপ হিসেবে পাওয়া যায়
+                    }
+                },
+            },
         });
-      }
-    });
 
-    return res.status(200).json({
-      success: { success: true },
-      data: {
-        totalSales,
-        cashSales,
-        digitalSales,
-        totalProfit: Math.round(totalProfit * 100) / 100,
-      },
-    });
+        let totalSales = 0;
+        let cashSales = 0;
+        let digitalSales = 0;
+        let totalProfit = 0;
 
-  } catch (err) {
-    console.error("Sales Summary Error:", err);
-    return res.status(500).json({ success: false, message: err.message });
-  }
+        sales.forEach((sale) => {
+            if (sale.saleItems && Array.isArray(sale.saleItems)) {
+                sale.saleItems.forEach((item) => {
+                    const qty = Number(item.quantity) || 0;
+                    const unitPrice = Number(item.unitPrice) || 0;
+
+                    // অগ্রাধিকার: ১. SaleItem এর নিজস্ব purchasePrice, ২. না থাকলে Product টেবিলের বর্তমান purchasePrice
+                    const purchasePrice = Number(item.purchasePrice) || Number(item.product?.purchasePrice) || 0;
+                    const discount = Number(item.discount) || 0;
+
+                    // সঠিক প্রফিট সূত্র: ((বিক্রয়মূল্য - ক্রয়মূল্য) * পরিমাণ) - ডিসকাউন্ট
+                    const itemProfit = ((unitPrice - purchasePrice) * qty) - discount;
+                    totalProfit += itemProfit;
+                });
+            }
+        });
+
+        return res.status(200).json({
+            success: { success: true },
+            data: {
+                totalSales,
+                cashSales,
+                digitalSales,
+                totalProfit: Math.round(totalProfit * 100) / 100,
+            },
+        });
+
+    } catch (err) {
+        console.error("Sales Summary Error:", err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
 };
