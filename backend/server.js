@@ -6,6 +6,7 @@ import productRoutes from "./routes/productRoutes.js"; // (.js এক্সট�
 import categoriesRouters from "./routes/categoryRouter.js";
 import salesRouter from './routes/salesRoutes.js';
 import purchaseRoutes from './routes/purchaseRoutes.js';
+import expenseRoutes from './routes/expenseRoutes.js';
 dotenv.config();
 
 const app = express();
@@ -20,6 +21,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/categories",categoriesRouters);
 app.use('/api/sales', salesRouter);
 app.use('/api', purchaseRoutes);
+app.use('/api', expenseRoutes);
 
 
 // Test Base Route

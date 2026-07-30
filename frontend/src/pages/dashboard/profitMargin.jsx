@@ -10,6 +10,7 @@ import {
   Plus,
   Filter
 } from 'lucide-react';
+import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -42,47 +43,66 @@ const ShopDashboard = () => {
     { id: 3, category: 'অন্যান্য', note: 'দোকান পরিষ্কারের সামগ্রী', time: 'গতকাল', amount: 300 },
   ]);
 
-  // ব্যাকএন্ড থেকে সেলস ডাটা ফেচ করার ফাংশন
-  // ব্যাকএন্ড থেকে সেলস ডাটা ফেচ করার ফাংশন
-  const fetchSalesData = async () => {
+  // ব্যাকএন্ড থেকে সেলস ও প্রফিট ডেটা ফেচ এবং ফিল্টার করার ফাংশন
+  const fetchProfitData = async () => {
     try {
-      const userStr = localStorage.getItem('user');
-      const user = userStr ? JSON.parse(userStr) : null;
-      const shopId = user ? user.shopId : '';
       const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
 
-      if (!shopId) return;
+      // সরাসরি /sales এবং /expenses এপিআই থেকে ডেটা নিয়ে আসা
+      const [salesRes, expenseRes] = await Promise.all([
+        axios.get(`${API_URL}/sales`, { headers, cache: 'no-store' }).catch(() => ({ data: [] })),
+        axios.get(`${API_URL}/expenses`, { headers, cache: 'no-store' }).catch(() => ({ data: [] }))
+      ]);
 
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      };
+      const sales = Array.isArray(salesRes.data) ? salesRes.data : (salesRes.data.data || []);
+      
+      // ফিল্টার লজিক প্রয়োগ (আজকের হিসাব অথবা কাস্টম ডেট রেঞ্জ)
+      let filteredSales = sales;
+      const todayStr = new Date().toISOString().split('T')[0];
 
-      let url = `${API_URL}/sales?shopId=${shopId}&filter=${filterType}`;
-
-      if (filterType === 'custom' && startDate && endDate) {
-        url += `&startDate=${startDate}&endDate=${endDate}`;
+      if (filterType === 'today') {
+        filteredSales = sales.filter(s => s.createdAt && s.createdAt.startsWith(todayStr));
+      } else if (filterType === 'custom' && startDate && endDate) {
+        filteredSales = sales.filter(s => {
+          if (!s.createdAt) return false;
+          const saleDate = s.createdAt.split('T')[0];
+          return saleDate >= startDate && saleDate <= endDate;
+        });
       }
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: headers
+      // মোট বিক্রি হিসাব করা
+      const totalSales = filteredSales.reduce((acc, curr) => acc + (Number(curr.grand_total || curr.grandTotal) || 0), 0);
+
+      // ক্যাশ ও ডিজিটাল আলাদা করা
+      let cash = 0;
+      let digital = 0;
+
+      filteredSales.forEach(s => {
+        const amount = Number(s.grand_total || s.grandTotal) || 0;
+        const method = (s.paymentMethod || s.paymentType || '').trim().toUpperCase();
+        if (method === 'CASH') {
+          cash += amount;
+        } else {
+          digital += amount;
+        }
       });
 
-      const result = await response.json();
+      setSalesData({
+        totalSales,
+        cashSales: cash,
+        digitalSales: digital
+      });
 
-      if (result.success) {
-        setSalesData(result.data);
-      }
     } catch (error) {
-      console.error("Error fetching sales data:", error);
+      console.error("Error fetching profit/sales data:", error);
     }
   };
 
   // কম্পোনেন্ট লোড হলে বা ফিল্টার চেঞ্জ হলে এই useEffect কল হবে
   useEffect(() => {
-    fetchSalesData();
-  }, [filterType, startDate, endDate]); // শুধুমাত্র এগুলো পরিবর্তনেই কল হবে
+    fetchProfitData();
+  }, [filterType, startDate, endDate]);
 
   // খরচ সাবমিট হ্যান্ডলার
   const handleAddExpense = (e) => {
@@ -103,6 +123,66 @@ const ShopDashboard = () => {
     setExpenseNote('');
   };
 
+// খরচ সাবমিট এবং ব্যাকএন্ডে পাঠানোর হ্যান্ডলার ফাংশন
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    if (!expenseAmount) {
+      alert("দয়া করে টাকার পরিমাণ লিখুন");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // আপনার ড্যাশবোর্ডে শপ আইডি যেখান থেকে নেওয়া হয় (যেমন: লোকাল স্টোরেজ বা প্রপস)
+      // উদাহরণস্বরূপ localStorage থেকে shopId নেওয়া হলো অথবা ১ ডিফল্ট রাখা হলো
+      const currentShopId = localStorage.getItem('shopId') || 1; 
+
+      const expensePayload = {
+        category: expenseCategory,
+        amount: Number(expenseAmount),
+        note: expenseNote || '',
+        shopId: Number(currentShopId)
+      };
+
+      // ব্যাকএন্ডে API রিকোয়েস্ট পাঠানো
+      const response = await axios.post(`${API_URL}/expenses`, expensePayload, { headers });
+
+      if (response.data.success) {
+        // সফলভাবে সেভ হলে নতুন এক্সপেন্সটি লোকাল লিস্টের উপরে যোগ করে দেওয়া
+        const savedExpense = response.data.data;
+        
+        const formattedNewExpense = {
+          id: savedExpense.id,
+          category: savedExpense.category,
+          note: savedExpense.note || 'বিবরণ নেই',
+          time: 'এইমাত্র',
+          amount: savedExpense.amount
+        };
+
+        setExpensesList([formattedNewExpense, ...expensesList]);
+        
+        // মোট খরচ (expenseData) আপডেট করা
+        setExpenseData(prev => prev + Number(expenseAmount));
+
+        // ফর্মের ফিল্ডগুলো খালি করে দেওয়া
+        setExpenseAmount('');
+        setExpenseNote('');
+        
+        alert("খরচ সফলভাবে যোগ করা হয়েছে!");
+        
+        // চাইলে প্রফিট ডেটা পুনরায় ফেচ করতে পারেন
+        fetchProfitData(); 
+      }
+    } catch (error) {
+      console.error("Error adding expense:", error);
+      alert("খরচ যোগ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+    }
+  };
+
+
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
 
@@ -119,8 +199,6 @@ const ShopDashboard = () => {
             <button
               onClick={() => {
                 setFilterType('today');
-                setStartDate('');
-                setEndDate('');
               }}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${filterType === 'today' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
@@ -160,7 +238,6 @@ const ShopDashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
 
         {/* মোট বিক্রি */}
-        {/* মোট বিক্রি */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">মোট বিক্রি (Total Sales)</p>
@@ -170,7 +247,7 @@ const ShopDashboard = () => {
             <div className="flex items-center gap-1 text-emerald-600 text-xs mt-2 font-medium">
               <ArrowUpRight size={14} />
               <span>
-                ক্যাশ: ৳ {salesData?.cashSales ? salesData.cashSales.toLocaleString() : 0} |
+                ক্যাশ: ৳ {salesData?.cashSales ? salesData.cashSales.toLocaleString() : 0} | 
                 ডিজিটাল: ৳ {salesData?.digitalSales ? salesData.digitalSales.toLocaleString() : 0}
               </span>
             </div>
