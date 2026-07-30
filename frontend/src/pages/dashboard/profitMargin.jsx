@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  DollarSign,
   ShoppingBag,
   TrendingUp,
   CreditCard,
@@ -8,19 +7,18 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Plus,
-  Filter
+  Trash2,
+  Edit
 } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const ShopDashboard = () => {
-  // স্টেট ম্যানেজমেন্ট
-  const [filterType, setFilterType] = useState('today'); // 'today' | 'custom'
+  const [filterType, setFilterType] = useState('today');
   const [startDate, setStartDate] = useState('2026-07-27');
   const [endDate, setEndDate] = useState('2026-07-27');
 
-  // সেলস ডাটা স্টেট
   const [salesData, setSalesData] = useState({
     totalSales: 0,
     cashSales: 0,
@@ -31,22 +29,20 @@ const ShopDashboard = () => {
   const [netProfit, setNetProfit] = useState(0);
   const [cashDrawer, setCashDrawer] = useState(0);
 
-  // নতুন খরচ ফর্মের জন্য স্টেট
+  // ফর্ম ও এডিট মোড স্টেট
   const [expenseCategory, setExpenseCategory] = useState('দোকান ভাড়া');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseNote, setExpenseNote] = useState('');
+  const [editingExpenseId, setEditingExpenseId] = useState(null); // এডিট ট্র্যাক করার জন্য
 
-  // সাম্প্রতিক খরচের তালিকা স্টেট
   const [expensesList, setExpensesList] = useState([]);
 
-  // ব্যাকএন্ড থেকে সেলস ও প্রফিট/এক্সপেন্স ডেটা ফেচ এবং ফিল্টার করার ফাংশন
   const fetchProfitData = async () => {
     try {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
       const currentShopId = localStorage.getItem('shopId') || 1;
 
-      // সরাসরি /sales এবং /expenses এপিআই থেকে ডেটা নিয়ে আসা (শপ আইডি সহ)
       const [salesRes, expenseRes] = await Promise.all([
         axios.get(`${API_URL}/sales?shopId=${currentShopId}`, { headers, cache: 'no-store' }).catch(() => ({ data: [] })),
         axios.get(`${API_URL}/expenses?shopId=${currentShopId}`, { headers, cache: 'no-store' }).catch(() => ({ data: [] }))
@@ -55,7 +51,6 @@ const ShopDashboard = () => {
       const sales = Array.isArray(salesRes.data) ? salesRes.data : (salesRes.data.data || []);
       const expenses = Array.isArray(expenseRes.data) ? expenseRes.data : (expenseRes.data.data || []);
       
-      // --- সেলস ফিল্টার লজিক ---
       let filteredSales = sales;
       const todayStr = new Date().toISOString().split('T')[0];
 
@@ -69,10 +64,8 @@ const ShopDashboard = () => {
         });
       }
 
-      // মোট বিক্রি হিসাব করা
       const totalSales = filteredSales.reduce((acc, curr) => acc + (Number(curr.grand_total || curr.grandTotal) || 0), 0);
 
-      // ক্যাশ ও ডিজিটাল আলাদা করা
       let cash = 0;
       let digital = 0;
 
@@ -86,13 +79,8 @@ const ShopDashboard = () => {
         }
       });
 
-      setSalesData({
-        totalSales,
-        cashSales: cash,
-        digitalSales: digital
-      });
+      setSalesData({ totalSales, cashSales: cash, digitalSales: digital });
 
-      // --- এক্সপেন্স ফিল্টার লজিক ---
       let filteredExpenses = expenses;
       if (filterType === 'today') {
         filteredExpenses = expenses.filter(e => e.createdAt && e.createdAt.startsWith(todayStr));
@@ -107,21 +95,16 @@ const ShopDashboard = () => {
       const totalExpense = filteredExpenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
       setExpenseData(totalExpense);
 
-      // ফরম্যাট করে এক্সপেন্স লিস্টে সেট করা
       const formattedExpenses = filteredExpenses.map(item => ({
         id: item.id,
         category: item.category,
         note: item.note || 'বিবরণ নেই',
-        time: new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: new Date(item.createdAt).toLocaleDateString('en-GB'),
         amount: item.amount
       }));
       setExpensesList(formattedExpenses);
 
-      // নিট প্রফিট হিসাব (মোট বিক্রি - মোট খরচ)
-      const calculatedNetProfit = totalSales - totalExpense;
-      setNetProfit(calculatedNetProfit);
-
-      // ক্যাশ ড্রয়ার হিসাব (ক্যাশ সেলস - খরচ)
+      setNetProfit(totalSales - totalExpense);
       setCashDrawer(cash - totalExpense);
 
     } catch (error) {
@@ -129,13 +112,12 @@ const ShopDashboard = () => {
     }
   };
 
-  // কম্পোনেন্ট লোড হলে বা ফিল্টার চেঞ্জ হলে এই useEffect কল হবে
   useEffect(() => {
     fetchProfitData();
   }, [filterType, startDate, endDate]);
 
-  // খরচ সাবমিট এবং ব্যাকএন্ডে পাঠানোর সঠিক হ্যান্ডলার ফাংশন
-  const handleAddExpense = async (e) => {
+  // খরচ যোগ বা আপডেট করার হ্যান্ডলার
+  const handleAddOrUpdateExpense = async (e) => {
     e.preventDefault();
     if (!expenseAmount) {
       alert("দয়া করে টাকার পরিমাণ লিখুন");
@@ -147,43 +129,74 @@ const ShopDashboard = () => {
       const headers = { Authorization: `Bearer ${token}` };
       const currentShopId = localStorage.getItem('shopId') || 1; 
 
-      const expensePayload = {
-        category: expenseCategory,
-        amount: Number(expenseAmount),
-        note: expenseNote || '',
-        shopId: Number(currentShopId)
-      };
+      if (editingExpenseId) {
+        // এডিট বা আপডেট রিকোয়েস্ট
+        await axios.put(`${API_URL}/expenses/${editingExpenseId}`, {
+          category: expenseCategory,
+          amount: Number(expenseAmount),
+          note: expenseNote
+        }, { headers });
 
-      // ব্যাকএন্ডে API রিকোয়েস্ট পাঠানো
-      const response = await axios.post(`${API_URL}/expenses`, expensePayload, { headers });
+        alert("খরচ সফলভাবে আপডেট করা হয়েছে!");
+        setEditingExpenseId(null);
+      } else {
+        // নতুন খরচ যোগ করার রিকোয়েস্ট
+        const expensePayload = {
+          category: expenseCategory,
+          amount: Number(expenseAmount),
+          note: expenseNote || '',
+          shopId: Number(currentShopId)
+        };
 
-      if (response.data.success) {
-        // ফর্মের ফিল্ডগুলো খালি করে দেওয়া
-        setExpenseAmount('');
-        setExpenseNote('');
-        
+        await axios.post(`${API_URL}/expenses`, expensePayload, { headers });
         alert("খরচ সফলভাবে যোগ করা হয়েছে!");
-        
-        // ডেটা পুনরায় ফেচ করে ড্যাশবোর্ড আপডেট করা
-        fetchProfitData(); 
       }
+
+      // ফর্ম রিসেট করা
+      setExpenseAmount('');
+      setExpenseNote('');
+      setExpenseCategory('দোকান ভাড়া');
+      fetchProfitData(); 
+
     } catch (error) {
-      console.error("Error adding expense:", error);
-      alert("খরচ যোগ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+      console.error("Error saving expense:", error);
+      alert("কার্যক্রমটি সম্পন্ন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+    }
+  };
+
+  // এডিট করার জন্য ডেটা ফর্মে লোড করা
+  const handleEditClick = (item) => {
+    setEditingExpenseId(item.id);
+    setExpenseCategory(item.category);
+    setExpenseAmount(item.amount);
+    setExpenseNote(item.note === 'বিবরণ নেই' ? '' : item.note);
+  };
+
+  // খরচ ডিলিট করার হ্যান্ডলার
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm("আপনি কি নিশ্চিত এই খরচটি ডিলিট করতে চান?")) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      await axios.delete(`${API_URL}/expenses/${id}`, { headers });
+      alert("খরচ সফলভাবে ডিলিট করা হয়েছে!");
+      fetchProfitData();
+    } catch (error) {
+      console.error("Error deleting expense:", error);
+      alert("ডিলিট করতে সমস্যা হয়েছে।");
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
-
-      {/* --- Header & Filter Section --- */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">শপ ম্যানেজমেন্ট ড্যাশবোর্ড</h1>
           <p className="text-sm text-slate-500 mt-1">আপনার দৈনিক ও মাসিক ব্যবসার হিসাব-নিকাশ এক নজরে</p>
         </div>
 
-        {/* ফিল্টার অপশন */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
             <button
@@ -200,7 +213,6 @@ const ShopDashboard = () => {
             </button>
           </div>
 
-          {/* ডেট রেঞ্জ পিকার (যদি কাস্টম সিলেক্ট করা হয়) */}
           {filterType === 'custom' && (
             <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
               <Calendar size={16} className="text-slate-500" />
@@ -222,10 +234,7 @@ const ShopDashboard = () => {
         </div>
       </div>
 
-      {/* --- Stat Cards Grid --- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-
-        {/* মোট বিক্রি */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">মোট বিক্রি (Total Sales)</p>
@@ -245,7 +254,6 @@ const ShopDashboard = () => {
           </div>
         </div>
 
-        {/* মোট খরচ */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">মোট খরচ (Shop Expense)</p>
@@ -257,7 +265,6 @@ const ShopDashboard = () => {
           </div>
         </div>
 
-        {/* নিট প্রফিট */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">নিট প্রফিট (Net Profit)</p>
@@ -269,31 +276,26 @@ const ShopDashboard = () => {
           </div>
         </div>
 
-        {/* ক্যাশ ড্রয়ার ব্যালেন্স */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">ক্যাশ ইন হ্যান্ড (Cash Drawer)</p>
             <h3 className="text-2xl font-bold text-slate-800 mt-2">৳ {cashDrawer.toLocaleString()}</h3>
-            <p className="text-slate-500 text-xs mt-2 font-medium">স্বয়ংক্রয়ভাবে আপডেটকৃত</p>
+            <p className="text-slate-500 text-xs mt-2 font-medium">স্বয়ংক্রভাবে আপডেটকৃত</p>
           </div>
           <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
             <CreditCard size={24} />
           </div>
         </div>
-
       </div>
 
-      {/* --- Action Buttons & Recent Transactions/Expenses Section --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-        {/* বাম দিকের সেকশন: এক্সপেন্স এন্ট্রি ফর্ম */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 lg:col-span-1">
           <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
             <Plus size={20} className="text-blue-600" />
-            নতুন খরচ এন্ট্রি করুন (Expense)
+            {editingExpenseId ? 'খরচ এডিট করুন (Edit Expense)' : 'নতুন খরচ এন্ট্রি করুন (Expense)'}
           </h2>
 
-          <form onSubmit={handleAddExpense} className="space-y-4">
+          <form onSubmit={handleAddOrUpdateExpense} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">খরচের খাত (Category)</label>
               <select
@@ -333,18 +335,30 @@ const ShopDashboard = () => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm transition-colors shadow-sm shadow-blue-200"
+              className={`w-full text-white font-medium py-2.5 rounded-xl text-sm transition-colors shadow-sm ${editingExpenseId ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'}`}
             >
-              খরচ যোগ করুন (Save Expense)
+              {editingExpenseId ? 'খরচ আপডেট করুন (Update Expense)' : 'খরচ যোগ করুন (Save Expense)'}
             </button>
+
+            {editingExpenseId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingExpenseId(null);
+                  setExpenseAmount('');
+                  setExpenseNote('');
+                }}
+                className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 rounded-xl text-sm transition-colors mt-2"
+              >
+                বাতিল করুন (Cancel)
+              </button>
+            )}
           </form>
         </div>
 
-        {/* ডান দিকের সেকশন: সাম্প্রতিক খরচ ও বিক্রির তালিকা */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 lg:col-span-2">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-bold text-slate-800">সাম্প্রতিক খরচের ইতিহাস</h2>
-            <span className="text-xs text-blue-600 font-semibold cursor-pointer hover:underline">সব দেখুন</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -353,8 +367,9 @@ const ShopDashboard = () => {
                 <tr className="border-b border-slate-100 text-slate-400 text-xs uppercase tracking-wider">
                   <th className="py-3 font-semibold">খাত</th>
                   <th className="py-3 font-semibold">বিবরণ</th>
-                  <th className="py-3 font-semibold">সময়</th>
+                  <th className="py-3 font-semibold">তারিখ</th>
                   <th className="py-3 font-semibold text-right">পরিমাণ</th>
+                  <th className="py-3 font-semibold text-center">অ্যাকশন</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm text-slate-700">
@@ -365,20 +380,34 @@ const ShopDashboard = () => {
                       <td className="py-3 text-slate-500">{item.note}</td>
                       <td className="py-3 text-slate-400 text-xs">{item.time}</td>
                       <td className="py-3 text-right font-semibold text-rose-600">-৳ {item.amount.toLocaleString()}</td>
+                      <td className="py-3 text-center space-x-2">
+                        <button
+                          onClick={() => handleEditClick(item)}
+                          className="text-blue-600 hover:text-blue-800 p-1 bg-blue-50 rounded-lg transition-colors"
+                          title="এডিট করুন"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExpense(item.id)}
+                          className="text-rose-600 hover:text-rose-800 p-1 bg-rose-50 rounded-lg transition-colors"
+                          title="ডিলিট করুন"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="4" className="py-4 text-center text-slate-400 text-sm">কোনো খরচের ডেটা পাওয়া যায়নি</td>
+                    <td colSpan="5" className="py-4 text-center text-slate-400 text-sm">কোনো খরচের ডেটা পাওয়া যায়নি</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
-
       </div>
-
     </div>
   );
 };

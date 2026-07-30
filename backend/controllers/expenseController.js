@@ -103,3 +103,48 @@ export const getExpenses = async (req, res) => {
         return res.status(500).json({ success: false, message: err.message });
     }
 };
+
+// খরচ আপডেট করার জন্য
+export const updateExpense = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { category, amount, note } = req.body;
+
+    const updatedExpense = await prisma.expense.update({
+      where: { id: Number(id) },
+      data: {
+        category,
+        amount: Number(amount),
+        note: note || '',
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Expense updated successfully",
+      data: updatedExpense,
+    });
+  } catch (err) {
+    console.error("Update Expense Error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// খরচ ডিলিট করার জন্য
+export const deleteExpense = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.expense.delete({
+      where: { id: Number(id) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Expense deleted successfully",
+    });
+  } catch (err) {
+    console.error("Delete Expense Error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
