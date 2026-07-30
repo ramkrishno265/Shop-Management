@@ -1,10 +1,10 @@
 import express from 'express';
 import { addExpense, getExpenses } from '../controllers/expenseController.js';
-import { verifyToken } from '../middleware/authMiddleware.js'; // খেয়াল রাখবেন শেষে যেন .js থাকে
+import { protect } from '../middleware/authMiddleware.js'; // খেয়াল রাখবেন শেষে যেন .js থাকে
 
 const router = express.Router();
 
-router.post('/expenses', verifyToken, addExpense);
-router.get('/expenses', verifyToken, getExpenses);
+router.post('/expenses', protect, addExpense);
+router.get('/expenses', protect, getExpenses);
 
 export default router;
