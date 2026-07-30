@@ -27,9 +27,9 @@ const ShopDashboard = () => {
     digitalSales: 0
   });
 
-  const [expenseData, setExpenseData] = useState(3200);
-  const [netProfit, setNetProfit] = useState(6800);
-  const [cashDrawer, setCashDrawer] = useState(14800);
+  const [expenseData, setExpenseData] = useState(0);
+  const [netProfit, setNetProfit] = useState(0);
+  const [cashDrawer, setCashDrawer] = useState(0);
 
   // নতুন খরচ ফর্মের জন্য স্টেট
   const [expenseCategory, setExpenseCategory] = useState('দোকান ভাড়া');
@@ -37,27 +37,25 @@ const ShopDashboard = () => {
   const [expenseNote, setExpenseNote] = useState('');
 
   // সাম্প্রতিক খরচের তালিকা স্টেট
-  const [expensesList, setExpensesList] = useState([
-    { id: 1, category: 'চা ও নাস্তা', note: 'দুপুরের নাস্তা', time: 'আজ, দুপুর ২:১৫', amount: 120 },
-    { id: 2, category: 'বিদ্যুৎ বিল', note: 'সাব-মিটার অ্যাডভান্স', time: 'আজ, সকাল ১০:০০', amount: 1500 },
-    { id: 3, category: 'অন্যান্য', note: 'দোকান পরিষ্কারের সামগ্রী', time: 'গতকাল', amount: 300 },
-  ]);
+  const [expensesList, setExpensesList] = useState([]);
 
-  // ব্যাকএন্ড থেকে সেলস ও প্রফিট ডেটা ফেচ এবং ফিল্টার করার ফাংশন
+  // ব্যাকএন্ড থেকে সেলস ও প্রফিট/এক্সপেন্স ডেটা ফেচ এবং ফিল্টার করার ফাংশন
   const fetchProfitData = async () => {
     try {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
+      const currentShopId = localStorage.getItem('shopId') || 1;
 
-      // সরাসরি /sales এবং /expenses এপিআই থেকে ডেটা নিয়ে আসা
+      // সরাসরি /sales এবং /expenses এপিআই থেকে ডেটা নিয়ে আসা (শপ আইডি সহ)
       const [salesRes, expenseRes] = await Promise.all([
-        axios.get(`${API_URL}/sales`, { headers, cache: 'no-store' }).catch(() => ({ data: [] })),
-        axios.get(`${API_URL}/expenses`, { headers, cache: 'no-store' }).catch(() => ({ data: [] }))
+        axios.get(`${API_URL}/sales?shopId=${currentShopId}`, { headers, cache: 'no-store' }).catch(() => ({ data: [] })),
+        axios.get(`${API_URL}/expenses?shopId=${currentShopId}`, { headers, cache: 'no-store' }).catch(() => ({ data: [] }))
       ]);
 
       const sales = Array.isArray(salesRes.data) ? salesRes.data : (salesRes.data.data || []);
+      const expenses = Array.isArray(expenseRes.data) ? expenseRes.data : (expenseRes.data.data || []);
       
-      // ফিল্টার লজিক প্রয়োগ (আজকের হিসাব অথবা কাস্টম ডেট রেঞ্জ)
+      // --- সেলস ফিল্টার লজিক ---
       let filteredSales = sales;
       const todayStr = new Date().toISOString().split('T')[0];
 
@@ -94,6 +92,38 @@ const ShopDashboard = () => {
         digitalSales: digital
       });
 
+      // --- এক্সপেন্স ফিল্টার লজিক ---
+      let filteredExpenses = expenses;
+      if (filterType === 'today') {
+        filteredExpenses = expenses.filter(e => e.createdAt && e.createdAt.startsWith(todayStr));
+      } else if (filterType === 'custom' && startDate && endDate) {
+        filteredExpenses = expenses.filter(e => {
+          if (!e.createdAt) return false;
+          const expDate = e.createdAt.split('T')[0];
+          return expDate >= startDate && expDate <= endDate;
+        });
+      }
+
+      const totalExpense = filteredExpenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+      setExpenseData(totalExpense);
+
+      // ফরম্যাট করে এক্সপেন্স লিস্টে সেট করা
+      const formattedExpenses = filteredExpenses.map(item => ({
+        id: item.id,
+        category: item.category,
+        note: item.note || 'বিবরণ নেই',
+        time: new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        amount: item.amount
+      }));
+      setExpensesList(formattedExpenses);
+
+      // নিট প্রফিট হিসাব (মোট বিক্রি - মোট খরচ)
+      const calculatedNetProfit = totalSales - totalExpense;
+      setNetProfit(calculatedNetProfit);
+
+      // ক্যাশ ড্রয়ার হিসাব (ক্যাশ সেলস - খরচ)
+      setCashDrawer(cash - totalExpense);
+
     } catch (error) {
       console.error("Error fetching profit/sales data:", error);
     }
@@ -104,39 +134,17 @@ const ShopDashboard = () => {
     fetchProfitData();
   }, [filterType, startDate, endDate]);
 
-  // খরচ সাবমিট হ্যান্ডলার
-  const handleAddExpense = (e) => {
-    e.preventDefault();
-    if (!expenseAmount) return;
-
-    const newExpense = {
-      id: Date.now(),
-      category: expenseCategory,
-      note: expenseNote || 'বিবরণ নেই',
-      time: 'এইমাত্র',
-      amount: Number(expenseAmount)
-    };
-
-    setExpensesList([newExpense, ...expensesList]);
-    setExpenseData(prev => prev + Number(expenseAmount));
-    setExpenseAmount('');
-    setExpenseNote('');
-  };
-
-// খরচ সাবমিট এবং ব্যাকএন্ডে পাঠানোর হ্যান্ডলার ফাংশন
+  // খরচ সাবমিট এবং ব্যাকএন্ডে পাঠানোর সঠিক হ্যান্ডলার ফাংশন
   const handleAddExpense = async (e) => {
     e.preventDefault();
     if (!expenseAmount) {
-      alert("দয়া করে টাকার পরিমাণ লিখুন");
+      alert("দয়া করে টাকার পরিমাণ লিখুন");
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
-
-      // আপনার ড্যাশবোর্ডে শপ আইডি যেখান থেকে নেওয়া হয় (যেমন: লোকাল স্টোরেজ বা প্রপস)
-      // উদাহরণস্বরূপ localStorage থেকে shopId নেওয়া হলো অথবা ১ ডিফল্ট রাখা হলো
       const currentShopId = localStorage.getItem('shopId') || 1; 
 
       const expensePayload = {
@@ -150,38 +158,20 @@ const ShopDashboard = () => {
       const response = await axios.post(`${API_URL}/expenses`, expensePayload, { headers });
 
       if (response.data.success) {
-        // সফলভাবে সেভ হলে নতুন এক্সপেন্সটি লোকাল লিস্টের উপরে যোগ করে দেওয়া
-        const savedExpense = response.data.data;
-        
-        const formattedNewExpense = {
-          id: savedExpense.id,
-          category: savedExpense.category,
-          note: savedExpense.note || 'বিবরণ নেই',
-          time: 'এইমাত্র',
-          amount: savedExpense.amount
-        };
-
-        setExpensesList([formattedNewExpense, ...expensesList]);
-        
-        // মোট খরচ (expenseData) আপডেট করা
-        setExpenseData(prev => prev + Number(expenseAmount));
-
         // ফর্মের ফিল্ডগুলো খালি করে দেওয়া
         setExpenseAmount('');
         setExpenseNote('');
         
-        alert("খরচ সফলভাবে যোগ করা হয়েছে!");
+        alert("খরচ সফলভাবে যোগ করা হয়েছে!");
         
-        // চাইলে প্রফিট ডেটা পুনরায় ফেচ করতে পারেন
+        // ডেটা পুনরায় ফেচ করে ড্যাশবোর্ড আপডেট করা
         fetchProfitData(); 
       }
     } catch (error) {
       console.error("Error adding expense:", error);
-      alert("খরচ যোগ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+      alert("খরচ যোগ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
     }
   };
-
-
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
@@ -197,9 +187,7 @@ const ShopDashboard = () => {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
             <button
-              onClick={() => {
-                setFilterType('today');
-              }}
+              onClick={() => setFilterType('today')}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${filterType === 'today' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               আজকের হিসাব
@@ -370,14 +358,20 @@ const ShopDashboard = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm text-slate-700">
-                {expensesList.map((item) => (
-                  <tr key={item.id}>
-                    <td className="py-3 font-medium text-slate-800">{item.category}</td>
-                    <td className="py-3 text-slate-500">{item.note}</td>
-                    <td className="py-3 text-slate-400 text-xs">{item.time}</td>
-                    <td className="py-3 text-right font-semibold text-rose-600">-৳ {item.amount.toLocaleString()}</td>
+                {expensesList.length > 0 ? (
+                  expensesList.map((item) => (
+                    <tr key={item.id}>
+                      <td className="py-3 font-medium text-slate-800">{item.category}</td>
+                      <td className="py-3 text-slate-500">{item.note}</td>
+                      <td className="py-3 text-slate-400 text-xs">{item.time}</td>
+                      <td className="py-3 text-right font-semibold text-rose-600">-৳ {item.amount.toLocaleString()}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="py-4 text-center text-slate-400 text-sm">কোনো খরচের ডেটা পাওয়া যায়নি</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

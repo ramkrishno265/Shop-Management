@@ -288,8 +288,6 @@ model Expense {
   id       Int      @id @default(autoincrement())
   shopId   Int
   shop     Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  title    String   // যেমন: দোকান ভাড়া, বিদ্যুৎ বিল ইত্যাদি
   amount   Float
   category String   // Rent, Utilities, Salary ইত্যাদি
   note     String?
@@ -302,12 +300,3 @@ model Expense {
   @@map("expenses")
 }
 
-model Expense {
-  id        Int      @id @default(autoincrement()) // ইউনিক আইডি
-  category  String   // খরচের খাত (যেমন: দোকান ভাড়া, বিদ্যুৎ বিল ইত্যাদি)
-  amount    Float    // টাকার পরিমাণ
-  note      String?  // বিবরণ বা নোট (ঐচ্ছিক)
-  shopId    Int      // কোন শপের খরচ তা ট্র্যাক করার জন্য
-  createdAt DateTime @default(now()) // খরচের সময় ও তারিখ ট্র্যাক করার জন্য
-  updatedAt DateTime @updatedAt     // আপডেট সময়
-}
