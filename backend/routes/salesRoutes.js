@@ -8,6 +8,6 @@ const router = express.Router();
 // POST: /api/sales/create
 router.post('/', protect, createSale);
 router.get('/', protect, getSales);
-router.get('/', protect, getSalesSummary);
+router.get('/summary', protect, getSalesSummary);
 
 export default router;
