@@ -125,6 +125,7 @@ export const createPurchase = async (req, res) => {
       supplier_id,
       date,
       payment_status,
+      productId,
       product, // এটি পণ্যের নাম হতে পারে
       quantity,
       unit_price,
@@ -150,6 +151,7 @@ export const createPurchase = async (req, res) => {
         supplier_id: Number(supplier_id),
         date: date || new Date().toISOString().split('T')[0],
         payment_status: payment_status || "Paid",
+        productId:productId,
         product: product,
         quantity: parsedQuantity,
         unit_price: parsedUnitPrice,
@@ -162,6 +164,7 @@ export const createPurchase = async (req, res) => {
         purchaseItems: {
           create: [
             {
+              productId:productId,
               productName: product || "General Product",
               quantity: parsedQuantity,
               unitPrice: parsedUnitPrice,
