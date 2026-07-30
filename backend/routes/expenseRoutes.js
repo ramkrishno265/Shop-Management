@@ -1,6 +1,6 @@
 import express from 'express';
 import { addExpense, getExpenses } from '../controllers/expenseController.js';
-import { verifyToken } from '../middlewares/authMiddleware.js'; // আপনার প্রজেক্টের অথেন্টিকেশন মিডলওয়্যার পাথ অনুযায়ী ঠিক করে দেবেন
+import { verifyToken } from '../middleware/authMiddleware.js'; // আপনার প্রজেক্টের অথেন্টিকেশন মিডলওয়্যার পাথ অনুযায়ী ঠিক করে দেবেন
 
 const router = express.Router();
 
