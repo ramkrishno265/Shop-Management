@@ -123,7 +123,6 @@ export default function InventoryManagement() {
       supplier_id: supplierId,
       date,
       payment_status: paymentStatus,
-      productId,
       product,
       quantity: Number(quantity),
       unit_price: Number(unitPrice),
