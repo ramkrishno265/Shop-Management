@@ -16,28 +16,30 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 const ShopDashboard = () => {
   const [filterType, setFilterType] = useState('today');
-  const [startDate, setStartDate] = useState('2026-07-27');
-  const [endDate, setEndDate] = useState('2026-07-27');
+  
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
 
   const [salesData, setSalesData] = useState({
     totalSales: 0,
     cashSales: 0,
-    digitalSales: 0
+    digitalSales: 0,
+    totalProfit: 0 // প্রফিটের জন্য ফিল্ড যোগ করা হলো
   });
 
   const [expenseData, setExpenseData] = useState(0);
   const [netProfit, setNetProfit] = useState(0);
   const [cashDrawer, setCashDrawer] = useState(0);
 
-  // ফর্ম ও এডিট মোড স্টেট
   const [expenseCategory, setExpenseCategory] = useState('দোকান ভাড়া');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseNote, setExpenseNote] = useState('');
-  const [editingExpenseId, setEditingExpenseId] = useState(null); // এডিট ট্র্যাক করার জন্য
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
 
   const [expensesList, setExpensesList] = useState([]);
 
-  const fetchProfitData = async () => {
+  const fetchDashboardData = async () => {
     try {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
@@ -52,7 +54,6 @@ const ShopDashboard = () => {
       const expenses = Array.isArray(expenseRes.data) ? expenseRes.data : (expenseRes.data.data || []);
       
       let filteredSales = sales;
-      const todayStr = new Date().toISOString().split('T')[0];
 
       if (filterType === 'today') {
         filteredSales = sales.filter(s => s.createdAt && s.createdAt.startsWith(todayStr));
@@ -65,6 +66,14 @@ const ShopDashboard = () => {
       }
 
       const totalSales = filteredSales.reduce((acc, curr) => acc + (Number(curr.grand_total || curr.grandTotal) || 0), 0);
+      
+      // ব্যাকএন্ডের সেলস ডাটা থেকে গ্রস প্রফিট হিসাব করা (যদি প্রফিট ফিল্ড বা আইটেম প্রফিট থাকে)
+      const totalProfit = filteredSales.reduce((acc, curr) => {
+        const p = Number(curr.total_profit || curr.totalProfit || curr.profit) || 0;
+        return acc + p;
+      }, 0);
+
+      console.log(totalProfit);
 
       let cash = 0;
       let digital = 0;
@@ -79,7 +88,7 @@ const ShopDashboard = () => {
         }
       });
 
-      setSalesData({ totalSales, cashSales: cash, digitalSales: digital });
+      setSalesData({ totalSales, cashSales: cash, digitalSales: digital, totalProfit });
 
       let filteredExpenses = expenses;
       if (filterType === 'today') {
@@ -104,7 +113,10 @@ const ShopDashboard = () => {
       }));
       setExpensesList(formattedExpenses);
 
-      setNetProfit(totalSales - totalExpense);
+      // নিট প্রফিট = (মোট বিক্রির প্রফিট) - (মোট খরচ)
+      setNetProfit(totalProfit - totalExpense);
+      
+      // ক্যাশ ড্রয়ার = (ক্যাশ সেলস) - (মোট খরচ)
       setCashDrawer(cash - totalExpense);
 
     } catch (error) {
@@ -113,10 +125,9 @@ const ShopDashboard = () => {
   };
 
   useEffect(() => {
-    fetchProfitData();
+    fetchDashboardData();
   }, [filterType, startDate, endDate]);
 
-  // খরচ যোগ বা আপডেট করার হ্যান্ডলার
   const handleAddOrUpdateExpense = async (e) => {
     e.preventDefault();
     if (!expenseAmount) {
@@ -130,7 +141,6 @@ const ShopDashboard = () => {
       const currentShopId = localStorage.getItem('shopId') || 1; 
 
       if (editingExpenseId) {
-        // এডিট বা আপডেট রিকোয়েস্ট
         await axios.put(`${API_URL}/expenses/${editingExpenseId}`, {
           category: expenseCategory,
           amount: Number(expenseAmount),
@@ -140,7 +150,6 @@ const ShopDashboard = () => {
         alert("খরচ সফলভাবে আপডেট করা হয়েছে!");
         setEditingExpenseId(null);
       } else {
-        // নতুন খরচ যোগ করার রিকোয়েস্ট
         const expensePayload = {
           category: expenseCategory,
           amount: Number(expenseAmount),
@@ -152,11 +161,10 @@ const ShopDashboard = () => {
         alert("খরচ সফলভাবে যোগ করা হয়েছে!");
       }
 
-      // ফর্ম রিসেট করা
       setExpenseAmount('');
       setExpenseNote('');
       setExpenseCategory('দোকান ভাড়া');
-      fetchProfitData(); 
+      fetchDashboardData(); 
 
     } catch (error) {
       console.error("Error saving expense:", error);
@@ -164,7 +172,6 @@ const ShopDashboard = () => {
     }
   };
 
-  // এডিট করার জন্য ডেটা ফর্মে লোড করা
   const handleEditClick = (item) => {
     setEditingExpenseId(item.id);
     setExpenseCategory(item.category);
@@ -172,7 +179,6 @@ const ShopDashboard = () => {
     setExpenseNote(item.note === 'বিবরণ নেই' ? '' : item.note);
   };
 
-  // খরচ ডিলিট করার হ্যান্ডলার
   const handleDeleteExpense = async (id) => {
     if (!window.confirm("আপনি কি নিশ্চিত এই খরচটি ডিলিট করতে চান?")) return;
 
@@ -182,7 +188,7 @@ const ShopDashboard = () => {
 
       await axios.delete(`${API_URL}/expenses/${id}`, { headers });
       alert("খরচ সফলভাবে ডিলিট করা হয়েছে!");
-      fetchProfitData();
+      fetchDashboardData();
     } catch (error) {
       console.error("Error deleting expense:", error);
       alert("ডিলিট করতে সমস্যা হয়েছে।");
@@ -269,7 +275,7 @@ const ShopDashboard = () => {
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">নিট প্রফিট (Net Profit)</p>
             <h3 className="text-2xl font-bold text-emerald-600 mt-2">৳ {netProfit.toLocaleString()}</h3>
-            <p className="text-slate-500 text-xs mt-2 font-medium">খরচ বাদ দেওয়ার পর আসল লাভ</p>
+            <p className="text-slate-500 text-xs mt-2 font-medium">মোট প্রফিট: ৳ {salesData?.totalProfit?.toLocaleString() || 0}</p>
           </div>
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
             <TrendingUp size={24} />

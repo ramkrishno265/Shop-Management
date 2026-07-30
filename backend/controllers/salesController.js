@@ -211,26 +211,21 @@ export const getSalesSummary = async (req, res) => {
       };
     }
 
-    console.log("Shop ID:", shopId);
-    console.log("Date Filter applied:", dateFilter);
-
-    // প্রফিট হিসাব করার জন্য saleItems সহ ডাটা কুয়েরি করা
+    // ১. নির্দিষ্ট shopId এবং তারিখ অনুযায়ী সেলস ও তার আন্ডারে থাকা saleItems কুয়েরি করা
     const sales = await prisma.sales.findMany({
       where: {
         shopId: Number(shopId),
         ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
       },
       include: {
-        saleItems: true, // প্রফিট বের করার জন্য আইটেমগুলোর ক্রয়মূল্য ও পরিমাণ দরকার
+        saleItems: true, // relation এর মাধ্যমে sale_items টেবিল যুক্ত করা হলো
       },
     });
-
-    console.log("Sales found from DB:", sales.length);
 
     let totalSales = 0;
     let cashSales = 0;
     let digitalSales = 0;
-    let totalProfit = 0; // প্রফিট ট্র্যাক করার জন্য
+    let totalProfit = 0;
 
     sales.forEach((sale) => {
       const amount = Number(sale.grand_total || sale.grandTotal || 0);
@@ -244,7 +239,7 @@ export const getSalesSummary = async (req, res) => {
         digitalSales += amount; 
       }
 
-      // প্রতিটি বিক্রয় আইটেম থেকে প্রফিট হিসাব করা
+      // ২. sale_items টেবিল থেকে প্রতিটি আইটেমের প্রফিট হিসাব করা
       if (sale.saleItems && Array.isArray(sale.saleItems)) {
         sale.saleItems.forEach((item) => {
           const qty = Number(item.quantity) || 0;
@@ -252,7 +247,7 @@ export const getSalesSummary = async (req, res) => {
           const purchasePrice = Number(item.purchasePrice) || 0;
           const discount = Number(item.discount) || 0;
 
-          // প্রফিট = (বিক্রয়মূল্য - ক্রয়মূল্য) * পরিমাণ - ডিসকাউন্ট
+          // প্রফিট সূত্র = (বিক্রয়মূল্য - ক্রয়মূল্য) * পরিমাণ - ডিসকাউন্ট
           const itemProfit = ((unitPrice - purchasePrice) * qty) - discount;
           totalProfit += itemProfit;
         });
@@ -274,4 +269,3 @@ export const getSalesSummary = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
