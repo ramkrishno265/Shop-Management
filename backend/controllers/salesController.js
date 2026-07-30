@@ -191,7 +191,8 @@ export const getSalesSummary = async (req, res) => {
 
     // ফিল্টার লজিক
     if (filter === 'today') {
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      // আজকের দিনের শুরু এবং শেষ সময় নিখুঁতভাবে নির্ধারণ
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
       dateFilter = {
@@ -199,13 +200,24 @@ export const getSalesSummary = async (req, res) => {
         lte: endOfDay,
       };
     } else if (filter === 'custom' && startDate && endDate) {
+      // কাস্টম ডেটের ক্ষেত্রে লোকাল টাইম জোনের ঝামেলা এড়াতে সঠিক ফরম্যাট
+      const startCustom = new Date(startDate);
+      startCustom.setHours(0, 0, 0, 0);
+
+      const endCustom = new Date(endDate);
+      endCustom.setHours(23, 59, 59, 999);
+
       dateFilter = {
-        gte: new Date(startDate),
-        lte: new Date(endDate + 'T23:59:59.999Z'),
+        gte: startCustom,
+        lte: endCustom,
       };
     }
 
-    // ডাটাবেজ থেকে সেলস রেকর্ড কুয়েরি করা (shopId কে Number এ রূপান্তর)
+    // ডিবাগ করার জন্য টার্মিনালে কুয়েরি দেখতে পারেন
+    console.log("Shop ID:", shopId);
+    console.log("Date Filter applied:", dateFilter);
+
+    // ডাটাবেজ থেকে সেলস রেকর্ড কুয়েরি করা
     const sales = await prisma.sales.findMany({
       where: {
         shopId: Number(shopId),
@@ -213,23 +225,23 @@ export const getSalesSummary = async (req, res) => {
       },
     });
 
+    console.log("Sales found from DB:", sales.length); // ডাটা কয়টা পেলো এখানে দেখাবে
+
     let totalSales = 0;
     let cashSales = 0;
     let digitalSales = 0;
 
     // টোটাল, ক্যাশ এবং ডিজিটাল আলাদা করা
-    // টোটাল, ক্যাশ এবং ডিজিটাল আলাদা করা
     sales.forEach((sale) => {
       const amount = Number(sale.grand_total || sale.totalAmount || 0);
       totalSales += amount;
 
-      // পেমেন্ট মেথড বড়হাতে রূপান্তর করে চেক করা হচ্ছে
       const paymentMethod = (sale.paymentMethod || sale.paymentType || '').trim().toUpperCase();
       
       if (paymentMethod === 'CASH') {
         cashSales += amount;
       } else {
-        digitalSales += amount; // বিকাশ, নগদ, কার্ড বা অন্যান্য অনলাইন পেমেন্ট
+        digitalSales += amount; 
       }
     });
 

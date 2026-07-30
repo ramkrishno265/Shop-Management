@@ -43,24 +43,19 @@ const ShopDashboard = () => {
   ]);
 
   // ব্যাকএন্ড থেকে সেলস ডাটা ফেচ করার ফাংশন
-const fetchSalesData = async () => {
+  // ব্যাকএন্ড থেকে সেলস ডাটা ফেচ করার ফাংশন
+  const fetchSalesData = async () => {
     try {
-      // ১. user অবজেক্টটি লোকাল স্টোরেজ থেকে এনে পার্স করুন
       const userStr = localStorage.getItem('user');
       const user = userStr ? JSON.parse(userStr) : null;
-      
-      // ২. user অবজেক্টের ভেতর থেকে shopId নিন
       const shopId = user ? user.shopId : '';
       const token = localStorage.getItem('token');
 
-      if (!shopId) {
-        console.warn("Shop ID পাওয়া যায়নি!");
-        return;
-      }
+      if (!shopId) return;
 
-      const headers = { 
+      const headers = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}` 
+        Authorization: `Bearer ${token}`
       };
 
       let url = `${API_URL}/sales?shopId=${shopId}&filter=${filterType}`;
@@ -84,10 +79,10 @@ const fetchSalesData = async () => {
     }
   };
 
-  // ফিল্টার বা ডেট পরিবর্তন হলে বা কম্পোনেন্ট লোড হলে ডাটা ফেচ হবে
+  // কম্পোনেন্ট লোড হলে বা ফিল্টার চেঞ্জ হলে এই useEffect কল হবে
   useEffect(() => {
     fetchSalesData();
-  }, [filterType, startDate, endDate]);
+  }, [filterType, startDate, endDate]); // শুধুমাত্র এগুলো পরিবর্তনেই কল হবে
 
   // খরচ সাবমিট হ্যান্ডলার
   const handleAddExpense = (e) => {
@@ -175,7 +170,7 @@ const fetchSalesData = async () => {
             <div className="flex items-center gap-1 text-emerald-600 text-xs mt-2 font-medium">
               <ArrowUpRight size={14} />
               <span>
-                ক্যাশ: ৳ {salesData?.cashSales ? salesData.cashSales.toLocaleString() : 0} | 
+                ক্যাশ: ৳ {salesData?.cashSales ? salesData.cashSales.toLocaleString() : 0} |
                 ডিজিটাল: ৳ {salesData?.digitalSales ? salesData.digitalSales.toLocaleString() : 0}
               </span>
             </div>
