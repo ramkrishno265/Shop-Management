@@ -53,15 +53,34 @@ export default function SalePage() {
     const changeAmount = receivedAmount ? Math.max(0, Number(receivedAmount) - payableAmount) : 0;
 
     // -------------------------------------------------------------
-    // ৪. ইভেন্ট হ্যান্ডলার ও লজিক ফাংশনসমূহ
+    // ৪. ইভেন্ট হ্যান্ডলার ও স্টক লজিক ফাংশনসমূহ
     // -------------------------------------------------------------
     const addToCart = (product) => {
+        // ব্যাকএন্ডের ফিল্ড অনুযায়ী স্টক নির্ধারণ (stock বা currentStock)
+        const currentStock = product.stock !== undefined ? product.stock : (product.currentStock !== undefined ? product.currentStock : 0);
+
+        if (currentStock <= 0) {
+            alert("❌ দুঃখিত! এই প্রোডাক্টটির স্টক শেষ (Stock Out)।");
+            return;
+        }
+
         const existingItem = cart.find(item => item.id === product.id);
+        const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
+
+        if (currentQuantityInCart + 1 > currentStock) {
+            alert(`❌ এর বেশি স্টক নেই! (সর্বোচ্চ মজুদ: ${currentStock}টি)`);
+            return;
+        }
 
         if (existingItem) {
             updateQuantity(product.id, 1);
         } else {
-            setCart([...cart, { ...product, price: product.sellingPrice, quantity: 1 }]);
+            setCart([...cart, { 
+                ...product, 
+                price: product.sellingPrice, 
+                quantity: 1,
+                stock: currentStock 
+            }]);
         }
         setSearchQuery('');
         setShowResults(false);
@@ -72,6 +91,13 @@ export default function SalePage() {
             prevCart.map(item => {
                 if (item.id === id) {
                     const newQty = item.quantity + change;
+                    const itemStock = item.stock !== undefined ? item.stock : 0;
+
+                    if (change > 0 && itemStock > 0 && newQty > itemStock) {
+                        alert(`❌ এর বেশি স্টক নেই! (সর্বোচ্চ মজুদ: ${itemStock}টি)`);
+                        return item;
+                    }
+
                     return newQty > 0 ? { ...item, quantity: newQty } : item;
                 }
                 return item;
@@ -148,7 +174,7 @@ export default function SalePage() {
     };
 
     // -------------------------------------------------------------
-    // ৫. JSX রেন্ডারিং (সবকিছু এখন ফাংশনের ভেতরে)
+    // ৫. JSX রেন্ডারিং
     // -------------------------------------------------------------
     return (
         <div className="p-1 text-slate-900">
@@ -179,26 +205,39 @@ export default function SalePage() {
                                 }}
                             />
 
-                            {/* সার্চ ড্রপডাউন */}
+                            {/* সার্চ ড্রপডাউন (স্টক স্ট্যাটাসসহ) */}
                             {showResults && (
                                 <div className="absolute z-10 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                                     {products
                                         .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
-                                        .map((product) => (
-                                            <div
-                                                key={product.id}
-                                                className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
-                                                onClick={() => {
-                                                    addToCart(product);
-                                                }}
-                                            >
-                                                <div>
-                                                    <p className="text-sm font-medium text-slate-800">{product.name}</p>
-                                                    <p className="text-[10px] text-slate-400">{product.sku}</p>
+                                        .map((product) => {
+                                            const stock = product.stock !== undefined ? product.stock : (product.currentStock !== undefined ? product.currentStock : 0);
+                                            const isOutOfStock = stock <= 0;
+
+                                            return (
+                                                <div
+                                                    key={product.id}
+                                                    className={`px-4 py-3 border-b border-slate-50 last:border-0 flex justify-between items-center ${
+                                                        isOutOfStock ? 'bg-slate-100 opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
+                                                    }`}
+                                                    onClick={() => {
+                                                        if (isOutOfStock) {
+                                                            alert("❌ এই প্রোডাক্টটির স্টক শেষ!");
+                                                            return;
+                                                        }
+                                                        addToCart(product);
+                                                    }}
+                                                >
+                                                    <div>
+                                                        <p className="text-sm font-medium text-slate-800">
+                                                            {product.name} {isOutOfStock && <span className="text-red-500 text-xs font-bold">(Stock Out)</span>}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400">SKU: {product.sku} | Stock: {stock}</p>
+                                                    </div>
+                                                    <p className="text-sm font-bold text-slate-600">৳{product.sellingPrice}</p>
                                                 </div>
-                                                <p className="text-sm font-bold text-slate-600">৳{product.sellingPrice}</p>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
 
                                     {products.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
                                         <div className="px-4 py-3 text-sm text-slate-400">No product found!</div>
@@ -208,6 +247,7 @@ export default function SalePage() {
                         </div>
 
                         <button
+                            type="button"
                             onClick={() => {
                                 const foundProduct = products.find(p =>
                                     p.name.toLowerCase() === searchQuery.toLowerCase() ||
@@ -252,12 +292,13 @@ export default function SalePage() {
                                             <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                                                 <td className="py-4">
                                                     <div className="font-semibold text-slate-700">{item.name}</div>
-                                                    <div className="text-[11px] text-slate-400 mt-0.5">{item.sku}</div>
+                                                    <div className="text-[11px] text-slate-400 mt-0.5">SKU: {item.sku} | Stock: {item.stock}</div>
                                                 </td>
                                                 <td className="py-4 text-center text-slate-600">৳{item.price}</td>
                                                 <td className="py-4">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
+                                                            type="button"
                                                             onClick={() => updateQuantity(item.id, -1)}
                                                             className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
                                                         >
@@ -265,6 +306,7 @@ export default function SalePage() {
                                                         </button>
                                                         <span className="w-6 text-center font-bold text-slate-800">{item.quantity}</span>
                                                         <button
+                                                            type="button"
                                                             onClick={() => updateQuantity(item.id, 1)}
                                                             className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
                                                         >
@@ -275,6 +317,7 @@ export default function SalePage() {
                                                 <td className="py-4 text-right font-semibold text-slate-800">৳{item.price * item.quantity}</td>
                                                 <td className="py-4 text-right">
                                                     <button
+                                                        type="button"
                                                         onClick={() => removeFromCart(item.id)}
                                                         className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-colors"
                                                         title="Remove"
@@ -355,9 +398,9 @@ export default function SalePage() {
                                         type="button"
                                         onClick={() => setPaymentMethod(method)}
                                         className={`py-2 text-xs font-bold rounded-xl border transition-all ${paymentMethod === method
-                                                ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                                            }`}
+                                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                        }`}
                                     >
                                         {method === 'CASH' ? '💵 Cash' : method === 'BKASH' ? '📱 bKash' : '💳 Card'}
                                     </button>
@@ -387,6 +430,7 @@ export default function SalePage() {
 
                         {/* ফাইনাল চেকআউট বাটন */}
                         <button
+                            type="button"
                             onClick={handleCheckout}
                             className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-2"
                         >
