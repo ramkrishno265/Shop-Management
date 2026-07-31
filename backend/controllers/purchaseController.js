@@ -5,18 +5,16 @@ import prisma from "../config/db.js";
 // ==========================================
 
 // ১. নির্দিষ্ট শপ-এর সব সাপ্লায়ার ফেচ করা (GET)
-// Example: GET /api/suppliers?shopId=1
 export const getSuppliers = async (req, res) => {
   try {
     const shopId = req.query.shopId || req.user?.shopId;
 
-    // যদি শপ আইডি না থাকে, তবে খালি অ্যারে রিটার্ন করবে
     if (!shopId) {
       return res.status(200).json({ success: true, data: [] });
     }
 
     const suppliers = await prisma.supplier.findMany({
-      where: { shopId: Number(shopId) }, // বাধ্যতামূলকভাবে নির্দিষ্ট শপ আইডি ফিল্টার
+      where: { shopId: Number(shopId) },
       orderBy: { id: 'desc' },
     });
 
@@ -31,7 +29,6 @@ export const createSupplier = async (req, res) => {
   try {
     const { name, phone, address, note, shopId } = req.body;
 
-    // ফ্রন্টএন্ড এবং নতুন স্কিমা অনুযায়ী name এবং shopId বাধ্যতামূলক করা হলো
     if (!name || !shopId) {
       return res.status(400).json({ success: false, message: 'Name and shopId are required' });
     }
@@ -41,7 +38,7 @@ export const createSupplier = async (req, res) => {
         name,
         phone,
         address,
-        note, // নতুন ফিল্ড যুক্ত করা হলো
+        note,
         shopId: Number(shopId)
       },
     });
@@ -89,18 +86,17 @@ export const deleteSupplier = async (req, res) => {
 // PURCHASE CONTROLLERS
 // ==========================================
 
-/// ১. সব পারচেজ নিয়ে আসা (GET)
+// ১. সব পারচেজ নিয়ে আসা (GET)
 export const getPurchases = async (req, res) => {
   try {
     const shopId = req.query.shopId || req.user?.shopId;
 
-    // যদি কোনো শপ আইডি পাওয়া না যায়, তবে সিকিউরিটির জন্য খালি লিস্ট রিটার্ন করবে
     if (!shopId) {
       return res.status(200).json({ success: true, data: [] });
     }
 
     const purchases = await prisma.purchase.findMany({
-      where: { shopId: Number(shopId) }, // বাধ্যতামূলকভাবে নির্দিষ্ট শপ আইডি ফিল্টার
+      where: { shopId: Number(shopId) },
       include: {
         supplier: true,
         user: {
@@ -126,17 +122,16 @@ export const createPurchase = async (req, res) => {
       date,
       payment_status,
       productId,
-      product, // এটি পণ্যের নাম হতে পারে
+      product, 
       quantity,
       unit_price,
       total_amount,
       paid_amount,
       due_amount,
       note,
-      createdBy = req.user?.id || 1 // লগইন করা ইউজারের আইডি থাকলে তা নিবে, না হলে ফলব্যাক
+      createdBy = req.user?.id || 1
     } = req.body;
 
-    // অটো ইউনিক ইনভয়েস নম্বর জেনারেট
     const invoiceNo = `INV-${Date.now().toString().slice(-8)}`;
 
     const parsedQuantity = Number(quantity) || 0;
@@ -177,11 +172,11 @@ export const createPurchase = async (req, res) => {
       }
     });
 
-    // ২. প্রোডাক্ট টেবিল থেকে ওই শপের আন্ডারে প্রোডাক্টটি খুঁজে স্টক আপডেট করা
+    // ২. প্রোডাক্ট টেবিল থেকে ওই শপের আন্ডারে প্রোডাক্টটি খুঁজে স্টক এবং লেটেস্ট পার্চেজ প্রাইস আপডেট করা
     const existingProduct = await prisma.product.findFirst({
       where: {
         shopId: Number(shopId),
-        name: product, // নাম দিয়ে ম্যাচ করা হচ্ছে (যদি নাম হুবহু মিলে যায়)
+        name: product,
       },
     });
 
@@ -189,13 +184,16 @@ export const createPurchase = async (req, res) => {
       const previousStock = existingProduct.quantity;
       const newStock = previousStock + parsedQuantity;
 
-      // প্রোডাক্টের পরিমাণ (quantity) আপডেট করা
+      // প্রোডাক্টের স্টক এবং লেটেস্ট কেনা দাম (purchasePrice) আপডেট করা
       await prisma.product.update({
         where: { id: existingProduct.id },
-        data: { quantity: newStock },
+        data: { 
+          quantity: newStock,
+          purchasePrice: parsedUnitPrice // নতুন কেনা দাম দিয়ে আপডেট করা হলো, যাতে প্রফিট সঠিক আসে
+        },
       });
 
-      // স্টক লগে (StockLog) এন্ট্রি রাখা যাতে হিস্ট্রি থাকে
+      // স্টক লগে (StockLog) এন্ট্রি রাখা
       await prisma.stockLog.create({
         data: {
           productId: existingProduct.id,
@@ -209,7 +207,7 @@ export const createPurchase = async (req, res) => {
       });
     }
 
-    res.status(201).json({ success: true, message: 'Purchase saved and stock updated successfully', data: newPurchase });
+    res.status(201).json({ success: true, message: 'Purchase saved and stock/price updated successfully', data: newPurchase });
   } catch (err) {
     console.error("Create Purchase Error:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -234,7 +232,6 @@ export const updatePurchase = async (req, res) => {
       note,
     } = req.body;
 
-    // ১. প্রথমে ডাটাবেজ থেকে পুরনো পারচেজ রেকর্ডটি খুঁজে বের করা
     const existingPurchase = await prisma.purchase.findUnique({
       where: { id: Number(id) },
     });
@@ -245,12 +242,12 @@ export const updatePurchase = async (req, res) => {
 
     const oldQuantity = Number(existingPurchase.quantity) || 0;
     const newQuantity = Number(quantity) || 0;
-    const quantityDifference = newQuantity - oldQuantity; // পরিমাণের পার্থক্য বের করা
+    const quantityDifference = newQuantity - oldQuantity;
 
     const parsedUnitPrice = Number(unit_price) || 0;
     const parsedTotalAmount = Number(total_amount) || 0;
 
-    // ২. পারচেজ রেকর্ড আপডেট করা
+    // পারচেজ রেকর্ড আপডেট করা
     const updatedPurchase = await prisma.purchase.update({
       where: { id: Number(id) },
       data: {
@@ -271,8 +268,8 @@ export const updatePurchase = async (req, res) => {
       },
     });
 
-    // ৩. সংশ্লিষ্ট প্রোডাক্টের স্টক আপডেট করা (পার্থক্য অনুযায়ী যোগ বা বিয়োগ হবে)
-    if (quantityDifference !== 0) {
+    // সংশ্লিষ্ট প্রোডাক্টের স্টক এবং লেটেস্ট পার্চেজ প্রাইস আপডেট করা
+    if (quantityDifference !== 0 || parsedUnitPrice > 0) {
       const existingProduct = await prisma.product.findFirst({
         where: {
           shopId: Number(shopId || existingPurchase.shopId),
@@ -282,18 +279,21 @@ export const updatePurchase = async (req, res) => {
 
       if (existingProduct) {
         const previousStock = existingProduct.quantity;
-        const updatedStock = previousStock + quantityDifference; // নতুন পরিমাণ বেশি হলে স্টক বাড়বে, কমলে কমবে
+        const updatedStock = previousStock + quantityDifference;
 
         await prisma.product.update({
           where: { id: existingProduct.id },
-          data: { quantity: Math.max(0, updatedStock) }, // স্টক যেন মাইনাস না হয়
+          data: { 
+            quantity: Math.max(0, updatedStock),
+            purchasePrice: parsedUnitPrice > 0 ? parsedUnitPrice : existingProduct.purchasePrice
+          },
         });
       }
     }
 
     res.status(200).json({
       success: true,
-      message: "Purchase updated and stock adjusted successfully!",
+      message: "Purchase updated and stock/price adjusted successfully!",
       data: updatedPurchase,
     });
   } catch (err) {
@@ -303,7 +303,7 @@ export const updatePurchase = async (req, res) => {
 };
 
 // ৪. পারচেজ ডিলিট করা (DELETE)
-export const deletePurchase = async (req, res) => {
+export const deletePurchase = async (errCode, res) => {
   try {
     const { id } = req.params;
 
