@@ -7,6 +7,8 @@ import categoriesRouters from "./routes/categoryRouter.js";
 import salesRouter from './routes/salesRoutes.js';
 import purchaseRoutes from './routes/purchaseRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
+import profitRoutes from "./routes/profitRoutes.js";
+
 dotenv.config();
 
 const app = express();
@@ -22,6 +24,7 @@ app.use("/api/categories",categoriesRouters);
 app.use('/api/sales', salesRouter);
 app.use('/api', purchaseRoutes);
 app.use('/api', expenseRoutes);
+app.use("/api/profit", profitRoutes);
 
 
 // Test Base Route

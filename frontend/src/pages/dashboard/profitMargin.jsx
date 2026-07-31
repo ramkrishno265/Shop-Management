@@ -25,7 +25,7 @@ const ShopDashboard = () => {
     totalSales: 0,
     cashSales: 0,
     digitalSales: 0,
-    totalProfit: 0 // প্রফিটের জন্য ফিল্ড যোগ করা হলো
+    totalProfit: 0
   });
 
   const [expenseData, setExpenseData] = useState(0);
@@ -45,51 +45,24 @@ const ShopDashboard = () => {
       const headers = { Authorization: `Bearer ${token}` };
       const currentShopId = localStorage.getItem('shopId') || 1;
 
-      const [salesRes, expenseRes] = await Promise.all([
-        axios.get(`${API_URL}/sales?shopId=${currentShopId}`, { headers, cache: 'no-store' }).catch(() => ({ data: [] })),
+      // ব্যাকএন্ডের প্রফিট এন্ডপয়েন্ট এবং খরচ এন্ডপয়েন্ট একসাথে কল করা হচ্ছে
+      let profitUrl = `${API_URL}/profit?type=${filterType}`;
+      if (filterType === 'custom' && startDate && endDate) {
+        profitUrl += `&startDate=${startDate}&endDate=${endDate}`;
+      }
+
+      const [profitRes, expenseRes] = await Promise.all([
+        axios.get(profitUrl, { headers, cache: 'no-store' }).catch(() => ({ data: {} })),
         axios.get(`${API_URL}/expenses?shopId=${currentShopId}`, { headers, cache: 'no-store' }).catch(() => ({ data: [] }))
       ]);
 
-      const sales = Array.isArray(salesRes.data) ? salesRes.data : (salesRes.data.data || []);
+      const profitInfo = profitRes.data || {};
       const expenses = Array.isArray(expenseRes.data) ? expenseRes.data : (expenseRes.data.data || []);
       
-      let filteredSales = sales;
+      const totalSales = Number(profitInfo.totalSale) || 0;
+      const totalProfit = Number(profitInfo.totalProfit) || 0;
 
-      if (filterType === 'today') {
-        filteredSales = sales.filter(s => s.createdAt && s.createdAt.startsWith(todayStr));
-      } else if (filterType === 'custom' && startDate && endDate) {
-        filteredSales = sales.filter(s => {
-          if (!s.createdAt) return false;
-          const saleDate = s.createdAt.split('T')[0];
-          return saleDate >= startDate && saleDate <= endDate;
-        });
-      }
-
-      const totalSales = filteredSales.reduce((acc, curr) => acc + (Number(curr.grand_total || curr.grandTotal) || 0), 0);
-      
-      // ব্যাকএন্ডের সেলস ডাটা থেকে গ্রস প্রফিট হিসাব করা (যদি প্রফিট ফিল্ড বা আইটেম প্রফিট থাকে)
-      const totalProfit = filteredSales.reduce((acc, curr) => {
-        const p = Number(curr.total_profit || curr.totalProfit || curr.profit) || 0;
-        return acc + p;
-      }, 0);
-
-      console.log(totalProfit);
-
-      let cash = 0;
-      let digital = 0;
-
-      filteredSales.forEach(s => {
-        const amount = Number(s.grand_total || s.grandTotal) || 0;
-        const method = (s.paymentMethod || s.paymentType || '').trim().toUpperCase();
-        if (method === 'CASH') {
-          cash += amount;
-        } else {
-          digital += amount;
-        }
-      });
-
-      setSalesData({ totalSales, cashSales: cash, digitalSales: digital, totalProfit });
-
+      // যদি ব্যাকএন্ড থেকে সেলস লিস্ট সরাসরি ক্যাশ/ডিজিটাল আলাদা না আসে, তবে ফিল্টার অনুযায়ী খরচ হিসাব করা
       let filteredExpenses = expenses;
       if (filterType === 'today') {
         filteredExpenses = expenses.filter(e => e.createdAt && e.createdAt.startsWith(todayStr));
@@ -112,6 +85,17 @@ const ShopDashboard = () => {
         amount: item.amount
       }));
       setExpensesList(formattedExpenses);
+
+      // ক্যাশ এবং ডিজিটাল সেলসের হিসাব (যদি ব্যাকএন্ডে পেমেন্ট মেথড থাকে)
+      let cash = totalSales; // ডিফল্ট সব ক্যাশ ধরতে পারেন বা ফিল্টার করতে পারেন
+      let digital = 0;
+
+      setSalesData({ 
+        totalSales, 
+        cashSales: cash, 
+        digitalSales: digital, 
+        totalProfit 
+      });
 
       // নিট প্রফিট = (মোট বিক্রির প্রফিট) - (মোট খরচ)
       setNetProfit(totalProfit - totalExpense);
