@@ -56,8 +56,8 @@ export default function SalePage() {
     // ৪. ইভেন্ট হ্যান্ডলার ও স্টক লজিক ফাংশনসমূহ
     // -------------------------------------------------------------
     const addToCart = (product) => {
-        // ব্যাকএন্ডের ফিল্ড অনুযায়ী স্টক নির্ধারণ (stock বা currentStock)
-        const currentStock = product.stock !== undefined ? product.stock : (product.currentStock !== undefined ? product.currentStock : 0);
+        // এখানে product.quantity হলো বর্তমান স্টক
+        const currentStock = Number(product.quantity) || 0;
 
         if (currentStock <= 0) {
             alert("❌ দুঃখিত! এই প্রোডাক্টটির স্টক শেষ (Stock Out)।");
@@ -78,8 +78,8 @@ export default function SalePage() {
             setCart([...cart, { 
                 ...product, 
                 price: product.sellingPrice, 
-                quantity: 1,
-                stock: currentStock 
+                quantity: 1, // এটি কার্টের কোয়ান্টিটি
+                stock: currentStock // এটি স্টকের পরিমাণ সংরক্ষণ করার জন্য
             }]);
         }
         setSearchQuery('');
@@ -91,7 +91,7 @@ export default function SalePage() {
             prevCart.map(item => {
                 if (item.id === id) {
                     const newQty = item.quantity + change;
-                    const itemStock = item.stock !== undefined ? item.stock : 0;
+                    const itemStock = item.stock !== undefined ? item.stock : (Number(item.quantity) || 0);
 
                     if (change > 0 && itemStock > 0 && newQty > itemStock) {
                         alert(`❌ এর বেশি স্টক নেই! (সর্বোচ্চ মজুদ: ${itemStock}টি)`);
@@ -205,13 +205,13 @@ export default function SalePage() {
                                 }}
                             />
 
-                            {/* সার্চ ড্রপডাউন (স্টক স্ট্যাটাসসহ) */}
+                            {/* সার্চ ড্রপডাউন */}
                             {showResults && (
                                 <div className="absolute z-10 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                                     {products
                                         .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
                                         .map((product) => {
-                                            const stock = product.stock !== undefined ? product.stock : (product.currentStock !== undefined ? product.currentStock : 0);
+                                            const stock = Number(product.quantity) || 0;
                                             const isOutOfStock = stock <= 0;
 
                                             return (
