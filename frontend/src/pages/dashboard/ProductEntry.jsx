@@ -10,6 +10,7 @@ const ProductEntry = () => {
     category: '',
     inventoryType: 'standard', // 'standard' or 'pack'
     baseUnit: 'Pcs',
+    description: '', // ব্যাকএন্ডের সাথে সামঞ্জস্য রাখতে যোগ করা হলো
   });
 
   // Existing Categories State
@@ -91,6 +92,13 @@ const ProductEntry = () => {
       return;
     }
 
+    const token = localStorage.getItem("token");
+    
+    if (!token) {
+      alert("Unauthorized: No token found. Please login again.");
+      return;
+    }
+
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
     const finalPayload = {
@@ -105,7 +113,7 @@ const ProductEntry = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // 'Authorization': `Bearer ${token}` // যদি টোকেন বা অথেন্টিকেশন লাগে এখানে বসাবেন
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(finalPayload),
       });
@@ -124,6 +132,7 @@ const ProductEntry = () => {
         category: '',
         inventoryType: 'standard',
         baseUnit: 'Pcs',
+        description: '',
       });
       setCategoryInput('');
       setStandardData({ purchasePrice: '', sellingPrice: '', stock: '' });
@@ -211,6 +220,19 @@ const ProductEntry = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Description Input */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Description <span className="text-xs font-normal text-slate-400">(Optional)</span></label>
+            <textarea 
+              name="description"
+              rows="2"
+              value={formData.description}
+              onChange={handleInputChange}
+              placeholder="Add short notes or description about the product..."
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+            />
           </div>
 
           {/* Section 2: Inventory Type Selector Cards */}

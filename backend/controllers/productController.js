@@ -12,7 +12,7 @@ const validateShopAccess = (user, requestShopId) => {
   return targetShopId;
 };
 
-// ১. Get Products (সাথে প্যাক ভ্যারিয়েন্টগুলোও ফেচ করার জন্য include যোগ করা হয়েছে)
+// ১. Get Products (সাথে প্যাক ভ্যারিয়েন্টগুলোও ফেচ করার জন্য include যোগ করা হয়েছে)
 export const getProducts = async (req, res) => {
   try {
     const { shopId } = req.user;
@@ -57,7 +57,17 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Product name and category are required." });
     }
 
-    const categoryName = typeof category === 'string' ? category.trim() : category.name;
+    // ক্যাটাগরি নাম সুরক্ষিতভাবে বের করা
+    let categoryName = '';
+    if (typeof category === 'string') {
+      categoryName = category.trim();
+    } else if (typeof category === 'object' && category !== null) {
+      categoryName = (category.name || '').trim();
+    }
+
+    if (!categoryName) {
+      return res.status(400).json({ message: "Invalid category format." });
+    }
 
     // ক্যাটাগরি হ্যান্ডলিং (নির্দিষ্ট শপের আন্ডারে ক্যাটাগরি চেক এবং ক্রিয়েট করা)
     let dbCategory = await prisma.category.findFirst({
@@ -76,7 +86,7 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // টাইপ অনুযায়ী প্রাইস এবং স্টক সেট করা
+    // টাইপ অনুযায়ী প্রাইস এবং স্টক সেট করা
     let purchasePrice = 0;
     let sellingPrice = 0;
     let quantity = 0;
@@ -110,7 +120,7 @@ export const createProduct = async (req, res) => {
         }
       });
 
-      // যদি প্যাক টাইপ হয় এবং প্যাক লিস্ট থাকে, তবে `product_packs` টেবিলে সেভ হবে
+      // যদি প্যাক টাইপ হয় এবং প্যাক লিস্ট থাকে, তবে `product_packs` টেবিলে সেভ হবে
       if (type === 'pack' && packs && Array.isArray(packs) && packs.length > 0) {
         const packDataToInsert = packs.map(pack => ({
           productId: product.id,
@@ -141,7 +151,7 @@ export const createProduct = async (req, res) => {
   }
 };
 
-// ৩. Delete Product (ProductPack ডাটাও ক্যাস্কেড ডিলিট হয়ে যাবে স্কিমা অনুযায়ী)
+// ৩. Delete Product (ProductPack ডাটাও ক্যাস্কেড ডিলিট হয়ে যাবে স্কিমা অনুযায়ী)
 export const deleteProduct = async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
@@ -203,30 +213,39 @@ export const updateProduct = async (req, res) => {
     // Category Handle
     let categoryId = existingProduct.categoryId;
 
-    if (category && category.trim() !== "") {
-      let dbCategory = await prisma.category.findFirst({
-        where: {
-          name: { equals: category.trim(), mode: "insensitive" },
-          shopId: existingProduct.shopId
-        },
-      });
+    if (category) {
+      let categoryName = '';
+      if (typeof category === 'string') {
+        categoryName = category.trim();
+      } else if (typeof category === 'object' && category !== null) {
+        categoryName = (category.name || '').trim();
+      }
 
-      if (!dbCategory) {
-        dbCategory = await prisma.category.create({
-          data: {
-            name: category.trim(),
+      if (categoryName !== "") {
+        let dbCategory = await prisma.category.findFirst({
+          where: {
+            name: { equals: categoryName, mode: "insensitive" },
             shopId: existingProduct.shopId
           },
         });
-      }
 
-      categoryId = dbCategory.id;
+        if (!dbCategory) {
+          dbCategory = await prisma.category.create({
+            data: {
+              name: categoryName,
+              shopId: existingProduct.shopId
+            },
+          });
+        }
+
+        categoryId = dbCategory.id;
+      }
     }
 
     // Product Update with Transaction (প্যাক আপডেট হ্যান্ডেল করার জন্য)
     const updatedProduct = await prisma.$transaction(async (tx) => {
       
-      // যদি প্যাক ডেটা পাঠানো হয়, তবে আগের প্যাকগুলো ডিলিট করে নতুন প্যাকগুলো ইনসার্ট করতে পারি অথবা আপডেট করতে পারি
+      // যদি প্যাক ডেটা পাঠানো হয়, তবে আগের প্যাকগুলো ডিলিট করে নতুন প্যাকগুলো ইনসার্ট করতে পারি
       if (packs && Array.isArray(packs)) {
         await tx.productPack.deleteMany({ where: { productId } });
         
