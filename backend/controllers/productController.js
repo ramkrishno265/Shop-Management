@@ -37,18 +37,21 @@ export const getProducts = async (req, res) => {
 };
 
 // ২. Create Product (Standard & Pack Product Support)
+// ২. Create Product (Standard & Pack Product Support)
 export const createProduct = async (req, res) => {
   try {
     const { 
       name, 
       sku, 
+      barcode,
       category, 
       inventoryType, 
       baseUnit, 
       standardData, 
       packs, 
       description, 
-      requestShopId 
+      requestShopId,
+      lowStockLimit
     } = req.body;
 
     // শপ আইডি নির্ধারণ
@@ -105,17 +108,19 @@ export const createProduct = async (req, res) => {
 
     // ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক (যদি থাকে) একসাথে সেভ করা
     const newProduct = await prisma.$transaction(async (tx) => {
-      // প্রোডাক্ট মেইন ডাটা তৈরি
+      // প্রোডাক্ট মেইন ডাটা তৈরি (আপনার Prisma স্কিমার সাথে হুবহু মিল রেখে ম্যাপ করা হয়েছে)
       const product = await tx.product.create({
         data: {
           name: name.trim(),
-          sku: sku ? sku.trim() : `SKU-${Date.now().toString().slice(-6)}`,
+          sku: sku && sku.trim() !== "" ? sku.trim() : `SKU-${Date.now().toString().slice(-6)}`,
+          barcode: barcode ? barcode.trim() : null,
           inventoryType: type,
           baseUnit: unitVal,
           quantity,
-          unit: unitVal,
+          unit: unitVal, // স্কিমার সাথে মিল রাখতে
           purchasePrice,
           sellingPrice,
+          lowStockLimit: lowStockLimit ? parseFloat(lowStockLimit) : 5,
           categoryId: dbCategory.id,
           shopId: finalShopId,
           description: description ? description.trim() : null,
@@ -127,7 +132,7 @@ export const createProduct = async (req, res) => {
       if (type === 'pack' && packs && Array.isArray(packs) && packs.length > 0) {
         const packDataToInsert = packs.map(pack => ({
           productId: product.id,
-          packName: pack.packName.trim(),
+          packName: pack.packName ? pack.packName.trim() : 'Default Pack',
           multiplier: parseFloat(pack.multiplier) || 1,
           purchasePrice: parseFloat(pack.purchasePrice) || 0,
           sellingPrice: parseFloat(pack.sellingPrice) || 0,
@@ -153,7 +158,6 @@ export const createProduct = async (req, res) => {
     res.status(500).json({ message: "Error creating product", error: error.message });
   }
 };
-
 // ৩. Delete Product (ProductPack ডাটাও ক্যাস্কেড ডিলিট হয়ে যাবে স্কিমা অনুযায়ী)
 export const deleteProduct = async (req, res) => {
   try {
