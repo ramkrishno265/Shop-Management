@@ -1,0 +1,332 @@
+import React, { useState } from 'react';
+import { FiPlus, FiTrash2, FiPackage, FiBox, FiCheckCircle } from 'react-icons/fi';
+
+const ProductEntry = () => {
+  // Main Product State
+  const [formData, setFormData] = useState({
+    name: '',
+    category: 'Grocery',
+    inventoryType: 'standard', // 'standard' or 'pack'
+    baseUnit: 'Pcs',
+  });
+
+  // For Standard Product Pricing
+  const [standardData, setStandardData] = useState({
+    purchasePrice: '',
+    sellingPrice: '',
+    stock: '',
+  });
+
+  // For Pack Product Multipacks List
+  const [packs, setPacks] = useState([
+    { id: 1, packName: '25 Kg Bag', multiplier: 25, purchasePrice: '', sellingPrice: '' }
+  ]);
+
+  // Handle Input Changes
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleStandardChange = (e) => {
+    const { name, value } = e.target;
+    setStandardData({ ...standardData, [name]: value });
+  };
+
+  // Pack Management Handlers
+  const handlePackChange = (id, field, value) => {
+    setPacks(packs.map(pack => pack.id === id ? { ...pack, [field]: value } : pack));
+  };
+
+  const addPackRow = () => {
+    setPacks([
+      ...packs,
+      { id: Date.now(), packName: '', multiplier: '', purchasePrice: '', sellingPrice: '' }
+    ]);
+  };
+
+  const removePackRow = (id) => {
+    if (packs.length === 1) {
+      alert("At least one pack configuration is required!");
+      return;
+    }
+    setPacks(packs.filter(pack => pack.id !== id));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const finalPayload = {
+      ...formData,
+      ...(formData.inventoryType === 'standard' ? { standardData } : { packs })
+    };
+    console.log("Submitting Product Payload:", finalPayload);
+    alert("Product saved successfully! Check console for data payload.");
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-sans">
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+        
+        {/* Header */}
+        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <FiPackage className="text-indigo-200" /> New Product Entry
+          </h1>
+          <p className="text-indigo-100 text-sm mt-1">
+            Add standard items or multi-unit pack products seamlessly into your inventory.
+          </p>
+        </div>
+
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
+          
+          {/* Section 1: Basic Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Product Name *</label>
+              <input 
+                type="text" 
+                name="name"
+                required
+                value={formData.name}
+                onChange={handleInputChange}
+                placeholder="e.g., Basmati Rice, T-Shirt"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Category *</label>
+              <select 
+                name="category"
+                value={formData.category}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-white"
+              >
+                <option value="Grocery">Grocery / Rice / Oil</option>
+                <option value="Pharmacy">Pharmacy / Medicine</option>
+                <option value="Furniture">Furniture</option>
+                <option value="Electronics">Electronics</option>
+                <option value="Fashion">Fashion & Apparels</option>
+                <option value="Hardware">Hardware</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Section 2: Inventory Type Selector Cards */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-3">Inventory Type *</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Standard Product Option */}
+              <div 
+                onClick={() => setFormData({ ...formData, inventoryType: 'standard' })}
+                className={`cursor-pointer p-4 rounded-xl border-2 transition flex items-start gap-3 ${
+                  formData.inventoryType === 'standard' 
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' 
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
+              >
+                <div className={`p-2.5 rounded-lg ${formData.inventoryType === 'standard' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  <FiBox size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Standard Product</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Furniture, Electronics, Fashion, Hardware (Single unit selling)</p>
+                </div>
+              </div>
+
+              {/* Pack Product Option */}
+              <div 
+                onClick={() => setFormData({ ...formData, inventoryType: 'pack' })}
+                className={`cursor-pointer p-4 rounded-xl border-2 transition flex items-start gap-3 ${
+                  formData.inventoryType === 'pack' 
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' 
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
+              >
+                <div className={`p-2.5 rounded-lg ${formData.inventoryType === 'pack' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  <FiPackage size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Pack Product</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Rice, Oil, Medicine, Beverages (Multi-unit & multi-pack conversion)</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Section 3: Base Unit Setting */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Base Unit <span className="text-xs font-normal text-slate-500">(Smallest measuring unit in system)</span>
+            </label>
+            <select 
+              name="baseUnit"
+              value={formData.baseUnit}
+              onChange={handleInputChange}
+              className="w-full md:w-1/2 px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="Pcs">Pcs (Piece)</option>
+              <option value="Kg">Kg (Kilogram)</option>
+              <option value="Gram">Gram</option>
+              <option value="Liter">Liter</option>
+              <option value="Ml">Ml (Milliliter)</option>
+              <option value="Packet">Packet</option>
+            </select>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          {/* CONDITIONAL RENDER 1: Standard Product Inputs */}
+          {formData.inventoryType === 'standard' && (
+            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 space-y-4 animate-fadeIn">
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider text-indigo-900">Standard Pricing & Stock</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Purchase Price (৳)</label>
+                  <input 
+                    type="number" 
+                    name="purchasePrice"
+                    value={standardData.purchasePrice}
+                    onChange={handleStandardChange}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Selling Price (৳)</label>
+                  <input 
+                    type="number" 
+                    name="sellingPrice"
+                    value={standardData.sellingPrice}
+                    onChange={handleStandardChange}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Initial Opening Stock</label>
+                  <input 
+                    type="number" 
+                    name="stock"
+                    value={standardData.stock}
+                    onChange={handleStandardChange}
+                    placeholder="0"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CONDITIONAL RENDER 2: Pack Product Multiplier Table */}
+          {formData.inventoryType === 'pack' && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Pack / Unit Configurations</h3>
+                  <p className="text-xs text-slate-500">Define packs relative to your base unit ({formData.baseUnit}).</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={addPackRow}
+                  className="px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-semibold text-xs rounded-lg flex items-center gap-1.5 transition"
+                >
+                  <FiPlus /> Add Pack Variant
+                </button>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/70 text-slate-600 text-xs font-semibold border-b border-slate-200">
+                      <th className="p-3">Pack Name (e.g., 25kg Bag)</th>
+                      <th className="p-3">Multiplier (Factor)</th>
+                      <th className="p-3">Purchase Price (৳)</th>
+                      <th className="p-3">Selling Price (৳)</th>
+                      <th className="p-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {packs.map((pack) => (
+                      <tr key={pack.id} className="text-sm">
+                        <td className="p-3">
+                          <input 
+                            type="text" 
+                            value={pack.packName}
+                            onChange={(e) => handlePackChange(pack.id, 'packName', e.target.value)}
+                            placeholder="e.g. 25 Kg Bag"
+                            className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500"
+                            required
+                          />
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-1">
+                            <input 
+                              type="number" 
+                              value={pack.multiplier}
+                              onChange={(e) => handlePackChange(pack.id, 'multiplier', e.target.value)}
+                              placeholder="25"
+                              className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500"
+                              required
+                            />
+                            <span className="text-xs text-slate-400 font-medium">× {formData.baseUnit}</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <input 
+                            type="number" 
+                            value={pack.purchasePrice}
+                            onChange={(e) => handlePackChange(pack.id, 'purchasePrice', e.target.value)}
+                            placeholder="0.00"
+                            className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <input 
+                            type="number" 
+                            value={pack.sellingPrice}
+                            onChange={(e) => handlePackChange(pack.id, 'sellingPrice', e.target.value)}
+                            placeholder="0.00"
+                            className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500"
+                            required
+                          />
+                        </td>
+                        <td className="p-3 text-center">
+                          <button 
+                            type="button"
+                            onClick={() => removePackRow(pack.id)}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition"
+                            title="Remove Row"
+                          >
+                            <FiTrash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <div className="pt-4 flex justify-end gap-3">
+            <button 
+              type="submit"
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-200 flex items-center gap-2 transition"
+            >
+              <FiCheckCircle size={18} /> Save Product to Inventory
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default ProductEntry;
