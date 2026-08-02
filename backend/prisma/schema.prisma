@@ -248,8 +248,6 @@ model SaleItem {
 
   createdAt     DateTime @default(now())
 
-  @@map("sale_item") // অথবা "sale_items"
-
   @@map("sale_items")
 }
 
