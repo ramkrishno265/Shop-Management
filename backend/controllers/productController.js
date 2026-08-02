@@ -14,7 +14,7 @@ const validateShopAccess = (user, requestShopId) => {
   return targetShopId;
 };
 
-// ১. Get Products (সাথে প্যাক ভ্যারিয়েন্টগুলোও ফেচ করার জন্য include যোগ করা হয়েছে)
+// ১. Get Products
 export const getProducts = async (req, res) => {
   try {
     const shopId = req.user?.shopId ? Number(req.user.shopId) : null;
@@ -24,7 +24,7 @@ export const getProducts = async (req, res) => {
       where: { shopId: shopId },
       include: { 
         category: true,
-        packs: true // প্যাক প্রোডাক্টগুলোর কনফিগারেশন দেখার জন্য
+        packs: true 
       },
       orderBy: { createdAt: "desc" },
     });
@@ -36,7 +36,6 @@ export const getProducts = async (req, res) => {
   }
 };
 
-// ২. Create Product (Standard & Pack Product Support)
 // ২. Create Product (Standard & Pack Product Support)
 export const createProduct = async (req, res) => {
   try {
@@ -75,7 +74,7 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Invalid category format." });
     }
 
-    // ক্যাটাগরি হ্যান্ডলিং (নির্দিষ্ট শপের আন্ডারে ক্যাটাগরি চেক এবং ক্রিয়েট করা)
+    // ক্যাটাগরি হ্যান্ডলিং
     let dbCategory = await prisma.category.findFirst({
       where: {
         name: { equals: categoryName, mode: 'insensitive' },
@@ -106,9 +105,18 @@ export const createProduct = async (req, res) => {
       quantity = parseFloat(standardData.stock) || 0;
     }
 
-    // ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক (যদি থাকে) একসাথে সেভ করা
+    // ফ্রন্টএন্ড থেকে packs অবজেক্ট বা অ্যারে আকারে আসতে পারে, সেফটি চেক
+    let parsedPacks = [];
+    if (type === 'pack') {
+      if (Array.isArray(packs)) {
+        parsedPacks = packs;
+      } else if (packs && typeof packs === 'object' && Array.isArray(packs.packs)) {
+        parsedPacks = packs.packs;
+      }
+    }
+
+    // ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক একসাথে সেভ করা
     const newProduct = await prisma.$transaction(async (tx) => {
-      // প্রোডাক্ট মেইন ডাটা তৈরি (আপনার Prisma স্কিমার সাথে হুবহু মিল রেখে ম্যাপ করা হয়েছে)
       const product = await tx.product.create({
         data: {
           name: name.trim(),
@@ -117,7 +125,6 @@ export const createProduct = async (req, res) => {
           inventoryType: type,
           baseUnit: unitVal,
           quantity,
-          unit: unitVal, // স্কিমার সাথে মিল রাখতে
           purchasePrice,
           sellingPrice,
           lowStockLimit: lowStockLimit ? parseFloat(lowStockLimit) : 5,
@@ -128,9 +135,9 @@ export const createProduct = async (req, res) => {
         }
       });
 
-      // যদি প্যাক টাইপ হয় এবং প্যাক লিস্ট থাকে, তবে `product_packs` টেবিলে সেভ হবে
-      if (type === 'pack' && packs && Array.isArray(packs) && packs.length > 0) {
-        const packDataToInsert = packs.map(pack => ({
+      // প্যাক ডাটা ইনসার্ট করা
+      if (type === 'pack' && parsedPacks.length > 0) {
+        const packDataToInsert = parsedPacks.map(pack => ({
           productId: product.id,
           packName: pack.packName ? pack.packName.trim() : 'Default Pack',
           multiplier: parseFloat(pack.multiplier) || 1,
@@ -146,7 +153,6 @@ export const createProduct = async (req, res) => {
       return product;
     });
 
-    // ফ্রন্টএন্ডে রিলেশনসহ ডাটা রিটার্ন করা
     const createdProductWithRelations = await prisma.product.findUnique({
       where: { id: newProduct.id },
       include: { category: true, packs: true }
@@ -158,7 +164,8 @@ export const createProduct = async (req, res) => {
     res.status(500).json({ message: "Error creating product", error: error.message });
   }
 };
-// ৩. Delete Product (ProductPack ডাটাও ক্যাস্কেড ডিলিট হয়ে যাবে স্কিমা অনুযায়ী)
+
+// ৩. Delete Product
 export const deleteProduct = async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
@@ -168,7 +175,6 @@ export const deleteProduct = async (req, res) => {
     const existingProduct = await prisma.product.findUnique({ where: { id: productId } });
     if (!existingProduct) return res.status(404).json({ message: "Product not found." });
 
-    // সিকিউরিটি চেক
     if (role !== "ADMIN" && existingProduct.shopId !== userShopId) {
       return res.status(403).json({ message: "Unauthorized: Access denied." });
     }
@@ -191,7 +197,6 @@ export const updateProduct = async (req, res) => {
       sku,
       category,
       quantity,
-      unit,
       purchasePrice,
       sellingPrice,
       description,
@@ -205,7 +210,6 @@ export const updateProduct = async (req, res) => {
     const { role, shopId } = req.user;
     const userShopId = shopId ? Number(shopId) : null;
 
-    // Product exists কিনা চেক
     const existingProduct = await prisma.product.findUnique({
       where: { id: productId },
       include: { category: true, packs: true },
@@ -215,12 +219,10 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found." });
     }
 
-    // Security Check
     if (role !== "ADMIN" && existingProduct.shopId !== userShopId) {
       return res.status(403).json({ message: "Unauthorized: Access denied." });
     }
 
-    // Category Handle
     let categoryId = existingProduct.categoryId;
 
     if (category) {
@@ -252,17 +254,24 @@ export const updateProduct = async (req, res) => {
       }
     }
 
-    // Product Update with Transaction (প্যাক আপডেট হ্যান্ডেল করার জন্য)
+    // প্যাক পার্সিং সেফটি চেক
+    let parsedPacks = null;
+    if (packs !== undefined) {
+      if (Array.isArray(packs)) {
+        parsedPacks = packs;
+      } else if (packs && typeof packs === 'object' && Array.isArray(packs.packs)) {
+        parsedPacks = packs.packs;
+      }
+    }
+
     const updatedProduct = await prisma.$transaction(async (tx) => {
-      
-      // যদি প্যাক ডেটা পাঠানো হয়, তবে আগের প্যাকগুলো ডিলিট করে নতুন প্যাকগুলো ইনসার্ট করতে পারি
-      if (packs && Array.isArray(packs)) {
+      if (parsedPacks !== null) {
         await tx.productPack.deleteMany({ where: { productId } });
         
-        if (packs.length > 0) {
-          const packDataToInsert = packs.map(pack => ({
+        if (parsedPacks.length > 0) {
+          const packDataToInsert = parsedPacks.map(pack => ({
             productId,
-            packName: pack.packName.trim(),
+            packName: pack.packName ? pack.packName.trim() : 'Default Pack',
             multiplier: parseFloat(pack.multiplier) || 1,
             purchasePrice: parseFloat(pack.purchasePrice) || 0,
             sellingPrice: parseFloat(pack.sellingPrice) || 0,
@@ -287,7 +296,6 @@ export const updateProduct = async (req, res) => {
           sku: sku ? sku.trim() : existingProduct.sku,
           inventoryType: inventoryType ?? existingProduct.inventoryType,
           baseUnit: baseUnit ?? existingProduct.baseUnit,
-          unit: unit ?? baseUnit ?? existingProduct.unit,
           quantity: finalQuantity,
           purchasePrice: finalPurchasePrice,
           sellingPrice: finalSellingPrice,
