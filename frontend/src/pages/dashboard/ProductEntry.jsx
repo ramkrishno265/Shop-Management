@@ -109,7 +109,7 @@ const ProductEntry = () => {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/products`, {
+      const response = await fetch(`${API_URL}/products`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

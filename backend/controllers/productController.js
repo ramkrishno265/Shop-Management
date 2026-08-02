@@ -2,8 +2,10 @@ import prisma from "../config/db.js";
 
 // Utility: শপ আইডি ভ্যালিডেশন
 const validateShopAccess = (user, requestShopId) => {
-  const userShopId = Number(user.shopId);
+  const userShopId = user.shopId ? Number(user.shopId) : null;
   const targetShopId = requestShopId ? Number(requestShopId) : userShopId;
+
+  if (!targetShopId) return null;
 
   // ADMIN সব শপ অ্যাক্সেস করতে পারবে, অন্যরা শুধু তাদের নিজস্ব শপ
   if (user.role !== "ADMIN" && targetShopId !== userShopId) {
@@ -15,11 +17,11 @@ const validateShopAccess = (user, requestShopId) => {
 // ১. Get Products (সাথে প্যাক ভ্যারিয়েন্টগুলোও ফেচ করার জন্য include যোগ করা হয়েছে)
 export const getProducts = async (req, res) => {
   try {
-    const { shopId } = req.user;
+    const shopId = req.user?.shopId ? Number(req.user.shopId) : null;
     if (!shopId) return res.status(400).json({ message: "Shop assignment missing." });
 
     const products = await prisma.product.findMany({
-      where: { shopId: Number(shopId) },
+      where: { shopId: shopId },
       include: { 
         category: true,
         packs: true // প্যাক প্রোডাক্টগুলোর কনফিগারেশন দেখার জন্য
@@ -29,6 +31,7 @@ export const getProducts = async (req, res) => {
 
     res.status(200).json(products);
   } catch (error) {
+    console.error("Error fetching products:", error);
     res.status(500).json({ message: "Error fetching products", error: error.message });
   }
 };
@@ -105,8 +108,8 @@ export const createProduct = async (req, res) => {
       // প্রোডাক্ট মেইন ডাটা তৈরি
       const product = await tx.product.create({
         data: {
-          name,
-          sku: sku || `SKU-${Date.now().toString().slice(-6)}`,
+          name: name.trim(),
+          sku: sku ? sku.trim() : `SKU-${Date.now().toString().slice(-6)}`,
           inventoryType: type,
           baseUnit: unitVal,
           quantity,
@@ -115,7 +118,7 @@ export const createProduct = async (req, res) => {
           sellingPrice,
           categoryId: dbCategory.id,
           shopId: finalShopId,
-          description,
+          description: description ? description.trim() : null,
           status: quantity > 0 ? "ACTIVE" : "INACTIVE"
         }
       });
@@ -124,7 +127,7 @@ export const createProduct = async (req, res) => {
       if (type === 'pack' && packs && Array.isArray(packs) && packs.length > 0) {
         const packDataToInsert = packs.map(pack => ({
           productId: product.id,
-          packName: pack.packName,
+          packName: pack.packName.trim(),
           multiplier: parseFloat(pack.multiplier) || 1,
           purchasePrice: parseFloat(pack.purchasePrice) || 0,
           sellingPrice: parseFloat(pack.sellingPrice) || 0,
@@ -156,18 +159,20 @@ export const deleteProduct = async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
     const { role, shopId } = req.user;
+    const userShopId = shopId ? Number(shopId) : null;
 
     const existingProduct = await prisma.product.findUnique({ where: { id: productId } });
     if (!existingProduct) return res.status(404).json({ message: "Product not found." });
 
     // সিকিউরিটি চেক
-    if (role !== "ADMIN" && existingProduct.shopId !== Number(shopId)) {
+    if (role !== "ADMIN" && existingProduct.shopId !== userShopId) {
       return res.status(403).json({ message: "Unauthorized: Access denied." });
     }
 
     await prisma.product.delete({ where: { id: productId } });
     res.status(200).json({ message: "Product deleted successfully." });
   } catch (error) {
+    console.error("Error deleting product:", error);
     res.status(500).json({ message: "Error deleting product", error: error.message });
   }
 };
@@ -194,6 +199,7 @@ export const updateProduct = async (req, res) => {
     } = req.body;
 
     const { role, shopId } = req.user;
+    const userShopId = shopId ? Number(shopId) : null;
 
     // Product exists কিনা চেক
     const existingProduct = await prisma.product.findUnique({
@@ -206,7 +212,7 @@ export const updateProduct = async (req, res) => {
     }
 
     // Security Check
-    if (role !== "ADMIN" && existingProduct.shopId !== Number(shopId)) {
+    if (role !== "ADMIN" && existingProduct.shopId !== userShopId) {
       return res.status(403).json({ message: "Unauthorized: Access denied." });
     }
 
@@ -252,7 +258,7 @@ export const updateProduct = async (req, res) => {
         if (packs.length > 0) {
           const packDataToInsert = packs.map(pack => ({
             productId,
-            packName: pack.packName,
+            packName: pack.packName.trim(),
             multiplier: parseFloat(pack.multiplier) || 1,
             purchasePrice: parseFloat(pack.purchasePrice) || 0,
             sellingPrice: parseFloat(pack.sellingPrice) || 0,
@@ -273,15 +279,15 @@ export const updateProduct = async (req, res) => {
       return await tx.product.update({
         where: { id: productId },
         data: {
-          name: name ?? existingProduct.name,
-          sku: sku ?? existingProduct.sku,
+          name: name ? name.trim() : existingProduct.name,
+          sku: sku ? sku.trim() : existingProduct.sku,
           inventoryType: inventoryType ?? existingProduct.inventoryType,
           baseUnit: baseUnit ?? existingProduct.baseUnit,
           unit: unit ?? baseUnit ?? existingProduct.unit,
           quantity: finalQuantity,
           purchasePrice: finalPurchasePrice,
           sellingPrice: finalSellingPrice,
-          description: description ?? existingProduct.description,
+          description: description !== undefined ? description.trim() : existingProduct.description,
           status: status ?? (finalQuantity > 0 ? "ACTIVE" : "INACTIVE"),
           categoryId,
         },
