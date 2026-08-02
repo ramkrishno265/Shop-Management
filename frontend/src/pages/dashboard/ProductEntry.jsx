@@ -1,14 +1,29 @@
 import React, { useState } from 'react';
-import { FiPlus, FiTrash2, FiPackage, FiBox, FiCheckCircle } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiPackage, FiBox, FiCheckCircle, FiSearch, FiLoader } from 'react-icons/fi';
 
 const ProductEntry = () => {
+  const [loading, setLoading] = useState(false);
+
   // Main Product State
   const [formData, setFormData] = useState({
     name: '',
-    category: 'Grocery',
+    category: '',
     inventoryType: 'standard', // 'standard' or 'pack'
     baseUnit: 'Pcs',
   });
+
+  // Existing Categories State
+  const [existingCategories, setExistingCategories] = useState([
+    'Grocery / Rice / Oil',
+    'Pharmacy / Medicine',
+    'Furniture',
+    'Electronics & Gadgets',
+    'Fashion & Apparels',
+    'Hardware & Sanitary',
+    'Stationery & Books'
+  ]);
+  const [categoryInput, setCategoryInput] = useState('');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   // For Standard Product Pricing
   const [standardData, setStandardData] = useState({
@@ -33,6 +48,20 @@ const ProductEntry = () => {
     setStandardData({ ...standardData, [name]: value });
   };
 
+  // Category Selection Handlers
+  const selectCategory = (cat) => {
+    setCategoryInput(cat);
+    setFormData({ ...formData, category: cat });
+    setShowCategoryDropdown(false);
+  };
+
+  const handleCategoryInput = (e) => {
+    const val = e.target.value;
+    setCategoryInput(val);
+    setFormData({ ...formData, category: val });
+    setShowCategoryDropdown(true);
+  };
+
   // Pack Management Handlers
   const handlePackChange = (id, field, value) => {
     setPacks(packs.map(pack => pack.id === id ? { ...pack, [field]: value } : pack));
@@ -53,15 +82,65 @@ const ProductEntry = () => {
     setPacks(packs.filter(pack => pack.id !== id));
   };
 
-  const handleSubmit = (e) => {
+  // --- Backend API Integration (handleSubmit) ---
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!formData.category) {
+      alert("Please select or type a category!");
+      return;
+    }
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
     const finalPayload = {
       ...formData,
       ...(formData.inventoryType === 'standard' ? { standardData } : { packs })
     };
-    console.log("Submitting Product Payload:", finalPayload);
-    alert("Product saved successfully! Check console for data payload.");
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // 'Authorization': `Bearer ${token}` // যদি টোকেন বা অথেন্টিকেশন লাগে এখানে বসাবেন
+        },
+        body: JSON.stringify(finalPayload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to save product to database!');
+      }
+
+      alert("Product saved successfully to database!");
+
+      // Form Reset
+      setFormData({
+        name: '',
+        category: '',
+        inventoryType: 'standard',
+        baseUnit: 'Pcs',
+      });
+      setCategoryInput('');
+      setStandardData({ purchasePrice: '', sellingPrice: '', stock: '' });
+      setPacks([{ id: 1, packName: '25 Kg Bag', multiplier: 25, purchasePrice: '', sellingPrice: '' }]);
+
+    } catch (error) {
+      console.error("Error saving product:", error);
+      alert("Error: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Filter categories based on input
+  const filteredCategories = existingCategories.filter(cat => 
+    cat.toLowerCase().includes(categoryInput.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-sans">
@@ -90,26 +169,47 @@ const ProductEntry = () => {
                 required
                 value={formData.name}
                 onChange={handleInputChange}
-                placeholder="e.g., Basmati Rice, T-Shirt"
+                placeholder="e.g., Basmati Rice, T-Shirt, Paracetamol"
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               />
             </div>
 
-            <div>
+            {/* Dynamic Searchable Category Input */}
+            <div className="relative">
               <label className="block text-sm font-semibold text-slate-700 mb-2">Category *</label>
-              <select 
-                name="category"
-                value={formData.category}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-white"
-              >
-                <option value="Grocery">Grocery / Rice / Oil</option>
-                <option value="Pharmacy">Pharmacy / Medicine</option>
-                <option value="Furniture">Furniture</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Fashion">Fashion & Apparels</option>
-                <option value="Hardware">Hardware</option>
-              </select>
+              <div className="relative">
+                <input 
+                  type="text" 
+                  required
+                  value={categoryInput}
+                  onChange={handleCategoryInput}
+                  onFocus={() => setShowCategoryDropdown(true)}
+                  placeholder="Select or type new category..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-white"
+                />
+                <FiSearch className="absolute right-3.5 top-3.5 text-slate-400" />
+              </div>
+
+              {/* Category Suggestions Dropdown */}
+              {showCategoryDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {filteredCategories.length > 0 ? (
+                    filteredCategories.map((cat, index) => (
+                      <div 
+                        key={index}
+                        onClick={() => selectCategory(cat)}
+                        className="px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 cursor-pointer transition border-b border-slate-50 last:border-none"
+                      >
+                        {cat}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-2.5 text-sm text-indigo-600 font-medium bg-indigo-50/50">
+                      ✨ Will create new category: "{categoryInput}"
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -168,12 +268,33 @@ const ProductEntry = () => {
               onChange={handleInputChange}
               className="w-full md:w-1/2 px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
-              <option value="Pcs">Pcs (Piece)</option>
-              <option value="Kg">Kg (Kilogram)</option>
-              <option value="Gram">Gram</option>
-              <option value="Liter">Liter</option>
-              <option value="Ml">Ml (Milliliter)</option>
-              <option value="Packet">Packet</option>
+              <optgroup label="General / Piece-based">
+                <option value="Pcs">Pcs (Piece)</option>
+                <option value="Pair">Pair (যোড়া)</option>
+                <option value="Set">Set</option>
+                <option value="Dozen">Dozen (হালি)</option>
+              </optgroup>
+              <optgroup label="Weight-based (Grocery)">
+                <option value="Kg">Kg (Kilogram)</option>
+                <option value="Gram">Gram</option>
+                <option value="Mon">Mon (মণ)</option>
+              </optgroup>
+              <optgroup label="Liquid-based (Oil / Beverage)">
+                <option value="Liter">Liter</option>
+                <option value="Ml">Ml (Milliliter)</option>
+              </optgroup>
+              <optgroup label="Pack / Box-based (Pharmacy / FMCG)">
+                <option value="Tablet">Tablet / Piece</option>
+                <option value="Strip">Strip (পাতা)</option>
+                <option value="Packet">Packet</option>
+                <option value="Box">Box</option>
+                <option value="Bottle">Bottle</option>
+              </optgroup>
+              <optgroup label="Length-based (Cloth / Hardware)">
+                <option value="Meter">Meter</option>
+                <option value="Yard">Yard (গজ)</option>
+                <option value="Feet">Feet</option>
+              </optgroup>
             </select>
           </div>
 
@@ -181,7 +302,7 @@ const ProductEntry = () => {
 
           {/* CONDITIONAL RENDER 1: Standard Product Inputs */}
           {formData.inventoryType === 'standard' && (
-            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 space-y-4 animate-fadeIn">
+            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 space-y-4">
               <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider text-indigo-900">Standard Pricing & Stock</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -224,7 +345,7 @@ const ProductEntry = () => {
 
           {/* CONDITIONAL RENDER 2: Pack Product Multiplier Table */}
           {formData.inventoryType === 'pack' && (
-            <div className="space-y-4 animate-fadeIn">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm">Pack / Unit Configurations</h3>
@@ -243,7 +364,7 @@ const ProductEntry = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-100/70 text-slate-600 text-xs font-semibold border-b border-slate-200">
-                      <th className="p-3">Pack Name (e.g., 25kg Bag)</th>
+                      <th className="p-3">Pack Name (e.g., 25kg Bag / Strip)</th>
                       <th className="p-3">Multiplier (Factor)</th>
                       <th className="p-3">Purchase Price (৳)</th>
                       <th className="p-3">Selling Price (৳)</th>
@@ -317,9 +438,11 @@ const ProductEntry = () => {
           <div className="pt-4 flex justify-end gap-3">
             <button 
               type="submit"
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-200 flex items-center gap-2 transition"
+              disabled={loading}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-200 flex items-center gap-2 transition disabled:opacity-50"
             >
-              <FiCheckCircle size={18} /> Save Product to Inventory
+              {loading ? <FiLoader className="animate-spin" size={18} /> : <FiCheckCircle size={18} />}
+              {loading ? 'Saving...' : 'Save Product to Inventory'}
             </button>
           </div>
 
