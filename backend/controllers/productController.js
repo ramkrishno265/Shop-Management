@@ -275,6 +275,7 @@ export const updateProduct = async (req, res) => {
             productId,
             packName: pack.packName ? pack.packName.trim() : 'Default Pack',
             multiplier: parseFloat(pack.multiplier) || 1,
+            stock: parseFloat(pack.stock) || 0, // 👈 প্যাকের স্টক আপডেট নিশ্চিত করা হলো
             purchasePrice: parseFloat(pack.purchasePrice) || 0,
             sellingPrice: parseFloat(pack.sellingPrice) || 0,
           }));
