@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
 
 export default function Inventory() {
   const API_URL = `${import.meta.env.VITE_API_URL}/products`;
@@ -42,7 +42,7 @@ export default function Inventory() {
     quantity: "",
     unit: "Pcs",
     description: "",
-    status: "ACTIVE"
+    status: "ACTIVE",
   });
 
   // সাজেশন স্টেট সমূহ
@@ -66,14 +66,17 @@ export default function Inventory() {
 
         const [productsRes, categoriesRes] = await Promise.all([
           axios.get(API_URL, { headers: getAuthHeader() }),
-          axios.get(CATEGORY_API_URL, { headers: getAuthHeader() }).catch(() => ({ data: [] }))
+          axios
+            .get(CATEGORY_API_URL, { headers: getAuthHeader() })
+            .catch(() => ({ data: [] })),
         ]);
 
         if (Array.isArray(productsRes.data)) {
           setProducts(productsRes.data);
 
           const lowStock = productsRes.data.filter(
-            (product) => Number(product.quantity) > 0 && Number(product.quantity) <= 5
+            (product) =>
+              Number(product.quantity) > 0 && Number(product.quantity) <= 5,
           );
 
           setLowProductList(lowStock);
@@ -110,7 +113,9 @@ export default function Inventory() {
         setShowSuggestions(false);
       } else {
         const matched = products
-          .filter((p) => p.name && p.name.toLowerCase().includes(value.toLowerCase()))
+          .filter(
+            (p) => p.name && p.name.toLowerCase().includes(value.toLowerCase()),
+          )
           .map((p) => p.name);
         const uniqueSuggestions = [...new Set(matched)];
         setSuggestions(uniqueSuggestions);
@@ -124,9 +129,13 @@ export default function Inventory() {
         setShowCategorySuggestions(false);
       } else {
         const matched = categories.filter((cat) =>
-          cat.name.toLowerCase().includes(value.toLowerCase())
+          cat.name.toLowerCase().includes(value.toLowerCase()),
         );
-        const uniqueSuggestions = [...new Map(matched.map(item => [item.name.toLowerCase(), item])).values()];
+        const uniqueSuggestions = [
+          ...new Map(
+            matched.map((item) => [item.name.toLowerCase(), item]),
+          ).values(),
+        ];
         setCategorySuggestions(uniqueSuggestions);
         setShowCategorySuggestions(uniqueSuggestions.length > 0);
       }
@@ -171,15 +180,25 @@ export default function Inventory() {
     };
 
     try {
-      const response = await axios.post(API_URL, productData, { headers: getAuthHeader() });
+      const response = await axios.post(API_URL, productData, {
+        headers: getAuthHeader(),
+      });
 
       if (response.status === 201 || response.status === 200) {
         const savedProduct = response.data;
         setProducts((prev) => [savedProduct, ...prev]);
 
-        const catName = savedProduct.category?.name || savedProduct.category || "General";
-        if (!categories.some(c => c.name.toLowerCase() === catName.toLowerCase())) {
-          setCategories((prev) => [...prev, { id: savedProduct.categoryId || Date.now(), name: catName }]);
+        const catName =
+          savedProduct.category?.name || savedProduct.category || "General";
+        if (
+          !categories.some(
+            (c) => c.name.toLowerCase() === catName.toLowerCase(),
+          )
+        ) {
+          setCategories((prev) => [
+            ...prev,
+            { id: savedProduct.categoryId || Date.now(), name: catName },
+          ]);
         }
 
         setFormData({
@@ -202,10 +221,16 @@ export default function Inventory() {
     } catch (error) {
       console.error("Error saving product:", error);
       const errorMessage = error.response?.data?.error || "";
-      if (errorMessage.includes("Unique constraint failed") || errorMessage.includes("sku")) {
+      if (
+        errorMessage.includes("Unique constraint failed") ||
+        errorMessage.includes("sku")
+      ) {
         alert("❌ This SKU Already Used Please Change");
       } else {
-        alert(error.response?.data?.message || "Something went wrong! Please try again.");
+        alert(
+          error.response?.data?.message ||
+            "Something went wrong! Please try again.",
+        );
       }
     }
   };
@@ -213,7 +238,9 @@ export default function Inventory() {
   // --- এডিট পপআপ ওপেন করার ফাংশন ---
   const handleEditClick = (product) => {
     setEditProductId(product.id);
-    const catName = product.category?.name || (typeof product.category === 'string' ? product.category : "");
+    const catName =
+      product.category?.name ||
+      (typeof product.category === "string" ? product.category : "");
     setEditFormData({
       name: product.name || "",
       sku: product.sku || "",
@@ -223,7 +250,7 @@ export default function Inventory() {
       quantity: product.quantity || "",
       unit: product.unit || "Pcs",
       description: product.description || "",
-      status: product.status || "ACTIVE"
+      status: product.status || "ACTIVE",
     });
     setEditProductPopup(true);
   };
@@ -241,15 +268,19 @@ export default function Inventory() {
       quantity: parseFloat(editFormData.quantity) || 0,
       unit: editFormData.unit,
       description: editFormData.description,
-      status: editFormData.status
+      status: editFormData.status,
     };
 
     try {
-      const response = await axios.put(`${API_URL}/${editProductId}`, updatedData, { headers: getAuthHeader() });
+      const response = await axios.put(
+        `${API_URL}/${editProductId}`,
+        updatedData,
+        { headers: getAuthHeader() },
+      );
       if (response.status === 200) {
         const updatedProduct = response.data;
         setProducts((prev) =>
-          prev.map((p) => (p.id === editProductId ? updatedProduct : p))
+          prev.map((p) => (p.id === editProductId ? updatedProduct : p)),
         );
         setEditProductPopup(false);
         alert("Product updated successfully!");
@@ -262,10 +293,13 @@ export default function Inventory() {
 
   // --- ৪. প্রোডাক্ট ডিলিট করা ---
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    if (!window.confirm("Are you sure you want to delete this product?"))
+      return;
 
     try {
-      const response = await axios.delete(`${API_URL}/${id}`, { headers: getAuthHeader() });
+      const response = await axios.delete(`${API_URL}/${id}`, {
+        headers: getAuthHeader(),
+      });
       if (response.status === 200) {
         setProducts((prev) => prev.filter((p) => p.id !== id));
         alert("Product deleted successfully!");
@@ -282,9 +316,14 @@ export default function Inventory() {
       product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.sku?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const categoryName = product.category?.name || (typeof product.category === 'string' ? product.category : "Uncategorized");
+    const categoryName =
+      product.category?.name ||
+      (typeof product.category === "string"
+        ? product.category
+        : "Uncategorized");
     const matchesCategory =
-      selectedCategory === "All" || categoryName.toLowerCase() === selectedCategory.toLowerCase();
+      selectedCategory === "All" ||
+      categoryName.toLowerCase() === selectedCategory.toLowerCase();
 
     return matchesSearch && matchesCategory;
   });
@@ -293,7 +332,10 @@ export default function Inventory() {
   const totalPages = Math.ceil(filteredProducts.length / rowsPerPage);
   const indexOfLastRow = currentPage * rowsPerPage;
   const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-  const currentProducts = filteredProducts.slice(indexOfFirstRow, indexOfLastRow);
+  const currentProducts = filteredProducts.slice(
+    indexOfFirstRow,
+    indexOfLastRow,
+  );
 
   // সার্চ বা ক্যাটাগরি পরিবর্তন করলে পেজ ১ এ নিয়ে যাওয়া
   useEffect(() => {
@@ -316,8 +358,12 @@ export default function Inventory() {
       {/* ১. HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Inventory</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Manage your shop products, stock levels, and pricing.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Inventory
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Manage your shop products, stock levels, and pricing.
+          </p>
         </div>
         <button
           className="inline-flex items-center justify-center px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-xl text-sm shadow-sm transition-all cursor-pointer"
@@ -332,31 +378,47 @@ export default function Inventory() {
         {/* Total Products */}
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Products</p>
-            <h3 className="text-2xl font-bold text-slate-900 mt-1">{products.length}</h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Total Products
+            </p>
+            <h3 className="text-2xl font-bold text-slate-900 mt-1">
+              {products.length}
+            </h3>
           </div>
-          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-indigo-600">📦</div>
+          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-indigo-600">
+            📦
+          </div>
         </div>
 
         {/* Total Stock Volume */}
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Stock Volume</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Total Stock Volume
+            </p>
             <h3 className="text-2xl font-bold text-slate-900 mt-1">
               {products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)}
             </h3>
           </div>
-          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-emerald-600">📊</div>
+          <div className="text-2xl p-2 bg-slate-50 rounded-lg text-emerald-600">
+            📊
+          </div>
         </div>
 
         {/* Low Stock Products */}
         <Link to="/stock_low" className="block group">
           <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between cursor-pointer transition-all duration-200 group-hover:border-blue-400 group-hover:shadow-md active:scale-[0.98]">
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Low Stock Products</p>
-              <h3 className="text-2xl font-bold text-slate-900 mt-1">{lowProductList.length}</h3>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Low Stock Products
+              </p>
+              <h3 className="text-2xl font-bold text-slate-900 mt-1">
+                {lowProductList.length}
+              </h3>
             </div>
-            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-amber-600">⚠️</div>
+            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-amber-600">
+              ⚠️
+            </div>
           </div>
         </Link>
 
@@ -364,12 +426,16 @@ export default function Inventory() {
         <Link to="/stock_low" className="block group">
           <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs flex items-center justify-between cursor-pointer transition-all duration-200 group-hover:border-blue-400 group-hover:shadow-md active:scale-[0.98]">
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Out of Stock</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Out of Stock
+              </p>
               <h3 className="text-2xl font-bold text-slate-900 mt-1">
                 {products.filter((p) => (Number(p.quantity) || 0) === 0).length}
               </h3>
             </div>
-            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-rose-600">🚫</div>
+            <div className="text-2xl p-2 bg-slate-50 rounded-lg text-rose-600">
+              🚫
+            </div>
           </div>
         </Link>
       </div>
@@ -377,7 +443,9 @@ export default function Inventory() {
       {/* ৩. FILTER & SEARCH BAR */}
       <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-4 border border-slate-200 rounded-xl shadow-xs">
         <div className="w-full sm:flex-1 relative">
-          <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔍</span>
+          <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">
+            🔍
+          </span>
           <input
             type="text"
             placeholder="Search by product name or SKU..."
@@ -394,7 +462,9 @@ export default function Inventory() {
           >
             <option value="All">All Categories</option>
             {categories.map((cat) => (
-              <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>
+              <option key={cat.id || cat.name} value={cat.name}>
+                {cat.name}
+              </option>
             ))}
           </select>
         </div>
@@ -419,23 +489,68 @@ export default function Inventory() {
             <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-10 text-center text-sm text-slate-400">Loading products...</td>
+                  <td
+                    colSpan="8"
+                    className="px-6 py-10 text-center text-sm text-slate-400"
+                  >
+                    Loading products...
+                  </td>
                 </tr>
               ) : currentProducts.length > 0 ? (
                 currentProducts.map((product) => (
-                  <tr key={product.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900">{product.name}</td>
-                    <td className="px-6 py-4 text-xs font-mono text-slate-500">{product.sku}</td>
-                    <td className="px-6 py-4 text-slate-500">{product.category?.name || (typeof product.category === 'string' ? product.category : "Uncategorized")}</td>
-                    <td className="px-6 py-4 text-slate-500">৳{Number(product.purchasePrice).toFixed(2)}</td>
-                    <td className="px-6 py-4 font-semibold text-slate-900">৳{Number(product.sellingPrice).toFixed(2)}</td>
-                    <td className="px-6 py-4">
-                      <span className={`font-semibold ${Number(product.quantity) <= 5 ? "text-amber-600" : "text-slate-700"}`}>
-                        {product.quantity} {product.unit || "Pcs"}
-                      </span>
+                  <tr
+                    key={product.id}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
+                    <td className="px-6 py-4 font-medium text-slate-900">
+                      {product.name}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-mono text-slate-500">
+                      {product.sku}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500">
+                      {product.category?.name ||
+                        (typeof product.category === "string"
+                          ? product.category
+                          : "Uncategorized")}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500">
+                      ৳{Number(product.purchasePrice).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-900">
+                      ৳{Number(product.sellingPrice).toFixed(2)}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 text-xs font-medium border rounded-md ${getStatusStyle(product.status)}`}>
+                      {product.inventoryType === "pack" &&
+                      product.packs &&
+                      product.packs.length > 0 ? (
+                        <div className="space-y-1">
+                          {product.packs.map((p, idx) => (
+                            <div key={idx} className="text-xs">
+                              <span className="font-semibold text-indigo-700">
+                                {p.packName}:
+                              </span>{" "}
+                              {p.stock || 0} ({p.multiplier}{" "}
+                              {product.unit || "Pcs"})
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span
+                          className={`font-semibold ${Number(product.quantity || product.stock || 0) <= 5 ? "text-amber-600" : "text-slate-700"}`}
+                        >
+                          {product.quantity !== undefined &&
+                          product.quantity !== null
+                            ? product.quantity
+                            : product.stock || 0}{" "}
+                          {product.unit || "Pcs"}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2.5 py-1 text-xs font-medium border rounded-md ${getStatusStyle(product.status)}`}
+                      >
                         {product.status || "ACTIVE"}
                       </span>
                     </td>
@@ -457,7 +572,12 @@ export default function Inventory() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="px-6 py-10 text-center text-sm text-slate-400">No products found matching the criteria.</td>
+                  <td
+                    colSpan="8"
+                    className="px-6 py-10 text-center text-sm text-slate-400"
+                  >
+                    No products found matching the criteria.
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -468,7 +588,19 @@ export default function Inventory() {
         {!loading && filteredProducts.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50/50">
             <span className="text-xs text-slate-500">
-              Showing <span className="font-semibold text-slate-700">{indexOfFirstRow + 1}</span> to <span className="font-semibold text-slate-700">{Math.min(indexOfLastRow, filteredProducts.length)}</span> of <span className="font-semibold text-slate-700">{filteredProducts.length}</span> results
+              Showing{" "}
+              <span className="font-semibold text-slate-700">
+                {indexOfFirstRow + 1}
+              </span>{" "}
+              to{" "}
+              <span className="font-semibold text-slate-700">
+                {Math.min(indexOfLastRow, filteredProducts.length)}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-slate-700">
+                {filteredProducts.length}
+              </span>{" "}
+              results
             </span>
             <div className="flex items-center gap-1.5">
               <button
@@ -484,7 +616,9 @@ export default function Inventory() {
               </span>
 
               <button
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
                 disabled={currentPage === totalPages || totalPages === 0}
                 className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
@@ -498,19 +632,36 @@ export default function Inventory() {
       {/* ৫. ADD PRODUCT POPUP */}
       {addProductPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onClick={() => setAddProductPopup(false)}></div>
+          <div
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setAddProductPopup(false)}
+          ></div>
           <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden transform transition-all max-h-[calc(100vh-2rem)] flex flex-col z-10">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Add New Product</h2>
-                <p className="text-xs text-slate-500">Fill in the item specifics to update the stock.</p>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Add New Product
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Fill in the item specifics to update the stock.
+                </p>
               </div>
-              <button onClick={() => setAddProductPopup(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-all cursor-pointer">✕</button>
+              <button
+                onClick={() => setAddProductPopup(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+            <form
+              onSubmit={handleSubmit}
+              className="flex-1 overflow-y-auto p-6 space-y-4"
+            >
               <div className="relative">
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Product Name *</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Product Name *
+                </label>
                 <input
                   type="text"
                   name="name"
@@ -518,8 +669,14 @@ export default function Inventory() {
                   autoComplete="off"
                   value={formData.name}
                   onChange={handleChange}
-                  onFocus={() => formData.name.trim() !== "" && suggestions.length > 0 && setShowSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  onFocus={() =>
+                    formData.name.trim() !== "" &&
+                    suggestions.length > 0 &&
+                    setShowSuggestions(true)
+                  }
+                  onBlur={() =>
+                    setTimeout(() => setShowSuggestions(false), 200)
+                  }
                   placeholder="e.g. Miniket Rice"
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
                 />
@@ -543,7 +700,9 @@ export default function Inventory() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">SKU / Barcode</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    SKU / Barcode
+                  </label>
                   <input
                     type="text"
                     name="sku"
@@ -554,7 +713,9 @@ export default function Inventory() {
                   />
                 </div>
                 <div className="relative">
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Category *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Category *
+                  </label>
                   <input
                     type="text"
                     name="category"
@@ -562,33 +723,45 @@ export default function Inventory() {
                     autoComplete="off"
                     value={formData.category}
                     onChange={handleChange}
-                    onFocus={() => formData.category.trim() !== "" && categorySuggestions.length > 0 && setShowCategorySuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowCategorySuggestions(false), 200)}
+                    onFocus={() =>
+                      formData.category.trim() !== "" &&
+                      categorySuggestions.length > 0 &&
+                      setShowCategorySuggestions(true)
+                    }
+                    onBlur={() =>
+                      setTimeout(() => setShowCategorySuggestions(false), 200)
+                    }
                     placeholder="Type or select category..."
                     className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all"
                   />
-                  {showCategorySuggestions && categorySuggestions.length > 0 && (
-                    <ul className="absolute left-0 right-0 z-50 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg divide-y divide-slate-100">
-                      {categorySuggestions.map((cat) => (
-                        <li
-                          key={cat.id}
-                          onClick={() => {
-                            setFormData((prev) => ({ ...prev, category: cat.name }));
-                            setShowCategorySuggestions(false);
-                          }}
-                          className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
-                        >
-                          {cat.name}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {showCategorySuggestions &&
+                    categorySuggestions.length > 0 && (
+                      <ul className="absolute left-0 right-0 z-50 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg divide-y divide-slate-100">
+                        {categorySuggestions.map((cat) => (
+                          <li
+                            key={cat.id}
+                            onClick={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                category: cat.name,
+                              }));
+                              setShowCategorySuggestions(false);
+                            }}
+                            className="px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                          >
+                            {cat.name}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Purchase Price (৳) *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Purchase Price (৳) *
+                  </label>
                   <input
                     type="number"
                     name="purchasePrice"
@@ -601,7 +774,9 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Selling Price (৳) *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Selling Price (৳) *
+                  </label>
                   <input
                     type="number"
                     name="sellingPrice"
@@ -617,7 +792,9 @@ export default function Inventory() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Stock Quantity *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Stock Quantity *
+                  </label>
                   <input
                     type="number"
                     name="quantity"
@@ -630,7 +807,9 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Unit *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Unit *
+                  </label>
                   <select
                     name="unit"
                     value={formData.unit}
@@ -657,7 +836,9 @@ export default function Inventory() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Description</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Description
+                </label>
                 <textarea
                   name="description"
                   rows="2"
@@ -691,19 +872,36 @@ export default function Inventory() {
       {/* ৬. EDIT PRODUCT POPUP */}
       {editProductPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onClick={() => setEditProductPopup(false)}></div>
+          <div
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setEditProductPopup(false)}
+          ></div>
           <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden transform transition-all max-h-[calc(100vh-2rem)] flex flex-col z-10">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Edit Product</h2>
-                <p className="text-xs text-slate-500">Update product specifications.</p>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Edit Product
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Update product specifications.
+                </p>
               </div>
-              <button onClick={() => setEditProductPopup(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-all cursor-pointer">✕</button>
+              <button
+                onClick={() => setEditProductPopup(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
 
-            <form onSubmit={handleUpdateSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+            <form
+              onSubmit={handleUpdateSubmit}
+              className="flex-1 overflow-y-auto p-6 space-y-4"
+            >
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Product Name *</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Product Name *
+                </label>
                 <input
                   type="text"
                   name="name"
@@ -716,7 +914,9 @@ export default function Inventory() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">SKU / Barcode</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    SKU / Barcode
+                  </label>
                   <input
                     type="text"
                     name="sku"
@@ -726,7 +926,9 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Category *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Category *
+                  </label>
                   <input
                     type="text"
                     name="category"
@@ -740,7 +942,9 @@ export default function Inventory() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Purchase Price (৳) *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Purchase Price (৳) *
+                  </label>
                   <input
                     type="number"
                     name="purchasePrice"
@@ -752,7 +956,9 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Selling Price (৳) *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Selling Price (৳) *
+                  </label>
                   <input
                     type="number"
                     name="sellingPrice"
@@ -767,7 +973,9 @@ export default function Inventory() {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Stock Quantity *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Stock Quantity *
+                  </label>
                   <input
                     type="number"
                     name="quantity"
@@ -779,7 +987,9 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Unit *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Unit *
+                  </label>
                   <select
                     name="unit"
                     value={editFormData.unit}
@@ -801,11 +1011,12 @@ export default function Inventory() {
                     <option value="Feet">Feet</option>
                     <option value="Ml">Milliliter (ml)</option>
                     <option value="Ton">Ton</option>
-
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Status *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Status *
+                  </label>
                   <select
                     name="status"
                     value={editFormData.status}
@@ -819,7 +1030,9 @@ export default function Inventory() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Description</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Description
+                </label>
                 <textarea
                   name="description"
                   rows="2"

@@ -91,7 +91,7 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // টাইপ অনুযায়ী প্রাইস এবং স্টক সেট করা
+    // টাইপ অনুযায়ী প্রাইস এবং স্টক সেট করা (Standard Product এর জন্য)
     let purchasePrice = 0;
     let sellingPrice = 0;
     let quantity = 0;
@@ -117,6 +117,7 @@ export const createProduct = async (req, res) => {
 
     // ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক একসাথে সেভ করা
     const newProduct = await prisma.$transaction(async (tx) => {
+      // যদি প্যাক টাইপ হয়, তবে টোটাল স্টক বা বেস স্টক প্যাকগুলোর গুণফল থেকেও হিসাব করা যেতে পারে, অথবা স্ট্যান্ডার্ড জিরো রাখা যায়।
       const product = await tx.product.create({
         data: {
           name: name.trim(),
@@ -124,23 +125,24 @@ export const createProduct = async (req, res) => {
           barcode: barcode ? barcode.trim() : null,
           inventoryType: type,
           baseUnit: unitVal,
-          quantity,
+          quantity, // স্ট্যান্ডার্ড প্রোডাক্টের স্টক (প্যাকের ক্ষেত্রে এটি ০ বা ক্যালকুলেটেড থাকতে পারে)
           purchasePrice,
           sellingPrice,
           lowStockLimit: lowStockLimit ? parseFloat(lowStockLimit) : 5,
           categoryId: dbCategory.id,
           shopId: finalShopId,
           description: description ? description.trim() : null,
-          status: quantity > 0 ? "ACTIVE" : "INACTIVE"
+          status: quantity > 0 || type === 'pack' ? "ACTIVE" : "INACTIVE"
         }
       });
 
-      // প্যাক ডাটা ইনসার্ট করা
+      // প্যাক ডাটা এবং প্যাক স্টক ইনসার্ট করা
       if (type === 'pack' && parsedPacks.length > 0) {
         const packDataToInsert = parsedPacks.map(pack => ({
           productId: product.id,
           packName: pack.packName ? pack.packName.trim() : 'Default Pack',
           multiplier: parseFloat(pack.multiplier) || 1,
+          stock: parseFloat(pack.stock) || 0, // 👈 প্যাকের নিজস্ব স্টক এখানে যুক্ত করা হয়েছে
           purchasePrice: parseFloat(pack.purchasePrice) || 0,
           sellingPrice: parseFloat(pack.sellingPrice) || 0,
         }));
