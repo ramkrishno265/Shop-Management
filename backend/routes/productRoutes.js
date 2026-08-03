@@ -1,19 +1,20 @@
 import express from "express";
 import {
   getProducts,
+  getProductById, // 👈 নতুন কন্ট্রোলারটি ইমপোর্ট করুন
   createProduct,
   deleteProduct,
   updateProduct
 } from "../controllers/productController.js";
-import { protect } from "../middleware/authMiddleware.js"; // 👈 মিডলওয়্যারটি ইমপোর্ট করো
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// routes mapping (সবগুলো রাউটের মাঝখানে 'protect' বসিয়ে সিকিউর করা হলো)
+// routes mapping
 router.get("/", protect, getProducts);
+router.get("/:id", protect, getProductById); // 👈 এই লাইনটি যোগ করুন (সিঙ্গেল প্রোডাক্ট আনার জন্য)
 router.post("/", protect, createProduct);
 router.delete("/:id", protect, deleteProduct);
 router.put("/:id", protect, updateProduct);
 
-// এই লাইনটি নিশ্চিত করো (export default থাকতে হবে)
 export default router;
