@@ -147,6 +147,7 @@ model Product {
 }
 
 // নতুন যোগ করা মডেল: প্যাক প্রোডাক্টের মাল্টিপল ভ্যারিয়েন্ট বা সাইজ (যেমন: ২৫ কেজি ব্যাগ, ১০ পিসের বক্স ইত্যাদি)
+// প্যাক প্রোডাক্টের মাল্টিপল ভ্যারিয়েন্ট বা সাইজ এবং স্টক সংরক্ষণ করার জন্য
 model ProductPack {
   id            Int      @id @default(autoincrement())
   productId     Int      @map("product_id")
@@ -154,6 +155,7 @@ model ProductPack {
   
   packName      String   @map("pack_name") // যেমন: "25 Kg Bag", "1 Box"
   multiplier    Float    @map("multiplier") // বেস ইউনিটের সাপেক্ষে কত গুণ (যেমন: ২৫ কেজির জন্য ২৫)
+  stock         Float    @default(0) @map("stock") // 👈 নতুন যোগ করা হলো: প্যাক বা বস্তার নিজস্ব স্টক
   purchasePrice Float    @default(0) @map("purchase_price")
   sellingPrice  Float    @default(0) @map("selling_price")
 
