@@ -325,3 +325,30 @@ export const updateProduct = async (req, res) => {
     });
   }
 };
+
+// ৫. Get Product By ID (For Editing)
+export const getProductById = async (req, res) => {
+  try {
+    const productId = parseInt(req.params.id);
+    const { role, shopId } = req.user;
+    const userShopId = shopId ? Number(shopId) : null;
+
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { category: true, packs: true }
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    if (role !== "ADMIN" && product.shopId !== userShopId) {
+      return res.status(403).json({ message: "Unauthorized: Access denied." });
+    }
+
+    res.status(200).json({ product });
+  } catch (error) {
+    console.error("Error fetching product by id:", error);
+    res.status(500).json({ message: "Error fetching product", error: error.message });
+  }
+};
