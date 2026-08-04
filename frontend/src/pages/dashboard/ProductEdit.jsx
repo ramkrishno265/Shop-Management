@@ -52,11 +52,11 @@ const ProductEdit = () => {
             baseUnit: product.baseUnit || 'Kg',
           });
 
-          if (product.inventoryType === 'standard') {
+          if (product.inventoryType === 'standard' || !product.inventoryType) {
             setStandardData({
               purchasePrice: product.purchasePrice ?? '',
               sellingPrice: product.sellingPrice ?? '',
-              stock: product.quantity ?? '',
+              stock: product.quantity ?? product.stock ?? '',
             });
           } else if (product.inventoryType === 'pack' && product.packs) {
             setPacks(product.packs.map(p => ({
@@ -114,7 +114,14 @@ const ProductEdit = () => {
 
     const finalPayload = {
       ...formData,
-      ...(formData.inventoryType === 'standard' ? { standardData } : { packs })
+      ...(formData.inventoryType === 'standard' 
+        ? { 
+            purchasePrice: Number(standardData.purchasePrice),
+            sellingPrice: Number(standardData.sellingPrice),
+            quantity: Number(standardData.stock),
+            stock: Number(standardData.stock)
+          } 
+        : { packs })
     };
 
     setLoading(true);
@@ -128,9 +135,9 @@ const ProductEdit = () => {
         body: JSON.stringify(finalPayload),
       });
 
-      if (!response.ok) throw new Error('পণ্য আপডেট করতে ব্যর্থ হয়েছে!');
+      if (!response.ok) throw new Error('পণ্য আপডেট করতে ব্যর্থ হয়েছে!');
 
-      alert("পণ্য সফলভাবে আপডেট করা হয়েছে! ✅");
+      alert("পণ্য সফলভাবে আপডেট করা হয়েছে! ✅");
       navigate('/inventory');
     } catch (error) {
       console.error("Error updating product:", error);
@@ -152,7 +159,7 @@ const ProductEdit = () => {
     <div className="min-h-screen bg-slate-100/60 p-4 md:p-8 font-sans flex justify-center items-start">
       <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
         
-        {/* Header (Matching Entry Page) */}
+        {/* Header */}
         <div className="bg-gradient-to-r from-violet-600 to-indigo-700 p-6 md:p-8 text-white">
           <h1 className="text-2xl font-bold flex items-center gap-2.5">
             <FiPackage size={26} /> পণ্য এডিট করুন (Edit Product)
@@ -232,7 +239,7 @@ const ProductEdit = () => {
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-800 text-sm">সাধারণ পণ্য (Standard Product)</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">একক হিসেবে বিক্রি হয় এমন পণ্য (যেমন: সাবান, প্রসাধন)</p>
+                  <p className="text-xs text-slate-500 mt-0.5">একক হিসেবে বিক্রি হয় এমন পণ্য (যেমন: সাবান, প্রসাধন)</p>
                 </div>
               </div>
 
@@ -250,7 +257,7 @@ const ProductEdit = () => {
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-800 text-sm">প্যাক বা বস্তাভিত্তিক (Pack / Multi-unit)</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">বস্তা, কার্টুন বা বিভিন্ন মাপে বিক্রি হয় (যেমন: চাল, ডাল, পেপসি)</p>
+                  <p className="text-xs text-slate-500 mt-0.5">বস্তা, কার্টুন বা বিভিন্ন মাপে বিক্রি হয় (যেমন: চাল, ডাল, পেপসি)</p>
                 </div>
               </div>
 
@@ -260,7 +267,7 @@ const ProductEdit = () => {
           {/* Base Unit Selection */}
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">
-              বেস ইউনিট (Base Unit) — সিস্টেমে পরিমাপের সবচেয়ে ছোট একক
+              বেস ইউনিট (Base Unit) — সিস্টেমে পরিমাপের সবচেয়ে ছোট একক
             </label>
             <select 
               name="baseUnit"
@@ -282,7 +289,7 @@ const ProductEdit = () => {
               <h3 className="font-bold text-slate-800 text-sm">মূল্য এবং প্রারম্ভিক স্টক</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">ক্রয়মূল্য (Purchase Price)</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">ক্রয়মূল্য (Purchase Price)</label>
                   <input 
                     type="number" 
                     name="purchasePrice"
@@ -293,7 +300,7 @@ const ProductEdit = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">বিক্রয়মূল্য (Selling Price)</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">বিক্রয়মূল্য (Selling Price)</label>
                   <input 
                     type="number" 
                     name="sellingPrice"
@@ -319,7 +326,7 @@ const ProductEdit = () => {
           ) : (
             <div className="space-y-4 bg-slate-50/70 p-5 rounded-3xl border border-slate-200/80">
               <div className="flex justify-between items-center">
-                <h3 className="font-bold text-slate-800 text-sm">প্যাক বা সাইজ অনুযায়ী স্টক এবং প্রাইসিং</h3>
+                <h3 className="font-bold text-slate-800 text-sm">প্যাক বা সাইজ অনুযায়ী স্টক এবং প্রাইসিং</h3>
                 <button 
                   type="button" 
                   onClick={addPackRow}
@@ -363,17 +370,17 @@ const ProductEdit = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 mb-0.5">ক্রয়মূল্য</label>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-0.5">ক্রয়মূল্য</label>
                       <input 
                         type="number" 
                         value={pack.purchasePrice} 
                         onChange={(e) => handlePackChange(index, 'purchasePrice', e.target.value)} 
-                        placeholder="১200" 
+                        placeholder="১২০০" 
                         className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:ring-1 focus:ring-violet-500 font-medium" 
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 mb-0.5">বিক্রয়মূল্য</label>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-0.5">বিক্রয়মূল্য</label>
                       <input 
                         type="number" 
                         value={pack.sellingPrice} 

@@ -91,19 +91,12 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // টাইপ অনুযায়ী প্রাইস এবং স্টক সেট করা (Standard Product এর জন্য)
     let purchasePrice = 0;
     let sellingPrice = 0;
     let quantity = 0;
 
     const type = inventoryType || 'standard';
     const unitVal = baseUnit || 'Pcs';
-
-    if (type === 'standard' && standardData) {
-      purchasePrice = parseFloat(standardData.purchasePrice) || 0;
-      sellingPrice = parseFloat(standardData.sellingPrice) || 0;
-      quantity = parseFloat(standardData.stock) || 0;
-    }
 
     // ফ্রন্টএন্ড থেকে packs অবজেক্ট বা অ্যারে আকারে আসতে পারে, সেফটি চেক
     let parsedPacks = [];
@@ -115,9 +108,26 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    // স্টক এবং প্রাইস ক্যালকুলেশন লজিক
+    if (type === 'standard' && standardData) {
+      purchasePrice = parseFloat(standardData.purchasePrice) || 0;
+      sellingPrice = parseFloat(standardData.sellingPrice) || 0;
+      quantity = parseFloat(standardData.stock) || 0;
+    } else if (type === 'pack' && parsedPacks.length > 0) {
+      // প্যাকের স্টক এবং মাল্টিপ্লায়ার গুণ করে মোট বেস ইউনিট স্টক হিসাব করা
+      quantity = parsedPacks.reduce((sum, p) => {
+        const packStock = parseFloat(p.stock) || 0;
+        const multiplier = parseFloat(p.multiplier) || 1;
+        return sum + (packStock * multiplier);
+      }, 0);
+
+      // প্রথম প্যাকের দাম ডিফল্ট প্রাইস হিসেবে ধরতে পারেন (অথবা ০ রাখতে পারেন)
+      purchasePrice = parseFloat(parsedPacks[0].purchasePrice) || 0;
+      sellingPrice = parseFloat(parsedPacks[0].sellingPrice) || 0;
+    }
+
     // ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক একসাথে সেভ করা
     const newProduct = await prisma.$transaction(async (tx) => {
-      // যদি প্যাক টাইপ হয়, তবে টোটাল স্টক বা বেস স্টক প্যাকগুলোর গুণফল থেকেও হিসাব করা যেতে পারে, অথবা স্ট্যান্ডার্ড জিরো রাখা যায়।
       const product = await tx.product.create({
         data: {
           name: name.trim(),
@@ -125,7 +135,7 @@ export const createProduct = async (req, res) => {
           barcode: barcode ? barcode.trim() : null,
           inventoryType: type,
           baseUnit: unitVal,
-          quantity, // স্ট্যান্ডার্ড প্রোডাক্টের স্টক (প্যাকের ক্ষেত্রে এটি ০ বা ক্যালকুলেটেড থাকতে পারে)
+          quantity, // 👈 এখন প্যাকগুলোর গুণফল হিসাব করে টোটাল স্টক এখানে সেভ হবে
           purchasePrice,
           sellingPrice,
           lowStockLimit: lowStockLimit ? parseFloat(lowStockLimit) : 5,
@@ -142,7 +152,7 @@ export const createProduct = async (req, res) => {
           productId: product.id,
           packName: pack.packName ? pack.packName.trim() : 'Default Pack',
           multiplier: parseFloat(pack.multiplier) || 1,
-          stock: parseFloat(pack.stock) || 0, // 👈 প্যাকের নিজস্ব স্টক এখানে যুক্ত করা হয়েছে
+          stock: parseFloat(pack.stock) || 0,
           purchasePrice: parseFloat(pack.purchasePrice) || 0,
           sellingPrice: parseFloat(pack.sellingPrice) || 0,
         }));
@@ -267,6 +277,9 @@ export const updateProduct = async (req, res) => {
     }
 
     const updatedProduct = await prisma.$transaction(async (tx) => {
+      let finalQuantity = quantity !== undefined ? parseFloat(quantity) : existingProduct.quantity;
+      const currentInventoryType = inventoryType ?? existingProduct.inventoryType;
+
       if (parsedPacks !== null) {
         await tx.productPack.deleteMany({ where: { productId } });
         
@@ -275,15 +288,28 @@ export const updateProduct = async (req, res) => {
             productId,
             packName: pack.packName ? pack.packName.trim() : 'Default Pack',
             multiplier: parseFloat(pack.multiplier) || 1,
-            stock: parseFloat(pack.stock) || 0, // 👈 প্যাকের স্টক আপডেট নিশ্চিত করা হলো
+            stock: parseFloat(pack.stock) || 0,
             purchasePrice: parseFloat(pack.purchasePrice) || 0,
             sellingPrice: parseFloat(pack.sellingPrice) || 0,
           }));
           await tx.productPack.createMany({ data: packDataToInsert });
+
+          // যদি আপডেট করার সময় প্যাক থাকে, তবে নতুন প্যাকগুলোর স্টক থেকে টোটাল `quantity` রি-ক্যালকুলেট করে নেওয়া ভালো
+          if (currentInventoryType === 'pack') {
+            finalQuantity = parsedPacks.reduce((sum, p) => {
+              const packStock = parseFloat(p.stock) || 0;
+              const multiplier = parseFloat(p.multiplier) || 1;
+              return sum + (packStock * multiplier);
+            }, 0);
+          }
         }
       }
 
-      const finalQuantity = quantity !== undefined ? parseFloat(quantity) : existingProduct.quantity;
+      // যদি স্ট্যান্ডার্ড ডাটা থাকে
+      if (currentInventoryType === 'standard' && standardData) {
+        finalQuantity = standardData.stock !== undefined ? parseFloat(standardData.stock) : finalQuantity;
+      }
+
       const finalPurchasePrice = standardData?.purchasePrice !== undefined 
         ? parseFloat(standardData.purchasePrice) 
         : (purchasePrice !== undefined ? parseFloat(purchasePrice) : existingProduct.purchasePrice);
@@ -297,9 +323,9 @@ export const updateProduct = async (req, res) => {
         data: {
           name: name ? name.trim() : existingProduct.name,
           sku: sku ? sku.trim() : existingProduct.sku,
-          inventoryType: inventoryType ?? existingProduct.inventoryType,
+          inventoryType: currentInventoryType,
           baseUnit: baseUnit ?? existingProduct.baseUnit,
-          quantity: finalQuantity,
+          quantity: finalQuantity, // 👈 সঠিক ক্যালকুলেটেড স্টক আপডেট হবে
           purchasePrice: finalPurchasePrice,
           sellingPrice: finalSellingPrice,
           description: description !== undefined ? description.trim() : existingProduct.description,
