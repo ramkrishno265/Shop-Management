@@ -56,7 +56,6 @@ export default function SalePage() {
     // ৪. ইভেন্ট হ্যান্ডলার ও স্টক লজিক ফাংশনসমূহ
     // -------------------------------------------------------------
     const addToCart = (product) => {
-        // এখানে product.quantity হলো বর্তমান স্টক
         const currentStock = Number(product.quantity) || 0;
 
         if (currentStock <= 0) {
@@ -64,7 +63,8 @@ export default function SalePage() {
             return;
         }
 
-        const existingItem = cart.find(item => item.id === product.id);
+        const productId = product.id || product.productId;
+        const existingItem = cart.find(item => (item.id || item.productId) === productId);
         const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
 
         if (currentQuantityInCart + 1 > currentStock) {
@@ -73,13 +73,14 @@ export default function SalePage() {
         }
 
         if (existingItem) {
-            updateQuantity(product.id, 1);
+            updateQuantity(productId, 1);
         } else {
             setCart([...cart, { 
                 ...product, 
-                price: product.sellingPrice, 
-                quantity: 1, // এটি কার্টের কোয়ান্টিটি
-                stock: currentStock // এটি স্টকের পরিমাণ সংরক্ষণ করার জন্য
+                id: productId,
+                price: product.sellingPrice || product.price, 
+                quantity: 1, 
+                stock: currentStock 
             }]);
         }
         setSearchQuery('');
@@ -89,7 +90,7 @@ export default function SalePage() {
     const updateQuantity = (id, change) => {
         setCart(prevCart =>
             prevCart.map(item => {
-                if (item.id === id) {
+                if ((item.id || item.productId) === id) {
                     const newQty = item.quantity + change;
                     const itemStock = item.stock !== undefined ? item.stock : (Number(item.quantity) || 0);
 
@@ -106,7 +107,7 @@ export default function SalePage() {
     };
 
     const removeFromCart = (id) => {
-        setCart(prevCart => prevCart.filter(item => item.id !== id));
+        setCart(prevCart => prevCart.filter(item => (item.id || item.productId) !== id));
     };
 
     const handleCheckout = async (e) => {
@@ -203,20 +204,37 @@ export default function SalePage() {
                                     setSearchQuery(e.target.value);
                                     setShowResults(e.target.value.length > 0);
                                 }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const foundProduct = products.find(p =>
+                                            p.name.toLowerCase() === searchQuery.toLowerCase() ||
+                                            (p.sku && p.sku.toLowerCase() === searchQuery.toLowerCase())
+                                        );
+                                        if (foundProduct) {
+                                            addToCart(foundProduct);
+                                        } else {
+                                            alert("প্রোডাক্টটি খুঁজে পাওয়া যায়নি!");
+                                        }
+                                    }
+                                }}
                             />
 
                             {/* সার্চ ড্রপডাউন */}
                             {showResults && (
                                 <div className="absolute z-10 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                                     {products
-                                        .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+                                        .filter((p) => 
+                                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                            (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+                                        )
                                         .map((product) => {
                                             const stock = Number(product.quantity) || 0;
                                             const isOutOfStock = stock <= 0;
 
                                             return (
                                                 <div
-                                                    key={product.id}
+                                                    key={product.id || product.productId}
                                                     className={`px-4 py-3 border-b border-slate-50 last:border-0 flex justify-between items-center ${
                                                         isOutOfStock ? 'bg-slate-100 opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
                                                     }`}
@@ -232,14 +250,14 @@ export default function SalePage() {
                                                         <p className="text-sm font-medium text-slate-800">
                                                             {product.name} {isOutOfStock && <span className="text-red-500 text-xs font-bold">(Stock Out)</span>}
                                                         </p>
-                                                        <p className="text-[10px] text-slate-400">SKU: {product.sku} | Stock: {stock}</p>
+                                                        <p className="text-[10px] text-slate-400">SKU: {product.sku || 'N/A'} | Stock: {stock}</p>
                                                     </div>
-                                                    <p className="text-sm font-bold text-slate-600">৳{product.sellingPrice}</p>
+                                                    <p className="text-sm font-bold text-slate-600">৳{product.sellingPrice || product.price}</p>
                                                 </div>
                                             );
                                         })}
 
-                                    {products.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                                    {products.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))).length === 0 && (
                                         <div className="px-4 py-3 text-sm text-slate-400">No product found!</div>
                                     )}
                                 </div>
@@ -251,7 +269,7 @@ export default function SalePage() {
                             onClick={() => {
                                 const foundProduct = products.find(p =>
                                     p.name.toLowerCase() === searchQuery.toLowerCase() ||
-                                    p.sku.toLowerCase() === searchQuery.toLowerCase()
+                                    (p.sku && p.sku.toLowerCase() === searchQuery.toLowerCase())
                                 );
                                 if (foundProduct) {
                                     addToCart(foundProduct);
@@ -288,45 +306,48 @@ export default function SalePage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
-                                        {cart.map((item) => (
-                                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                                                <td className="py-4">
-                                                    <div className="font-semibold text-slate-700">{item.name}</div>
-                                                    <div className="text-[11px] text-slate-400 mt-0.5">SKU: {item.sku} | Stock: {item.stock}</div>
-                                                </td>
-                                                <td className="py-4 text-center text-slate-600">৳{item.price}</td>
-                                                <td className="py-4">
-                                                    <div className="flex items-center justify-center gap-2">
+                                        {cart.map((item) => {
+                                            const itemId = item.id || item.productId;
+                                            return (
+                                                <tr key={itemId} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="py-4">
+                                                        <div className="font-semibold text-slate-700">{item.name}</div>
+                                                        <div className="text-[11px] text-slate-400 mt-0.5">SKU: {item.sku || 'N/A'} | Stock: {item.stock}</div>
+                                                    </td>
+                                                    <td className="py-4 text-center text-slate-600">৳{item.price}</td>
+                                                    <td className="py-4">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => updateQuantity(itemId, -1)}
+                                                                className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
+                                                            >
+                                                                -
+                                                            </button>
+                                                            <span className="w-6 text-center font-bold text-slate-800">{item.quantity}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => updateQuantity(itemId, 1)}
+                                                                className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
+                                                            >
+                                                                +
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-4 text-right font-semibold text-slate-800">৳{item.price * item.quantity}</td>
+                                                    <td className="py-4 text-right">
                                                         <button
                                                             type="button"
-                                                            onClick={() => updateQuantity(item.id, -1)}
-                                                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
+                                                            onClick={() => removeFromCart(itemId)}
+                                                            className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-colors"
+                                                            title="Remove"
                                                         >
-                                                            -
+                                                            🗑️
                                                         </button>
-                                                        <span className="w-6 text-center font-bold text-slate-800">{item.quantity}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => updateQuantity(item.id, 1)}
-                                                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
-                                                        >
-                                                            +
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 text-right font-semibold text-slate-800">৳{item.price * item.quantity}</td>
-                                                <td className="py-4 text-right">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeFromCart(item.id)}
-                                                        className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-colors"
-                                                        title="Remove"
-                                                    >
-                                                        🗑️
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>

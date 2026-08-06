@@ -59,18 +59,9 @@ const InventoryPage = () => {
   };
 
   // --- Total Stock Calculation Helper ---
-  const calculateTotalStock = (product) => {
-    if (product.inventoryType === 'standard' || !product.packs || product.packs.length === 0) {
-      return Number(product.quantity) || 0;
-    } else if (product.inventoryType === 'pack' && product.packs) {
-      return product.packs.reduce((acc, p) => {
-        const pStock = Number(p.stock) || 0;
-        const multiplier = Number(p.multiplier) || 1;
-        return acc + (pStock * multiplier);
-      }, 0);
-    }
-    return Number(product.quantity) || 0;
-  };
+const calculateTotalStock = (product) => {
+  return Number(product.quantity) || 0;
+};
 
   // --- Calculations for Top Cards ---
   const totalProductsCount = products.length;
