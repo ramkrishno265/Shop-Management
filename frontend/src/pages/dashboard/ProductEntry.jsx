@@ -5,7 +5,7 @@ const ProductEntry = () => {
   const [loading, setLoading] = useState(false);
   const [categoryLoading, setCategoryLoading] = useState(false);
 
-  // --- Voice Assistant States ---
+  // --- Voice & AI Assistant States ---
   const [isListening, setIsListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("মাইক্রোফোন চালু করতে 'মুখে বলুন' বাটনে ক্লিক করুন");
 
@@ -132,7 +132,7 @@ const ProductEntry = () => {
     setPacks(packs.filter(pack => pack.id !== id));
   };
 
-  // --- Voice Recognition Logic (Bangla & English Support) ---
+  // --- Voice Recognition Setup ---
   const startVoiceRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
@@ -142,19 +142,19 @@ const ProductEntry = () => {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'bn-BD'; // বাংলা এবং ইংরেজি মিশ্র শব্দ বোঝার জন্য
+    recognition.lang = 'bn-BD'; // বাংলা ও ইংরেজি মিশ্র কথা প্রসেস করার জন্য
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
       setIsListening(true);
-      setVoiceStatus("শুনছি... পণ্যের নাম বলুন (যেমন: 'মিনিকেট চাল' বা 'Lux Soap')");
+      setVoiceStatus("শুনছি... বলুন (যেমন: '২৫ কেজি মিনিকেট চাল ১৮৫০ টাকা দরে ১০ বস্তা add করো')");
     };
 
     recognition.onresult = (event) => {
       const speechText = event.results[0][0].transcript;
-      setVoiceStatus(`শোনা গেছে: "${speechText}"`);
-      parseVoiceCommand(speechText);
+      setVoiceStatus(`শোনা গেছে: "${speechText}" — AI প্রসেস করছে...`);
+      sendTextToAIBackend(speechText);
     };
 
     recognition.onerror = (event) => {
@@ -170,11 +170,65 @@ const ProductEntry = () => {
     recognition.start();
   };
 
-  // Smart Voice Parser 
-  const parseVoiceCommand = (text) => {
-    // ইউজারের বলা কথাটি সরাসরি পণ্যের নাম ফিল্ডে বসিয়ে দেওয়া হচ্ছে
-    setFormData(prev => ({ ...prev, name: text }));
-    setVoiceStatus(`সফলভাবে নাম সেট করা হয়েছে: "${text}"`);
+  // --- Send Spoken Text to Backend for AI Parsing ---
+  const sendTextToAIBackend = async (text) => {
+    try {
+      const response = await fetch(`${API_URL}/ai-parse-product`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ text })
+      });
+
+      const aiData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(aiData.message || 'AI পার্সিংয়ে সমস্যা হয়েছে!');
+      }
+
+      // AI থেকে প্রাপ্ত JSON অনুযায়ী ফর্ম অটো-ফিলাপ করা
+      if (aiData.action === "add_product") {
+        const isPackProduct = aiData.packSize !== null && aiData.packSize !== undefined;
+
+        setFormData(prev => ({
+          ...prev,
+          name: aiData.name || '',
+          inventoryType: isPackProduct ? 'pack' : 'standard',
+          baseUnit: aiData.packUnit ? capitalizeWord(aiData.packUnit) : prev.baseUnit
+        }));
+
+        if (isPackProduct) {
+          // প্যাক প্রোডাক্ট হলে প্যাক স্টেট আপডেট করা
+          setPacks([{
+            id: Date.now(),
+            packName: `${aiData.packSize} ${aiData.packUnit || 'Kg'} ${aiData.unit || 'বস্তা'}`,
+            multiplier: aiData.packSize,
+            stock: aiData.quantity || '',
+            purchasePrice: '',
+            sellingPrice: aiData.price || ''
+          }]);
+        } else {
+          // স্ট্যান্ডার্ড প্রোডাক্ট হলে স্ট্যান্ডার্ড স্টেট আপডেট করা
+          setStandardData({
+            purchasePrice: '',
+            sellingPrice: aiData.price || '',
+            stock: aiData.quantity || ''
+          });
+        }
+
+        setVoiceStatus(`সফল! পণ্য যোগ হয়েছে: "${aiData.name}"`);
+      }
+
+    } catch (error) {
+      console.error("AI Parse Error:", error);
+      setVoiceStatus("AI ডাটা প্রসেস করতে ব্যর্থ হয়েছে।");
+    }
+  };
+
+  const capitalizeWord = (str) => {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
   // --- Backend API Integration (handleSubmit) ---
@@ -249,7 +303,7 @@ const ProductEntry = () => {
     <div className="min-h-screen bg-slate-100/60 p-4 md:p-8 font-sans">
       <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
         
-        {/* Header with Voice Assistant Button */}
+        {/* Header with AI Voice Assistant Button */}
         <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 p-6 md:p-8 text-white">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -274,7 +328,7 @@ const ProductEntry = () => {
                   : 'bg-white text-indigo-700 hover:bg-indigo-50 shadow-black/10'
               }`}
             >
-              <span>🎙️</span> {isListening ? 'শোনা হচ্ছে...' : 'মুখে বলুন (Voice Add)'}
+              <span>🎙️</span> {isListening ? 'শোনা হচ্ছে...' : 'মুখে বলুন (AI Voice Add)'}
             </button>
           </div>
 

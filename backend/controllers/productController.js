@@ -378,3 +378,58 @@ export const getProductById = async (req, res) => {
     res.status(500).json({ message: "Error fetching product", error: error.message });
   }
 };
+
+// ৬. AI Voice / Text Product Parser
+export const parseProductWithAI = async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ success: false, message: "কোনো টেক্সট পাওয়া যায়নি!" });
+    }
+
+    // জেমিনি এআই ইনিশিয়ালাইজেশন (নিশ্চিত করুন আপনার প্রজেক্টে @google/generative-ai ইনস্টল করা আছে)
+    // অথবা আপনি যদি প্রজেক্টের অন্য কোনো জায়গায় জেমিনি সেটআপ করে থাকেন সেটি ব্যবহার করতে পারেন
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const prompt = `
+      You are a Product Entry Assistant for a shop inventory management system. 
+      Understand the given Bangla or English text and extract product information accurately.
+      Return ONLY a valid JSON object matching this exact structure, with no markdown code blocks (like \`\`\`json) and no extra text:
+      {
+        "action": "add_product",
+        "name": "string or null",
+        "price": number or null,
+        "quantity": number or null,
+        "unit": "string or null (e.g., bag, bottle, pcs)",
+        "packSize": number or null,
+        "packUnit": "string or null (e.g., kg, liter)"
+      }
+
+      Input text: "${text}"
+    `;
+
+    const result = await model.generateContent(prompt);
+    const responseText = await result.response.text();
+
+    // মার্কডাউন ব্যাকটিক বা এক্সট্রা টেক্সট ক্লিন করে শুধু JSON বের করা
+    const cleanedJsonString = responseText
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const parsedData = JSON.parse(cleanedJsonString);
+
+    return res.status(200).json(parsedData);
+
+  } catch (error) {
+    console.error("AI Parsing Error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "AI প্রসেসিংয়ে সমস্যা হয়েছে", 
+      error: error.message 
+    });
+  }
+};
