@@ -22,9 +22,9 @@ export const getProducts = async (req, res) => {
 
     const products = await prisma.product.findMany({
       where: { shopId: shopId },
-      include: { 
+      include: {
         category: true,
-        packs: true 
+        packs: true
       },
       orderBy: { createdAt: "desc" },
     });
@@ -39,16 +39,16 @@ export const getProducts = async (req, res) => {
 // ২. Create Product (Standard & Pack Product Support)
 export const createProduct = async (req, res) => {
   try {
-    const { 
-      name, 
-      sku, 
+    const {
+      name,
+      sku,
       barcode,
-      category, 
-      inventoryType, 
-      baseUnit, 
-      standardData, 
-      packs, 
-      description, 
+      category,
+      inventoryType,
+      baseUnit,
+      standardData,
+      packs,
+      description,
       requestShopId,
       lowStockLimit
     } = req.body;
@@ -78,7 +78,7 @@ export const createProduct = async (req, res) => {
     let dbCategory = await prisma.category.findFirst({
       where: {
         name: { equals: categoryName, mode: 'insensitive' },
-        shopId: finalShopId 
+        shopId: finalShopId
       }
     });
 
@@ -86,7 +86,7 @@ export const createProduct = async (req, res) => {
       dbCategory = await prisma.category.create({
         data: {
           name: categoryName,
-          shopId: finalShopId 
+          shopId: finalShopId
         }
       });
     }
@@ -282,7 +282,7 @@ export const updateProduct = async (req, res) => {
 
       if (parsedPacks !== null) {
         await tx.productPack.deleteMany({ where: { productId } });
-        
+
         if (parsedPacks.length > 0) {
           const packDataToInsert = parsedPacks.map(pack => ({
             productId,
@@ -310,12 +310,12 @@ export const updateProduct = async (req, res) => {
         finalQuantity = standardData.stock !== undefined ? parseFloat(standardData.stock) : finalQuantity;
       }
 
-      const finalPurchasePrice = standardData?.purchasePrice !== undefined 
-        ? parseFloat(standardData.purchasePrice) 
+      const finalPurchasePrice = standardData?.purchasePrice !== undefined
+        ? parseFloat(standardData.purchasePrice)
         : (purchasePrice !== undefined ? parseFloat(purchasePrice) : existingProduct.purchasePrice);
-        
-      const finalSellingPrice = standardData?.sellingPrice !== undefined 
-        ? parseFloat(standardData.sellingPrice) 
+
+      const finalSellingPrice = standardData?.sellingPrice !== undefined
+        ? parseFloat(standardData.sellingPrice)
         : (sellingPrice !== undefined ? parseFloat(sellingPrice) : existingProduct.sellingPrice);
 
       return await tx.product.update({
@@ -390,7 +390,8 @@ export const parseProductWithAI = async (req, res) => {
 
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // আপনার productController.js ফাইলের ভেতরে এই অংশটি এভাবে আপডেট করুন:
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `
       You are a Product Entry Assistant for a shop inventory management system. 
@@ -438,10 +439,10 @@ export const parseProductWithAI = async (req, res) => {
 
   } catch (error) {
     console.error("AI Parsing Error:", error);
-    return res.status(500).json({ 
-      success: false, 
-      message: "AI প্রসেসিংয়ে সমস্যা হয়েছে", 
-      error: error.message 
+    return res.status(500).json({
+      success: false,
+      message: "AI প্রসেসিংয়ে সমস্যা হয়েছে",
+      error: error.message
     });
   }
 };

@@ -85,20 +85,13 @@ const InventoryPage = () => {
           </div>
 
           {/* Add Product Button */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/product_entry')}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
-            >
-              <FiPlus size={18} /> 🎤 Add by Voice
-            </button>
-            <button
-              onClick={() => navigate('/product_entry')}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
-            >
-              <FiPlus size={18} /> Add Product
-            </button>   
-          </div>
+          <button
+            onClick={() => navigate('/product_entry')}
+            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
+          >
+            <FiPlus size={18} /> Add Product
+          </button>
+
 
         </div>
 
