@@ -379,17 +379,15 @@ export const getProductById = async (req, res) => {
   }
 };
 
-// ৬. AI Voice / Text Product Parser
+// ৬. AI Voice / Text Product Parser (Updated)
 export const parseProductWithAI = async (req, res) => {
   try {
     const { text } = req.body;
 
     if (!text) {
-      return res.status(400).json({ success: false, message: "কোনো টেক্সট পাওয়া যায়নি!" });
+      return res.status(400).json({ success: false, message: "কোনো টেক্সট পাওয়া যায়নি!" });
     }
 
-    // জেমিনি এআই ইনিশিয়ালাইজেশন (নিশ্চিত করুন আপনার প্রজেক্টে @google/generative-ai ইনস্টল করা আছে)
-    // অথবা আপনি যদি প্রজেক্টের অন্য কোনো জায়গায় জেমিনি সেটআপ করে থাকেন সেটি ব্যবহার করতে পারেন
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -397,15 +395,29 @@ export const parseProductWithAI = async (req, res) => {
     const prompt = `
       You are a Product Entry Assistant for a shop inventory management system. 
       Understand the given Bangla or English text and extract product information accurately.
+      If the user specifies a pack, bag, or multi-unit item (e.g., "২৫ কেজি বস্তা", "10 kg bag", "৫ লিটার জার"), categorize it as inventoryType "pack". Otherwise, use "standard".
+      
       Return ONLY a valid JSON object matching this exact structure, with no markdown code blocks (like \`\`\`json) and no extra text:
       {
         "action": "add_product",
-        "name": "string or null",
-        "price": number or null,
-        "quantity": number or null,
-        "unit": "string or null (e.g., bag, bottle, pcs)",
-        "packSize": number or null,
-        "packUnit": "string or null (e.g., kg, liter)"
+        "name": "string (product name, e.g., মিনিকেট চাল)",
+        "category": "string or null (e.g., চাল, তেল, মসলা - if not mentioned, guess a relevant category or null)",
+        "inventoryType": "standard" or "pack",
+        "baseUnit": "Kg" | "Gram" | "Mon" | "Pcs" | "Pair" | "Dozen" | "Liter" | "Ml" | "Packet" | "Box" | "Bottle",
+        "standardData": {
+          "purchasePrice": number or 0,
+          "sellingPrice": number or 0,
+          "stock": number or 0
+        },
+        "packs": [
+          {
+            "packName": "string (e.g., ২৫ কেজি বস্তা)",
+            "multiplier": number (e.g., 25),
+            "stock": number (e.g., quantity of packs, like 10),
+            "purchasePrice": number or 0,
+            "sellingPrice": number or 0
+          }
+        ]
       }
 
       Input text: "${text}"
@@ -415,7 +427,6 @@ export const parseProductWithAI = async (req, res) => {
     const responseText = await result.response.text();
     console.log("Raw AI Response:", responseText);
 
-    // মার্কডাউন ব্যাকটিক বা এক্সট্রা টেক্সট ক্লিন করে শুধু JSON বের করা
     const cleanedJsonString = responseText
       .replace(/```json/g, "")
       .replace(/```/g, "")
@@ -429,7 +440,7 @@ export const parseProductWithAI = async (req, res) => {
     console.error("AI Parsing Error:", error);
     return res.status(500).json({ 
       success: false, 
-      message: "AI প্রসেসিংয়ে সমস্যা হয়েছে", 
+      message: "AI প্রসেসিংয়ে সমস্যা হয়েছে", 
       error: error.message 
     });
   }
