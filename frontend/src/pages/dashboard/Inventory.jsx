@@ -11,7 +11,7 @@ const InventoryPage = () => {
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
-  
+
   // পপআপের জন্য স্টেট
   const [selectedProductPacks, setSelectedProductPacks] = useState(null);
 
@@ -59,9 +59,9 @@ const InventoryPage = () => {
   };
 
   // --- Total Stock Calculation Helper ---
-const calculateTotalStock = (product) => {
-  return Number(product.quantity) || 0;
-};
+  const calculateTotalStock = (product) => {
+    return Number(product.quantity) || 0;
+  };
 
   // --- Calculations for Top Cards ---
   const totalProductsCount = products.length;
@@ -85,12 +85,21 @@ const calculateTotalStock = (product) => {
           </div>
 
           {/* Add Product Button */}
-          <button
-            onClick={() => navigate('/product_entry')}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
-          >
-            <FiPlus size={18} /> Add Product
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/product_entry')}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <FiPlus size={18} /> 🎤 Add by Voice
+            </button>
+            <button
+              onClick={() => navigate('/product_entry')}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <FiPlus size={18} /> Add Product
+            </button>   
+          </div>
+
         </div>
 
         {/* Summary Metric Cards */}
@@ -250,7 +259,7 @@ const calculateTotalStock = (product) => {
                             <span className={`px-2.5 py-1 text-xs font-bold rounded-lg ${product.status === 'ACTIVE'
                               ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/50'
                               : 'bg-rose-50 text-rose-600 border border-rose-200/50'
-                            }`}>
+                              }`}>
                               {product.status || 'ACTIVE'}
                             </span>
                           </td>
@@ -303,14 +312,14 @@ const calculateTotalStock = (product) => {
       {selectedProductPacks && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
-            
+
             {/* Modal Header */}
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
               <div>
                 <h3 className="font-bold text-slate-800 text-lg">{selectedProductPacks.name}</h3>
                 <p className="text-xs text-slate-500">প্যাক অনুযায়ী স্টক বিবরণী</p>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedProductPacks(null)}
                 className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold transition cursor-pointer"
               >

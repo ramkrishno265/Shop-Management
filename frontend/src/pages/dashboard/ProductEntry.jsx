@@ -5,6 +5,10 @@ const ProductEntry = () => {
   const [loading, setLoading] = useState(false);
   const [categoryLoading, setCategoryLoading] = useState(false);
 
+  // --- Voice Assistant States ---
+  const [isListening, setIsListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("মাইক্রোফোন চালু করতে 'মুখে বলুন' বাটনে ক্লিক করুন");
+
   // Main Product State
   const [formData, setFormData] = useState({
     name: '',
@@ -60,7 +64,7 @@ const ProductEntry = () => {
     stock: '',
   });
 
-  // For Pack Product Multipacks List (Added stock field here)
+  // For Pack Product Multipacks List
   const [packs, setPacks] = useState([
     { id: 1, packName: '', multiplier: '', stock: '', purchasePrice: '', sellingPrice: '' }
   ]);
@@ -128,6 +132,51 @@ const ProductEntry = () => {
     setPacks(packs.filter(pack => pack.id !== id));
   };
 
+  // --- Voice Recognition Logic (Bangla & English Support) ---
+  const startVoiceRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      alert("আপনার ব্রাউজার ভয়েস রিকগনিশন সাপোর্ট করে না। দয়া করে Google Chrome বা Microsoft Edge ব্যবহার করুন।");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'bn-BD'; // বাংলা এবং ইংরেজি মিশ্র শব্দ বোঝার জন্য
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setVoiceStatus("শুনছি... পণ্যের নাম বলুন (যেমন: 'মিনিকেট চাল' বা 'Lux Soap')");
+    };
+
+    recognition.onresult = (event) => {
+      const speechText = event.results[0][0].transcript;
+      setVoiceStatus(`শোনা গেছে: "${speechText}"`);
+      parseVoiceCommand(speechText);
+    };
+
+    recognition.onerror = (event) => {
+      setVoiceStatus("ত্রুটি হয়েছে: " + event.error);
+      setIsListening(false);
+    };
+
+    recognition.onspeechend = () => {
+      recognition.stop();
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
+  // Smart Voice Parser 
+  const parseVoiceCommand = (text) => {
+    // ইউজারের বলা কথাটি সরাসরি পণ্যের নাম ফিল্ডে বসিয়ে দেওয়া হচ্ছে
+    setFormData(prev => ({ ...prev, name: text }));
+    setVoiceStatus(`সফলভাবে নাম সেট করা হয়েছে: "${text}"`);
+  };
+
   // --- Backend API Integration (handleSubmit) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -178,6 +227,7 @@ const ProductEntry = () => {
       setCategoryInput('');
       setStandardData({ purchasePrice: '', sellingPrice: '', stock: '' });
       setPacks([{ id: 1, packName: '', multiplier: '', stock: '', purchasePrice: '', sellingPrice: '' }]);
+      setVoiceStatus("মাইক্রোফোন চালু করতে 'মুখে বলুন' বাটনে ক্লিক করুন");
 
       if (formData.category && !existingCategories.includes(formData.category)) {
         setExistingCategories(prev => [...prev, formData.category]);
@@ -199,9 +249,9 @@ const ProductEntry = () => {
     <div className="min-h-screen bg-slate-100/60 p-4 md:p-8 font-sans">
       <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
         
-        {/* Header */}
+        {/* Header with Voice Assistant Button */}
         <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 p-6 md:p-8 text-white">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2.5">
                 <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md">
@@ -213,6 +263,24 @@ const ProductEntry = () => {
                 দোকানের স্টক এবং মাল্টি-প্যাক প্রাইসিং সহজে পরিচালনা করুন।
               </p>
             </div>
+
+            {/* Voice Add Button */}
+            <button
+              type="button"
+              onClick={startVoiceRecognition}
+              className={`px-4 py-3 rounded-2xl font-bold text-sm flex items-center gap-2.5 transition shadow-lg ${
+                isListening 
+                  ? 'bg-rose-500 text-white animate-pulse shadow-rose-500/50' 
+                  : 'bg-white text-indigo-700 hover:bg-indigo-50 shadow-black/10'
+              }`}
+            >
+              <span>🎙️</span> {isListening ? 'শোনা হচ্ছে...' : 'মুখে বলুন (Voice Add)'}
+            </button>
+          </div>
+
+          {/* Live Voice Status Bar */}
+          <div className="mt-4 px-4 py-2 bg-white/10 rounded-xl text-indigo-100 text-xs backdrop-blur-sm flex items-center gap-2">
+            <span>💡</span> <b>ভয়েস স্ট্যাটাস:</b> {voiceStatus}
           </div>
         </div>
 
@@ -432,7 +500,7 @@ const ProductEntry = () => {
                     <tr className="bg-slate-50 text-slate-600 text-xs font-semibold border-b border-slate-200">
                       <th className="p-3.5">প্যাকের নাম (যেমন: ২৫ কেজি বস্তা)</th>
                       <th className="p-3.5">কত গুণ ({formData.baseUnit})?</th>
-                      <th className="p-3.5">স্টক (কয় বস্তা/কার্টুন?)</th>
+                      <th className="p-3.5">স্টক (কয় বস্তা/কার্টুন?)</th>
                       <th className="p-3.5">ক্রয়মূল্য (৳)</th>
                       <th className="p-3.5">বিক্রয়মূল্য (৳)</th>
                       <th className="p-3.5 text-center">মুছে ফেলুন</th>
