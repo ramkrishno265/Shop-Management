@@ -206,8 +206,7 @@ const ProductEntry = () => {
       const speechText = event.results[0][0].transcript;
       setVoiceStatus(`শোনা গেছে: "${speechText}" — AI প্রসেস করছে...`);
       
-      // আপনার এআই ব্যাকএন্ডে টেক্সট পাঠানোর ফাংশন এখানে কল করবেন
-      // sendTextToAIBackend(speechText); 
+       sendTextToAIBackend(speechText); 
     };
 
     recognition.onerror = (event) => {
