@@ -185,36 +185,38 @@ const ProductEntry = () => {
 
     if (!SpeechRecognition) {
       alert(
-        "আপনার ব্রাউজার ভয়েস রিকগনিশন সাপোর্ট করে না। দয়া করে Google Chrome বা Microsoft Edge ব্যবহার করুন।",
+        "আপনার ব্রাউজার ভয়েস রিকগনিশন সাপোর্ট করে না। দয়া করে Google Chrome বা Microsoft Edge ব্যবহার করুন।"
       );
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = "bn-BD"; // বাংলা ও ইংরেজি মিশ্র কথা প্রসেস করার জন্য
+    recognition.lang = "bn-BD"; // বাংলা ভাষা সেট করার জন্য
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
       setIsListening(true);
       setVoiceStatus(
-        "শুনছি... বলুন (যেমন: '২৫ কেজি মিনিকেট চাল ১৮৫০ টাকা দরে ১০ বস্তা add করো')",
+        "শুনছি... বলুন (যেমন: '২৫ কেজি মিনিকেট চাল ১৮৫০ টাকা দরে ১০ বস্তা add করো')"
       );
     };
 
     recognition.onresult = (event) => {
       const speechText = event.results[0][0].transcript;
       setVoiceStatus(`শোনা গেছে: "${speechText}" — AI প্রসেস করছে...`);
-      sendTextToAIBackend(speechText);
+      
+      // আপনার এআই ব্যাকএন্ডে টেক্সট পাঠানোর ফাংশন এখানে কল করবেন
+      // sendTextToAIBackend(speechText); 
     };
 
     recognition.onerror = (event) => {
-      setVoiceStatus("ত্রুটি হয়েছে: " + event.error);
+      setVoiceStatus("ত্রুটি হয়েছে: " + event.error);
       setIsListening(false);
     };
 
+    // কথা বলা থামানোর সময় হঠাৎ যেন বন্ধ না হয়ে যায়, তাই recognition.stop() সরিয়ে দেওয়া হয়েছে
     recognition.onspeechend = () => {
-      recognition.stop();
       setIsListening(false);
     };
 
