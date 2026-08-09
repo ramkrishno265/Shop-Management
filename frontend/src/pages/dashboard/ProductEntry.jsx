@@ -36,22 +36,25 @@ const ProductEntry = () => {
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const token = localStorage.getItem("token");
-  const shopId = localStorage.getItem("shopId") || "";
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const shopId = user.shopId;
 
   // --- Fetch Existing Categories from Database on Mount ---
   useEffect(() => {
     const fetchCategories = async () => {
-      // টোকেন বা শপ আইডি না থাকলে রিকোয়েস্ট যাবে না, পেজ ক্র্যাশ করবে না
       if (!token || !shopId) return;
 
       setCategoryLoading(true);
       try {
-        const response = await fetch(`${API_URL}/categories?shopId=${shopId}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
+        const response = await fetch(
+          `${API_URL}/categories?shopId=${shopId}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           },
-        });
+        );
 
         const data = await response.json();
         if (response.ok) {
@@ -438,8 +441,11 @@ const ProductEntry = () => {
                   type="text"
                   required
                   value={categoryInput}
-                  onChange={handleCategoryInput}
-                  onFocus={() => setShowCategoryDropdown(true)}
+                  onChange={(e) => {
+                    handleCategoryInput(e);
+                    setShowCategoryDropdown(true); // কিছু টাইপ করলেই ড্রপডাউন ওপেন হবে
+                  }}
+                  onClick={() => setShowCategoryDropdown(true)} // ইনপুটে ক্লিক করলেই ড্রপডাউন ওপেন হবে
                   placeholder={
                     categoryLoading
                       ? "ক্যাটাগরি লোড হচ্ছে..."
@@ -460,7 +466,7 @@ const ProductEntry = () => {
                       <div
                         key={index}
                         onMouseDown={(e) => {
-                          e.preventDefault(); // ফোকাস লস হওয়া আটকাবে
+                          e.preventDefault(); // ফোকাস লস আটকাবে
                           selectCategory(cat);
                         }}
                         className="px-4 py-3 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer transition font-medium"
