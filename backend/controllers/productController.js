@@ -391,7 +391,7 @@ export const parseProductWithAI = async (req, res) => {
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     // আপনার productController.js ফাইলের ভেতরে এই অংশটি এভাবে আপডেট করুন:
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
     const prompt = `
       You are a Product Entry Assistant for a shop inventory management system. 
