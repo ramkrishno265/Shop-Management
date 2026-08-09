@@ -187,7 +187,7 @@ const ProductEntry = () => {
 
       // যদি রেসপন্স ঠিক না থাকে বা AI প্রসেস করতে ব্যর্থ হয়
       if (!response.ok || !aiData || aiData.action !== "add_product") {
-        setVoiceStatus("❌ AI ডাটা প্রসেস করতে ব্যর্থ হয়েছে। দя করে পরিষ্কারভাবে আবার বলুন।");
+        setVoiceStatus("❌ AI ডাটা প্রসেস করতে ব্যর্থ হয়েছে। দয়া করে পরিষ্কারভাবে আবার বলুন।");
         return;
       }
 
