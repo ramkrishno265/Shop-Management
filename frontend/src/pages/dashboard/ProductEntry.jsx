@@ -171,6 +171,7 @@ const ProductEntry = () => {
   };
 
   // --- Send Spoken Text to Backend for AI Parsing ---
+// --- Send Spoken Text to Backend for AI Parsing ---
   const sendTextToAIBackend = async (text) => {
     try {
       const response = await fetch(`${API_URL}/ai-parse-product`, {
@@ -184,46 +185,45 @@ const ProductEntry = () => {
 
       const aiData = await response.json();
 
-      if (!response.ok) {
-        throw new Error(aiData.message || 'AI পার্সিংয়ে সমস্যা হয়েছে!');
+      // যদি রেসপন্স ঠিক না থাকে বা AI প্রসেস করতে ব্যর্থ হয়
+      if (!response.ok || !aiData || aiData.action !== "add_product") {
+        setVoiceStatus("❌ AI ডাটা প্রসেস করতে ব্যর্থ হয়েছে। দя করে পরিষ্কারভাবে আবার বলুন।");
+        return;
       }
 
       // AI থেকে প্রাপ্ত JSON অনুযায়ী ফর্ম অটো-ফিলাপ করা
-      if (aiData.action === "add_product") {
-        const isPackProduct = aiData.packSize !== null && aiData.packSize !== undefined;
+      const isPackProduct = aiData.packSize !== null && aiData.packSize !== undefined;
 
-        setFormData(prev => ({
-          ...prev,
-          name: aiData.name || '',
-          inventoryType: isPackProduct ? 'pack' : 'standard',
-          baseUnit: aiData.packUnit ? capitalizeWord(aiData.packUnit) : prev.baseUnit
-        }));
+      setFormData(prev => ({
+        ...prev,
+        name: aiData.name || '',
+        inventoryType: isPackProduct ? 'pack' : 'standard',
+        baseUnit: aiData.packUnit ? capitalizeWord(aiData.packUnit) : prev.baseUnit
+      }));
 
-        if (isPackProduct) {
-          // প্যাক প্রোডাক্ট হলে প্যাক স্টেট আপডেট করা
-          setPacks([{
-            id: Date.now(),
-            packName: `${aiData.packSize} ${aiData.packUnit || 'Kg'} ${aiData.unit || 'বস্তা'}`,
-            multiplier: aiData.packSize,
-            stock: aiData.quantity || '',
-            purchasePrice: '',
-            sellingPrice: aiData.price || ''
-          }]);
-        } else {
-          // স্ট্যান্ডার্ড প্রোডাক্ট হলে স্ট্যান্ডার্ড স্টেট আপডেট করা
-          setStandardData({
-            purchasePrice: '',
-            sellingPrice: aiData.price || '',
-            stock: aiData.quantity || ''
-          });
-        }
-
-        setVoiceStatus(`সফল! পণ্য যোগ হয়েছে: "${aiData.name}"`);
+      if (isPackProduct) {
+        setPacks([{
+          id: Date.now(),
+          packName: `${aiData.packSize} ${aiData.packUnit || 'Kg'} ${aiData.unit || 'বস্তা'}`,
+          multiplier: aiData.packSize,
+          stock: aiData.quantity || '',
+          purchasePrice: '',
+          sellingPrice: aiData.price || ''
+        }]);
+      } else {
+        setStandardData({
+          purchasePrice: '',
+          sellingPrice: aiData.price || '',
+          stock: aiData.quantity || ''
+        });
       }
+
+      setVoiceStatus(`✅ সফল! পণ্য যোগ হয়েছে: "${aiData.name}"`);
 
     } catch (error) {
       console.error("AI Parse Error:", error);
-      setVoiceStatus("AI ডাটা প্রসেস করতে ব্যর্থ হয়েছে।");
+      // এখানে সরাসরি জানিয়ে দেওয়া হলো যে AI ডাটা প্রসেস করতে ব্যর্থ হয়েছে
+      setVoiceStatus("⚠️ AI ডাটা প্রসেস করতে ব্যর্থ হয়েছে। সার্ভার কানেকশন চেক করুন।");
     }
   };
 
