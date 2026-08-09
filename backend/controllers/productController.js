@@ -413,6 +413,7 @@ export const parseProductWithAI = async (req, res) => {
 
     const result = await model.generateContent(prompt);
     const responseText = await result.response.text();
+    console.log("Raw AI Response:", responseText);
 
     // মার্কডাউন ব্যাকটিক বা এক্সট্রা টেক্সট ক্লিন করে শুধু JSON বের করা
     const cleanedJsonString = responseText
