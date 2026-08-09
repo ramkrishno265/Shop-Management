@@ -9,7 +9,7 @@ export const getCategories = async (req, res) => {
       return res.status(400).json({ message: "Shop ID is required" });
     }
 
-    const categories = await prisma.category.findMany({
+    const categories = await prisma.categories.findMany({
       where: { 
         shopId: Number(shopId) // Jodi shopId Int hoy (String hole Number() bad dite hobe)
       }

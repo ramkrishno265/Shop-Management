@@ -36,16 +36,16 @@ const ProductEntry = () => {
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const token = localStorage.getItem("token");
+  const shopId = localStorage.getItem("shopId") || "";
 
   // --- Fetch Existing Categories from Database on Mount ---
   useEffect(() => {
     const fetchCategories = async () => {
-      // ekhane apnar kase jodi 'shopId' variable thake, seta check korben
+      // টোকেন বা শপ আইডি না থাকলে রিকোয়েস্ট যাবে না, পেজ ক্র্যাশ করবে না
       if (!token || !shopId) return;
 
       setCategoryLoading(true);
       try {
-        // API URL er sathe query parameter hisebe shopId add kora holo
         const response = await fetch(`${API_URL}/categories?shopId=${shopId}`, {
           method: "GET",
           headers: {
@@ -459,7 +459,10 @@ const ProductEntry = () => {
                     filteredCategories.map((cat, index) => (
                       <div
                         key={index}
-                        onClick={() => selectCategory(cat)}
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // ফোকাস লস হওয়া আটকাবে
+                          selectCategory(cat);
+                        }}
                         className="px-4 py-3 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer transition font-medium"
                       >
                         {cat}
