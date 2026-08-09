@@ -9,9 +9,9 @@ export const getCategories = async (req, res) => {
       return res.status(400).json({ message: "Shop ID is required" });
     }
 
-    const categories = await prisma.categories.findMany({
+    const categories = await prisma.category.findMany({
       where: { 
-        shopId: Number(shopId) // Jodi shopId Int hoy (String hole Number() bad dite hobe)
+        shopId: Number(shopId) // shopId যদি ডেটাবেজে Int টাইপের হয়
       }
     });
 
