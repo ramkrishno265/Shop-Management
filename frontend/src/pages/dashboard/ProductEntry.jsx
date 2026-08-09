@@ -174,7 +174,7 @@ const ProductEntry = () => {
 // --- Send Spoken Text to Backend for AI Parsing ---
   const sendTextToAIBackend = async (text) => {
     try {
-      const response = await fetch(`${API_URL}/ai-parse-product`, {
+      const response = await fetch(`${API_URL}/products/ai-parse-product`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
