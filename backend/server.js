@@ -8,7 +8,7 @@ import salesRouter from './routes/salesRoutes.js';
 import purchaseRoutes from './routes/purchaseRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import profitRoutes from "./routes/profitRoutes.js";
-import AddCustomer from '../frontend/src/pages/dashboard/AddCustomer.jsx';
+import AddCustomer from './routes/customer.routes.js';
 
 dotenv.config();
 
