@@ -8,6 +8,7 @@ import salesRouter from './routes/salesRoutes.js';
 import purchaseRoutes from './routes/purchaseRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import profitRoutes from "./routes/profitRoutes.js";
+import AddCustomer from '../frontend/src/pages/dashboard/AddCustomer.jsx';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use('/api/sales', salesRouter);
 app.use('/api', purchaseRoutes);
 app.use('/api', expenseRoutes);
 app.use("/api/profit", profitRoutes);
+app.use('/api/add_customer', AddCustomer);
 
 
 // Test Base Route

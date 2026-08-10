@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
 const API_URL = `${import.meta.env.VITE_API_URL}/products`;
 
 export default function SalePage() {
+
+    const navigate = useNavigate();
     // -------------------------------------------------------------
     // ১. সমস্ত স্টেটস (States) একসাথে সবার উপরে
     // -------------------------------------------------------------
@@ -75,12 +78,12 @@ export default function SalePage() {
         if (existingItem) {
             updateQuantity(productId, 1);
         } else {
-            setCart([...cart, { 
-                ...product, 
+            setCart([...cart, {
+                ...product,
                 id: productId,
-                price: product.sellingPrice || product.price, 
-                quantity: 1, 
-                stock: currentStock 
+                price: product.sellingPrice || product.price,
+                quantity: 1,
+                stock: currentStock
             }]);
         }
         setSearchQuery('');
@@ -224,8 +227,8 @@ export default function SalePage() {
                             {showResults && (
                                 <div className="absolute z-10 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                                     {products
-                                        .filter((p) => 
-                                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                        .filter((p) =>
+                                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                             (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
                                         )
                                         .map((product) => {
@@ -235,9 +238,8 @@ export default function SalePage() {
                                             return (
                                                 <div
                                                     key={product.id || product.productId}
-                                                    className={`px-4 py-3 border-b border-slate-50 last:border-0 flex justify-between items-center ${
-                                                        isOutOfStock ? 'bg-slate-100 opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
-                                                    }`}
+                                                    className={`px-4 py-3 border-b border-slate-50 last:border-0 flex justify-between items-center ${isOutOfStock ? 'bg-slate-100 opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer'
+                                                        }`}
                                                     onClick={() => {
                                                         if (isOutOfStock) {
                                                             alert("❌ এই প্রোডাক্টটির স্টক শেষ!");
@@ -375,7 +377,7 @@ export default function SalePage() {
                                 <button
                                     type="button"
                                     className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-sm font-bold rounded-xl transition-colors"
-                                    onClick={() => alert("নতুন কাস্টমার ক্রিয়েট মোডাল")}
+                                    onClick={() => navigate('/add_customer')}
                                 >
                                     ➕
                                 </button>
@@ -421,7 +423,7 @@ export default function SalePage() {
                                         className={`py-2 text-xs font-bold rounded-xl border transition-all ${paymentMethod === method
                                             ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                                             : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                                        }`}
+                                            }`}
                                     >
                                         {method === 'CASH' ? '💵 Cash' : method === 'BKASH' ? '📱 bKash' : '💳 Card'}
                                     </button>

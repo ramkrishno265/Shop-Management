@@ -16,6 +16,7 @@ import PurchasePage from "./pages/dashboard/purches.jsx";
 import ProfitMargin from "./pages/dashboard/profitMargin.jsx";
 import ProductEntry from "./pages/dashboard/ProductEntry.jsx";
 import ProductEdit from "./pages/dashboard/ProductEdit.jsx";
+import AddCustomer from "./pages/dashboard/AddCustomer.jsx";
 
 // Protected Route Guard Component
 const ProtectedRoute = ({ children }) => {
@@ -123,6 +124,17 @@ function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <ProductEdit />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/add_customer"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <AddCustomer />
               </DashboardLayout>
             </ProtectedRoute>
           }
