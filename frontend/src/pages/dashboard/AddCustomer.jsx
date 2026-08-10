@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { UserPlus, User, Phone, Mail, MapPin, RotateCcw, Check } from 'lucide-react';
-import { useNavigate } from 'react-router-dom'; // ১. useNavigate ইম্পোর্ট করুন
+import { useNavigate } from 'react-router-dom';
 
 export default function AddCustomer() {
-  const navigate = useNavigate(); // ২. হুকটি ডিক্লেয়ার করুন
+  const navigate = useNavigate();
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
   const [formData, setFormData] = useState({
     name: '',
@@ -12,19 +13,60 @@ export default function AddCustomer() {
     address: ''
   });
 
+  const [loading, setLoading] = useState(false);
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // এখানে আপনার কাস্টমার সেভ করার লজিক বা API কল হবে
-    console.log('Customer Data Saved:', formData);
-    
-    // সফলভাবে সেভ হওয়ার পর অ্যালার্ট দিয়ে /salePage এ নিয়ে যাবে
-    alert('কাস্টমার সফলভাবে সেভ হয়েছে!');
-    navigate('/salePage'); 
+    setLoading(true);
+
+    try {
+      // ১. লোকালস্টোরেজ থেকে টোকেন এবং ইউজার ডাটা নেওয়া
+      const token = localStorage.getItem('token');
+      const userStr = localStorage.getItem('user');
+      
+      let shopId = null;
+      if (userStr) {
+        const userObj = JSON.parse(userStr);
+        shopId = userObj.shopId; // আপনার লোকালস্টোরেজের user অবজেক্ট থেকে shopId নেওয়া হলো
+      }
+
+      if (!shopId) {
+        alert('শপ আইডি পাওয়া যায়নি, দয়া করে আবার লগইন করুন!');
+        setLoading(false);
+        return;
+      }
+
+      // ২. ব্যাকএন্ডে সঠিক এন্ডপয়েন্টে রিকোয়েস্ট পাঠানো (কোনো স্পেস ছাড়াই)
+      const response = await fetch(`${API_URL}/add_customer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...formData,
+          shopId: Number(shopId)
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert('কাস্টমার সফলভাবে সেভ হয়েছে!');
+        navigate('/salePage');
+      } else {
+        alert(result.error || result.message || 'কিছু ভুল হয়েছে!');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('সার্ভারে সংযোগ স্থাপন করা যায়নি!');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReset = () => {
@@ -126,10 +168,11 @@ export default function AddCustomer() {
             
             <button
               type="submit"
-              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 font-semibold py-2.5 px-4 rounded-lg shadow-md shadow-emerald-600/20 transition-all"
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 font-semibold py-2.5 px-4 rounded-lg shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
             >
               <Check size={18} />
-              সেভ করুন
+              {loading ? 'সেভ হচ্ছে...' : 'সেভ করুন'}
             </button>
           </div>
 

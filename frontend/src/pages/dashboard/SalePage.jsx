@@ -12,41 +12,53 @@ export default function SalePage() {
     // -------------------------------------------------------------
     const [cart, setCart] = useState([]);
     const [products, setProducts] = useState([]);
+    const [customers, setCustomers] = useState([]); // শপের কাস্টমারদের লিস্টের জন্য স্টেট
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [showResults, setShowResults] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [customer, setCustomer] = useState('Walk-in Customer');
+    
+    // কাস্টমার রিলেটেড স্টেট
+    const [selectedCustomer, setSelectedCustomer] = useState(null); // পুরো কাস্টমার অবজেক্ট রাখার জন্য
+    const [customerSearch, setCustomerSearch] = useState('Walk-in Customer'); // ইনপুটে প্রদর্শনের জন্য
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false); // কাস্টমার ড্রপডাউন টগল
+
     const [discount, setDiscount] = useState(0);
     const [paymentMethod, setPaymentMethod] = useState('CASH');
     const [receivedAmount, setReceivedAmount] = useState('');
 
+    const currentShopId = localStorage.getItem('shopId') || JSON.parse(localStorage.getItem('user') || '{}')?.shopId;
+
     // -------------------------------------------------------------
-    // ২. সাইড-ইফেক্ট (useEffect)
+    // ২. সাইড-ইফেক্ট (useEffect) - প্রোডাক্ট ও কাস্টমার লোড করা
     // -------------------------------------------------------------
     useEffect(() => {
-        const fetchProducts = async () => {
+        const fetchInitialData = async () => {
             try {
                 setLoading(true);
                 const token = localStorage.getItem('token');
+                const headers = { Authorization: `Bearer ${token}` };
 
-                const response = await axios.get(API_URL, {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
+                // প্রোডাক্ট এবং কাস্টমার একসাথে ফেচ করা
+                const [productsRes, customersRes] = await Promise.all([
+                    axios.get(API_URL, { headers }),
+                    axios.get(`${import.meta.env.VITE_API_URL}/customers?shopId=${currentShopId}`, { headers }).catch(() => ({ data: [] }))
+                ]);
 
-                setProducts(response.data);
+                setProducts(productsRes.data);
+                setCustomers(customersRes.data || []);
             } catch (err) {
-                console.error("Error fetching products:", err);
-                setError(err.response?.data?.message || "প্রোডাক্ট লোড করতে সমস্যা হয়েছে।");
+                console.error("Error fetching initial data:", err);
+                setError(err.response?.data?.message || "ডেটা লোড করতে সমস্যা হয়েছে।");
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchProducts();
-    }, []);
+        if (currentShopId) {
+            fetchInitialData();
+        }
+    }, [currentShopId]);
 
     // -------------------------------------------------------------
     // ৩. হিসাব-নিকাশ (Calculations)
@@ -121,8 +133,6 @@ export default function SalePage() {
             return;
         }
 
-        const currentShopId = localStorage.getItem('shopId') || JSON.parse(localStorage.getItem('user') || '{}')?.shopId;
-
         if (!currentShopId) {
             alert("❌ শপ আইডি পাওয়া যায়নি! অনুগ্রহ করে আবার লগইন করুন।");
             return;
@@ -130,8 +140,8 @@ export default function SalePage() {
 
         const orderData = {
             shopId: Number(currentShopId),
-            customerId: null,
-            customerName: customer,
+            customerId: selectedCustomer ? (selectedCustomer.id || selectedCustomer.customerId) : null,
+            customerName: customerSearch || 'Walk-in Customer',
             items: cart.map(item => ({
                 productId: item.id || item.productId,
                 name: item.name,
@@ -169,7 +179,8 @@ export default function SalePage() {
             setCart([]);
             setDiscount(0);
             setReceivedAmount('');
-            setCustomer('Walk-in Customer');
+            setSelectedCustomer(null);
+            setCustomerSearch('Walk-in Customer');
 
         } catch (err) {
             console.error("Checkout error:", err);
@@ -362,18 +373,61 @@ export default function SalePage() {
 
                     {/* কাস্টমার ও বিল ইনফো */}
                     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                        <div>
+                        <div className="relative">
                             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer Details</label>
                             <div className="flex gap-2 mt-1.5">
-                                <select
-                                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
-                                    value={customer}
-                                    onChange={(e) => setCustomer(e.target.value)}
-                                >
-                                    <option value="Walk-in Customer">👤 Walk-in Customer (খুচরা গ্রাহক)</option>
-                                    <option value="Abdur Rahman">👤 Abdur Rahman</option>
-                                    <option value="Sultana Razia">👤 Sultana Razia</option>
-                                </select>
+                                <div className="relative flex-1">
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name or mobile..."
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none"
+                                        value={customerSearch}
+                                        onChange={(e) => {
+                                            setCustomerSearch(e.target.value);
+                                            setShowCustomerDropdown(true);
+                                            if (!e.target.value) {
+                                                setSelectedCustomer(null);
+                                            }
+                                        }}
+                                        onFocus={() => setShowCustomerDropdown(true)}
+                                    />
+
+                                    {/* ডাইনামিক কাস্টমার ড্রপডাউন */}
+                                    {showCustomerDropdown && (
+                                        <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                            <div
+                                                className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer text-slate-700 font-medium border-b border-slate-50"
+                                                onClick={() => {
+                                                    setSelectedCustomer(null);
+                                                    setCustomerSearch('Walk-in Customer');
+                                                    setShowCustomerDropdown(false);
+                                                }}
+                                            >
+                                                👤 Walk-in Customer (খুচরা গ্রাহক)
+                                            </div>
+                                            {customers
+                                                .filter(c => 
+                                                    (c.name && c.name.toLowerCase().includes(customerSearch.toLowerCase())) || 
+                                                    (c.phone && c.phone.includes(customerSearch)) ||
+                                                    (c.mobile && c.mobile.includes(customerSearch))
+                                                )
+                                                .map(cust => (
+                                                    <div
+                                                        key={cust.id || cust.customerId}
+                                                        className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                                        onClick={() => {
+                                                            setSelectedCustomer(cust);
+                                                            setCustomerSearch(cust.name);
+                                                            setShowCustomerDropdown(false);
+                                                        }}
+                                                    >
+                                                        <p className="font-medium text-slate-800">{cust.name}</p>
+                                                        <p className="text-[11px] text-slate-400">📞 {cust.phone || cust.mobile || 'N/A'}</p>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    )}
+                                </div>
                                 <button
                                     type="button"
                                     className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-sm font-bold rounded-xl transition-colors"
