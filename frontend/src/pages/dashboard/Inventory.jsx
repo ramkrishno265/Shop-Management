@@ -93,12 +93,20 @@ const InventoryPage = () => {
           </div>
 
           {/* Add Product Button */}
-          <button
-            onClick={() => navigate("/product_entry")}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
-          >
-            <FiPlus size={18} /> Add Product
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/bulk_import")}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <FiPlus size={18} /> Import/Export
+            </button>
+            <button
+              onClick={() => navigate("/product_entry")}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <FiPlus size={18} /> Add Product
+            </button>
+          </div>
         </div>
 
         {/* Summary Metric Cards */}
@@ -298,11 +306,10 @@ const InventoryPage = () => {
                           {/* Status Badge */}
                           <td className="p-4">
                             <span
-                              className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
-                                product.status === "ACTIVE"
+                              className={`px-2.5 py-1 text-xs font-bold rounded-lg ${product.status === "ACTIVE"
                                   ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
                                   : "bg-rose-50 text-rose-600 border border-rose-200/50"
-                              }`}
+                                }`}
                             >
                               {product.status || "ACTIVE"}
                             </span>

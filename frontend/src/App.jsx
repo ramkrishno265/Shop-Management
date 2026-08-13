@@ -17,6 +17,7 @@ import ProfitMargin from "./pages/dashboard/profitMargin.jsx";
 import ProductEntry from "./pages/dashboard/ProductEntry.jsx";
 import ProductEdit from "./pages/dashboard/ProductEdit.jsx";
 import AddCustomer from "./pages/dashboard/AddCustomer.jsx";
+import BulkImportPage from "./pages/dashboard/BulkImportPage.jsx"; // Import the BulkImportPage component
 
 // Protected Route Guard Component
 const ProtectedRoute = ({ children }) => {
@@ -135,6 +136,17 @@ function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <AddCustomer />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/bulk_import"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <BulkImportPage />
               </DashboardLayout>
             </ProtectedRoute>
           }
