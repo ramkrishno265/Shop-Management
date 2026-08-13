@@ -54,7 +54,7 @@ const BulkImportPage = () => {
             if (userString) {
                 try {
                     const userObj = JSON.parse(userString);
-                    currentShopId = userObj.shopId; // ইউজার অবজেক্টের ভেতর থেকে shopId নেওয়া হলো
+                    currentShopId = userObj.shopId;
                 } catch (e) {
                     console.error("Failed to parse user from localStorage", e);
                 }

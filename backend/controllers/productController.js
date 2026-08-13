@@ -452,7 +452,7 @@ export const bulkImportProducts = async (req, res) => {
   try {
     const { products, requestShopId } = req.body;
 
-    // ১. শপ এক্সেস ভ্যালিডেশন (আপনার সিস্টেমের নিয়ম অনুযায়ী)
+    // ১. শপ এক্সেস ভ্যালিডেশন
     const finalShopId = validateShopAccess(req.user, requestShopId);
     if (!finalShopId) {
       return res.status(403).json({ message: "Access denied or Invalid Shop ID." });
@@ -465,7 +465,7 @@ export const bulkImportProducts = async (req, res) => {
     let successCount = 0;
     let failedProducts = [];
 
-    // প্রতিটা প্রোডাক্ট লুপ চালিয়ে প্রসেস করা
+    // প্রতিটা প্রোডাক্ট লুপ চালিয়ে প্রসেস করা
     for (const item of products) {
       try {
         if (!item.name) {
@@ -473,11 +473,11 @@ export const bulkImportProducts = async (req, res) => {
           continue;
         }
 
-        const productName = item.name.trim();
+        const productName = String(item.name).trim();
         const inventoryType = item.inventoryType === 'pack' ? 'pack' : 'standard';
-        const baseUnit = item.baseUnit ? item.baseUnit.trim() : 'Pcs';
+        const baseUnit = item.baseUnit ? String(item.baseUnit).trim() : 'Pcs';
 
-        // ২. ক্যাটাগরি হ্যান্ডলিং (যদি ক্যাটাগরি নাম দেওয়া থাকে, ডাটাবেজ থেকে খুঁজে বা তৈরি করে নেব)
+        // ২. ক্যাটাগরি হ্যান্ডলিং (নাম দিয়ে খুঁজে বা তৈরি করে নেওয়া)
         let categoryId = null;
         if (item.category) {
           const categoryName = typeof item.category === 'string' ? item.category.trim() : (item.category.name || '').trim();
@@ -502,14 +502,38 @@ export const bulkImportProducts = async (req, res) => {
           }
         }
 
-        // ৩. SKU বা Barcode ইউনিক চেক (একই শপের ভেতরে ডুপ্লিকেট এড়াতে)
-        const skuValue = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
+        // ৩. SKU এবং Barcode ইউনিক চেক ও ডুপ্লিকেট এড়ানোর লজিক
+        let baseSku = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
           ? String(item.sku).trim()
           : `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
 
-        const barcodeValue = item.barcode !== undefined && item.barcode !== null && String(item.barcode).trim() !== ""
-          ? String(item.barcode).trim()
-          : null;
+        let skuValue = baseSku;
+        let counter = 1;
+        
+        // ডাটাবেজে SKU অলরেডি থাকলে ইউনিক করার জন্য লুপ চালানো
+        while (true) {
+          const existingSku = await prisma.product.findFirst({
+            where: { sku: skuValue, shopId: finalShopId }
+          });
+          if (!existingSku) break;
+          skuValue = `${baseSku}-${counter}`;
+          counter++;
+        }
+
+        // বারকোড হ্যান্ডলিং (ফাঁকা হলে null এবং ডুপ্লিকেট হলে ইউনিক করা)
+        let barcodeValue = null;
+        if (item.barcode !== undefined && item.barcode !== null && String(item.barcode).trim() !== "") {
+          const rawBarcode = String(item.barcode).trim();
+          const existingBarcode = await prisma.product.findFirst({
+            where: { barcode: rawBarcode, shopId: finalShopId }
+          });
+
+          if (!existingBarcode) {
+            barcodeValue = rawBarcode;
+          } else {
+            barcodeValue = `${rawBarcode}-${Math.floor(Math.random() * 1000)}`;
+          }
+        }
 
         let quantity = 0;
         let purchasePrice = parseFloat(item.purchasePrice) || 0;
@@ -547,17 +571,17 @@ export const bulkImportProducts = async (req, res) => {
               sellingPrice: sellingPrice,
               lowStockLimit: item.lowStockLimit ? parseFloat(item.lowStockLimit) : 5,
               categoryId: categoryId,
-              shopId: finalShopId, // 👈 মাল্টি-শপ সিকিউরিটি নিশ্চিত করা হলো
-              description: item.description ? item.description.trim() : null,
+              shopId: finalShopId,
+              description: item.description ? String(item.description).trim() : null,
               status: quantity > 0 || inventoryType === 'pack' ? "ACTIVE" : "INACTIVE"
             }
           });
 
-          // যদি প্যাক প্রোডাক্ট হয়, তবে `product_packs` টেবিলে ডাটা ইনসার্ট করা
+          // যদি প্যাক প্রোডাক্ট হয়, তবে `product_packs` টেবিলে ডাটা ইনসার্ট করা
           if (inventoryType === 'pack' && parsedPacks.length > 0) {
             const packDataToInsert = parsedPacks.map(pack => ({
               productId: newProduct.id,
-              packName: pack.packName ? pack.packName.trim() : 'Default Pack',
+              packName: pack.packName ? String(pack.packName).trim() : 'Default Pack',
               multiplier: parseFloat(pack.multiplier) || 1,
               stock: parseFloat(pack.stock) || 0,
               purchasePrice: parseFloat(pack.purchasePrice) || 0,
