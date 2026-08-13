@@ -446,3 +446,141 @@ export const parseProductWithAI = async (req, res) => {
     });
   }
 };
+
+// ৭. Bulk Import Products (Standard & Pack Support with Multi-Shop Validation)
+export const bulkImportProducts = async (req, res) => {
+  try {
+    const { products, requestShopId } = req.body;
+
+    // ১. শপ এক্সেস ভ্যালিডেশন (আপনার সিস্টেমের নিয়ম অনুযায়ী)
+    const finalShopId = validateShopAccess(req.user, requestShopId);
+    if (!finalShopId) {
+      return res.status(403).json({ message: "Access denied or Invalid Shop ID." });
+    }
+
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ message: "Invalid data format or empty products list." });
+    }
+
+    let successCount = 0;
+    let failedProducts = [];
+
+    // প্রতিটা প্রোডাক্ট লুপ চালিয়ে প্রসেস করা
+    for (const item of products) {
+      try {
+        if (!item.name) {
+          failedProducts.push({ item, reason: "Product name is missing." });
+          continue;
+        }
+
+        const productName = item.name.trim();
+        const inventoryType = item.inventoryType === 'pack' ? 'pack' : 'standard';
+        const baseUnit = item.baseUnit ? item.baseUnit.trim() : 'Pcs';
+
+        // ২. ক্যাটাগরি হ্যান্ডলিং (যদি ক্যাটাগরি নাম দেওয়া থাকে, ডাটাবেজ থেকে খুঁজে বা তৈরি করে নেব)
+        let categoryId = null;
+        if (item.category) {
+          const categoryName = typeof item.category === 'string' ? item.category.trim() : (item.category.name || '').trim();
+          
+          if (categoryName) {
+            let dbCategory = await prisma.category.findFirst({
+              where: {
+                name: { equals: categoryName, mode: 'insensitive' },
+                shopId: finalShopId
+              }
+            });
+
+            if (!dbCategory) {
+              dbCategory = await prisma.category.create({
+                data: {
+                  name: categoryName,
+                  shopId: finalShopId
+                }
+              });
+            }
+            categoryId = dbCategory.id;
+          }
+        }
+
+        // ৩. SKU বা Barcode ইউনিক চেক (একই শপের ভেতরে ডুপ্লিকেট এড়াতে)
+        const skuValue = item.sku && item.sku.trim() !== "" ? item.sku.trim() : `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random()*1000)}`;
+        const barcodeValue = item.barcode ? item.barcode.trim() : null;
+
+        let quantity = 0;
+        let purchasePrice = parseFloat(item.purchasePrice) || 0;
+        let sellingPrice = parseFloat(item.sellingPrice) || 0;
+        let parsedPacks = [];
+
+        // প্যাক হ্যান্ডলিং
+        if (inventoryType === 'pack' && item.packs && Array.isArray(item.packs)) {
+          parsedPacks = item.packs;
+          quantity = parsedPacks.reduce((sum, p) => {
+            const packStock = parseFloat(p.stock) || 0;
+            const multiplier = parseFloat(p.multiplier) || 1;
+            return sum + (packStock * multiplier);
+          }, 0);
+
+          if (parsedPacks.length > 0) {
+            purchasePrice = parseFloat(parsedPacks[0].purchasePrice) || purchasePrice;
+            sellingPrice = parseFloat(parsedPacks[0].sellingPrice) || sellingPrice;
+          }
+        } else {
+          quantity = parseFloat(item.quantity) || 0;
+        }
+
+        // ৪. ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক সেভ করা
+        await prisma.$transaction(async (tx) => {
+          const newProduct = await tx.product.create({
+            data: {
+              name: productName,
+              sku: skuValue,
+              barcode: barcodeValue,
+              inventoryType: inventoryType,
+              baseUnit: baseUnit,
+              quantity: quantity,
+              purchasePrice: purchasePrice,
+              sellingPrice: sellingPrice,
+              lowStockLimit: item.lowStockLimit ? parseFloat(item.lowStockLimit) : 5,
+              categoryId: categoryId,
+              shopId: finalShopId, // 👈 মাল্টি-শপ সিকিউরিটি নিশ্চিত করা হলো
+              description: item.description ? item.description.trim() : null,
+              status: quantity > 0 || inventoryType === 'pack' ? "ACTIVE" : "INACTIVE"
+            }
+          });
+
+          // যদি প্যাক প্রোডাক্ট হয়, তবে `product_packs` টেবিলে ডাটা ইনসার্ট করা
+          if (inventoryType === 'pack' && parsedPacks.length > 0) {
+            const packDataToInsert = parsedPacks.map(pack => ({
+              productId: newProduct.id,
+              packName: pack.packName ? pack.packName.trim() : 'Default Pack',
+              multiplier: parseFloat(pack.multiplier) || 1,
+              stock: parseFloat(pack.stock) || 0,
+              purchasePrice: parseFloat(pack.purchasePrice) || 0,
+              sellingPrice: parseFloat(pack.sellingPrice) || 0,
+            }));
+
+            await tx.productPack.createMany({
+              data: packDataToInsert,
+            });
+          }
+        });
+
+        successCount++;
+      } catch (err) {
+        failedProducts.push({ item: item.name, reason: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      message: "Bulk import process completed.",
+      totalAttempted: products.length,
+      successCount,
+      failedCount: failedProducts.length,
+      failedProducts
+    });
+
+  } catch (error) {
+    console.error("Bulk Import Error:", error);
+    return res.status(500).json({ message: "Error during bulk import", error: error.message });
+  }
+};

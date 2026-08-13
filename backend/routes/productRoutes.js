@@ -5,7 +5,8 @@ import {
   createProduct,
   deleteProduct,
   updateProduct,
-  parseProductWithAI
+  parseProductWithAI,
+  bulkImportProducts
 } from "../controllers/productController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
@@ -18,5 +19,6 @@ router.post("/", protect, createProduct);
 router.delete("/:id", protect, deleteProduct);
 router.put("/:id", protect, updateProduct);
 router.post('/ai-parse-product', protect, parseProductWithAI);
+router.post('/bulk-import', protect, bulkImportProducts);
 
 export default router;
