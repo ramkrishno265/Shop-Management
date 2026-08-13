@@ -63,7 +63,7 @@ const BulkImportPage = () => {
             // ২. Vite এনভায়রনমেন্ট ভেরিয়েবল থেকে API_URL ব্যবহার করা
             const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-            const response = await fetch(`${API_URL}/api/products/bulk-import`, {
+            const response = await fetch(`${API_URL}/products/bulk-import`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

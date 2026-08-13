@@ -481,7 +481,7 @@ export const bulkImportProducts = async (req, res) => {
         let categoryId = null;
         if (item.category) {
           const categoryName = typeof item.category === 'string' ? item.category.trim() : (item.category.name || '').trim();
-          
+
           if (categoryName) {
             let dbCategory = await prisma.category.findFirst({
               where: {
@@ -503,8 +503,13 @@ export const bulkImportProducts = async (req, res) => {
         }
 
         // ৩. SKU বা Barcode ইউনিক চেক (একই শপের ভেতরে ডুপ্লিকেট এড়াতে)
-        const skuValue = item.sku && item.sku.trim() !== "" ? item.sku.trim() : `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random()*1000)}`;
-        const barcodeValue = item.barcode ? item.barcode.trim() : null;
+        const skuValue = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
+          ? String(item.sku).trim()
+          : `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+
+        const barcodeValue = item.barcode !== undefined && item.barcode !== null && String(item.barcode).trim() !== ""
+          ? String(item.barcode).trim()
+          : null;
 
         let quantity = 0;
         let purchasePrice = parseFloat(item.purchasePrice) || 0;
