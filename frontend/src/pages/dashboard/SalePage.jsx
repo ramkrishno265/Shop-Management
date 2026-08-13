@@ -20,7 +20,7 @@ export default function SalePage() {
     
     // কাস্টমার রিলেটেড স্টেট
     const [selectedCustomer, setSelectedCustomer] = useState(null); // পুরো কাস্টমার অবজেক্ট রাখার জন্য
-    const [customerSearch, setCustomerSearch] = useState('Walk-in Customer'); // ইনপুটে প্রদর্শনের জন্য
+    const [customerSearch, setCustomerSearch] = useState(''); // ইনপুটে প্রদর্শনের জন্য
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false); // কাস্টমার ড্রপডাউন টগল
 
     const [discount, setDiscount] = useState(0);
@@ -42,7 +42,7 @@ export default function SalePage() {
                 // প্রোডাক্ট এবং কাস্টমার একসাথে ফেচ করা
                 const [productsRes, customersRes] = await Promise.all([
                     axios.get(API_URL, { headers }),
-                    axios.get(`${import.meta.env.VITE_API_URL}/customers?shopId=${currentShopId}`, { headers }).catch(() => ({ data: [] }))
+                    axios.get(`${import.meta.env.VITE_API_URL}/add_customer?shopId=${currentShopId}`, { headers }).catch(() => ({ data: [] }))
                 ]);
 
                 setProducts(productsRes.data);
