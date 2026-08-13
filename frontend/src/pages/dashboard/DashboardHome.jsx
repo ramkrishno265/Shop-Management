@@ -53,7 +53,7 @@ export default function DashboardHome() {
         // সাম্প্রতিক ৫টি ইনভয়েস সাজানো
         const formattedInvoices = sales.slice(0, 5).map(s => ({
           id: s.invoiceNo || `INV-${s.id}`,
-          customer: s.customerName || (s.customer ? s.customer.name : 'Walk-in Customer'),
+          customer: s.customer ? s.customer.name : (s.notes || 'Walk-in Customer'),
           amount: `৳ ${s.grandTotal || 0}`,
           method: s.paymentMethod || 'CASH',
           time: new Date(s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

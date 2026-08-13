@@ -149,6 +149,7 @@ export const getSales = async (req, res) => {
         const sales = await prisma.sale.findMany({
             where: filterShopId ? { shopId: filterShopId } : {},
             include: {
+                customer: true,
                 saleItems: {
                     include: {
                         product: true // প্রোডাক্টের নাম বা ডিটেইলস সহ দেখতে চাইলে
