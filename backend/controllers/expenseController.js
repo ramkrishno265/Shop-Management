@@ -44,29 +44,44 @@ export const addExpense = async (req, res) => {
 // ২. খরচের তালিকা ও টোটাল খরচ ফেচ করার জন্য
 export const getExpenses = async (req, res) => {
     try {
-        const shopId = req.query.shopId || req.user?.shopId;
+        // Always take shopId from authenticated user
+        const shopId = req.user?.shopId;
         const { filter, startDate, endDate } = req.query;
 
         if (!shopId) {
             return res.status(400).json({
                 success: false,
-                message: "Shop ID is required"
+                message: "Shop ID is required",
             });
         }
 
         let dateFilter = {};
         const today = new Date();
 
-        // ডেট ফিল্টার লজিক (ড্যাশবোর্ডের সাথে মিলিয়ে)
-        if (filter === 'today') {
-            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+        // Today
+        if (filter === "today") {
+            const startOfDay = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                0, 0, 0, 0
+            );
+
+            const endOfDay = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                23, 59, 59, 999
+            );
 
             dateFilter = {
                 gte: startOfDay,
                 lte: endOfDay,
             };
-        } else if (filter === 'custom' && startDate && endDate) {
+        }
+
+        // Custom date range
+        else if (filter === "custom" && startDate && endDate) {
             const startCustom = new Date(startDate);
             startCustom.setHours(0, 0, 0, 0);
 
@@ -79,28 +94,38 @@ export const getExpenses = async (req, res) => {
             };
         }
 
-        // প্রিজমা কুয়েরি
         const expenses = await prisma.expense.findMany({
             where: {
                 shopId: Number(shopId),
-                ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
+
+                ...(Object.keys(dateFilter).length > 0 && {
+                    createdAt: dateFilter,
+                }),
             },
+
             orderBy: {
-                createdAt: 'desc', // সাম্প্রতিক খরচগুলো সবার উপরে দেখানোর জন্য
+                createdAt: "desc",
             },
         });
 
-        // মোট খরচের পরিমাণ হিসাব করা
-        const totalExpense = expenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        const totalExpense = expenses.reduce(
+            (acc, curr) => acc + (Number(curr.amount) || 0),
+            0
+        );
 
         return res.status(200).json({
             success: true,
             totalExpense,
             data: expenses,
         });
+
     } catch (err) {
         console.error("Get Expense Error:", err);
-        return res.status(500).json({ success: false, message: err.message });
+
+        return res.status(500).json({
+            success: false,
+            message: err.message,
+        });
     }
 };
 
