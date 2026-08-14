@@ -133,6 +133,7 @@ const ShopDashboard = () => {
 
   const handleAddOrUpdateExpense = async (e) => {
     e.preventDefault();
+
     if (!expenseAmount) {
       alert("দয়া করে টাকার পরিমাণ লিখুন");
       return;
@@ -140,16 +141,19 @@ const ShopDashboard = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const headers = { Authorization: `Bearer ${token}` };
-      const currentShopId = localStorage.getItem("shopId") || 1;
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
 
       if (editingExpenseId) {
+        // Update Expense
         await axios.put(
           `${API_URL}/expenses/${editingExpenseId}`,
           {
             category: expenseCategory,
             amount: Number(expenseAmount),
-            note: expenseNote,
+            note: expenseNote || "",
           },
           { headers },
         );
@@ -157,24 +161,33 @@ const ShopDashboard = () => {
         alert("খরচ সফলভাবে আপডেট করা হয়েছে!");
         setEditingExpenseId(null);
       } else {
+        // Add Expense
+        // এখানে shopId দেওয়ার দরকার নেই
         const expensePayload = {
           category: expenseCategory,
           amount: Number(expenseAmount),
           note: expenseNote || "",
-          shopId: Number(currentShopId),
         };
 
         await axios.post(`${API_URL}/expenses`, expensePayload, { headers });
+
         alert("খরচ সফলভাবে যোগ করা হয়েছে!");
       }
 
+      // Reset form
       setExpenseAmount("");
       setExpenseNote("");
       setExpenseCategory("দোকান ভাড়া");
+
+      // Refresh data
       fetchDashboardData();
     } catch (error) {
       console.error("Error saving expense:", error);
-      alert("কার্যক্রমটি সম্পন্ন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+
+      alert(
+        error.response?.data?.message ||
+          "কার্যক্রমটি সম্পন্ন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+      );
     }
   };
 
