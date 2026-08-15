@@ -24,7 +24,7 @@ export const getProducts = async (req, res) => {
       where: { shopId: shopId },
       include: {
         category: true,
-        packs: true
+        product_packs: true
       },
       orderBy: { createdAt: "desc" },
     });
