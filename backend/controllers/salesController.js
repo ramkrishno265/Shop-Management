@@ -82,23 +82,22 @@ export const createSale = async (req, res) => {
                             const cartQty = Number(item.quantity) || 1;
                             const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1);
 
-                            // আসল টোটাল একক পরিমাণ (যেমন: ২ প্যাক × ৫ কেজি = ১০ কেজি)
+                            // ডেটাবেজে দেখানোর জন্য মোট একক কোয়ান্টিটি (যেমন: ২ প্যাক × ৫ কেজি = ১০ কেজি)
                             const actualQty = cartQty * multiplier;
 
                             const price = Number(item.price) || 0;
                             const itemDiscount = Number(item.discount) || 0;
 
-                            // সাবটোটাল হিসাব করার সঠিক নিয়ম: (মোট একক পরিমাণ × প্রতি এককের দাম) অথবা (প্যাকের সংখ্যা × প্যাকের দাম)
-                            // যেহেতু price variable এ প্যাকের নির্দিষ্ট দাম বা ইউনিট দাম আসে, তাই actualQty দিয়ে হিসাব করা নিরাপদ:
+                            // সাবটোটাল হবে কার্টের প্যাক সংখ্যা অনুযায়ী (যেমন: ২ প্যাক × ৫০০ টাকা = ১০০০ টাকা)
                             const itemSubtotal = (price * cartQty) - itemDiscount;
 
                             return {
                                 productId: Number(item.productId || item.id),
-                                quantity: actualQty, // ডেটাবেজে মোট একক পরিমাণ (যেমন: 10) সেভ হবে
+                                quantity: actualQty, // স্টকের জন্য মোট একক পরিমাণ
                                 unitPrice: price,
                                 purchasePrice: Number(item.purchasePrice) || 0,
                                 discount: itemDiscount,
-                                subtotal: itemSubtotal // সঠিক সাবটোটাল সেভ হবে
+                                subtotal: itemSubtotal
                             };
                         })
                     }

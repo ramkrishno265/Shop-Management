@@ -74,10 +74,11 @@ export default function SalePage() {
   // -------------------------------------------------------------
   // ৩. হিসাব-নিকাশ (Calculations)
   // -------------------------------------------------------------
-  const subTotal = cart.reduce(
-    (acc, item) => acc + item.price * item.quantity,
-    0,
-  );
+  const subTotal = cart.reduce((acc, item) => {
+    const itemPrice = Number(item.price) || 0;
+    const itemQty = Number(item.quantity) || 0;
+    return acc + (itemPrice * itemQty);
+  }, 0);
 
 
 
