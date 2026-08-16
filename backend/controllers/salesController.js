@@ -79,14 +79,20 @@ export const createSale = async (req, res) => {
 
                     saleItems: {
                         create: items.map(item => {
-                            const qty = Number(item.quantity) || 1;
+                            const cartQty = Number(item.quantity) || 1;
+                            // প্যাক হলে multiplier দিয়ে গুণ হবে, না হলে ১
+                            const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1);
+                            
+                            // আসল টোটাল ইউনিট কোয়ান্টিটি (যেমন: ২ প্যাক × ৫ কেজি = ১০ কেজি)
+                            const actualQty = cartQty * multiplier; 
+                            
                             const price = Number(item.price) || 0;
                             const itemDiscount = Number(item.discount) || 0;
-                            const itemSubtotal = (price * qty) - itemDiscount;
+                            const itemSubtotal = (price * cartQty) - itemDiscount; // দাম হবে কার্টের প্যাকের দাম অনুযায়ী
 
                             return {
                                 productId: Number(item.productId || item.id),
-                                quantity: qty,
+                                quantity: actualQty, // ইনভয়েস বা সেল আইটেমে মোট একক পরিমাণ সেভ হবে
                                 unitPrice: price,
                                 purchasePrice: Number(item.purchasePrice) || 0,
                                 discount: itemDiscount,
@@ -100,20 +106,36 @@ export const createSale = async (req, res) => {
                 }
             });
 
-            // স্টক আপডেট করা
+            // স্টক ও প্যাক স্টক আপডেট করা
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
+                const cartQty = Number(item.quantity) || 0;
+                const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1);
+                const totalDeduductQty = cartQty * multiplier; // মোট কত একক বা স্টক কমবে
 
-                // প্রথমে বর্তমান প্রোডাক্টের তথ্য বা কুয়ান্টিটি বের করে নিতে পারেন অথবা সরাসরি মাইনাস করতে পারেন
-                // যদি আপনার প্রোডাক্ট টেবিলে ফিল্ডের নাম 'quantity' হয়:
+                // ১. যদি প্যাক প্রোডাক্ট হয় এবং ডেটাবেজে আলাদা 'pack' টেবিল থাকে, তবে প্যাকের নিজস্ব স্টক কমানো
+                if (item.packInfo?.id || item.packId) {
+                    const targetPackId = Number(item.packInfo?.id || item.packId);
+                    const packRecord = await tx.productPack.findUnique({ where: { id: targetPackId } });
+                    
+                    if (packRecord) {
+                        await tx.productPack.update({
+                            where: { id: targetPackId },
+                            data: {
+                                stock: Math.max(0, Number(packRecord.stock || 0) - cartQty) // প্যাকের সংখ্যা থেকে মাইনাস হবে (যেমন ২ প্যাক কমে যাওয়া)
+                            }
+                        });
+                    }
+                }
+
+                // ২. মূল প্রোডাক্টের স্টক বা পরিমাণ কমানো
                 const product = await tx.product.findUnique({ where: { id: prodId } });
-                const currentQty = product ? product.quantity : 0;
-                const buyQty = Number(item.quantity) || 0;
+                const currentQty = product ? Number(product.quantity || 0) : 0;
 
                 await tx.product.update({
                     where: { id: prodId },
                     data: {
-                        quantity: Math.max(0, currentQty - buyQty) // সরাসরি নতুন পরিমাণ সেট করে দেওয়া নিরাপদ
+                        quantity: Math.max(0, currentQty - totalDeduductQty) // মূল স্টক থেকে মোট একক (যেমন ১০ কেজি) মাইনাস হবে
                     }
                 });
             }

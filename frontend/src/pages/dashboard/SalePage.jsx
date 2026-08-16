@@ -82,10 +82,10 @@ export default function SalePage() {
 
 
   const numericDiscountInput = Number(discount) || 0;
-  const calculatedDiscountAmount = 
-  discountType === "PERCENTAGE" 
-    ? (subTotal * numericDiscountInput) / 100 
-    : numericDiscountInput;
+  const calculatedDiscountAmount =
+    discountType === "PERCENTAGE"
+      ? (subTotal * numericDiscountInput) / 100
+      : numericDiscountInput;
 
 
   const payableAmount = Math.max(0, subTotal - calculatedDiscountAmount);
@@ -271,13 +271,17 @@ export default function SalePage() {
       items: cart.map((item) => {
         const isPackItem = Boolean(item.packInfo || item.selectedPackId);
 
+        // প্যাক সিলেক্ট করা থাকলে প্যাকের নিজস্ব purchasePrice, না থাকলে মেইন প্রোডাক্টের purchasePrice
+        const itemPurchasePrice = isPackItem && item.packInfo?.purchasePrice
+          ? Number(item.packInfo.purchasePrice)
+          : Number(item.purchasePrice || 0);
+
         return {
           productId: item.id || item.productId,
           name: item.name,
           sku: item.sku || "",
           price: Number(item.price),
-          purchasePrice: Number(item.purchasePrice || 0),
-          // প্যাক হলে মোট ইউনিট (Quantity * Multiplier), সাধারণ হলে শুধু Quantity
+          purchasePrice: itemPurchasePrice, // 👈 এখানে আপডেট করা হলো
           quantity: Number(item.quantity) * Number(item.multiplier || 1),
           isPack: isPackItem,
           packId: item.selectedPackId || null,
