@@ -28,6 +28,7 @@ export default function SalePage() {
   const [productPacks, setProductPacks] = useState([]);
 
   const [discount, setDiscount] = useState(0);
+  const [discountType, setDiscountType] = useState("FIXED");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [receivedAmount, setReceivedAmount] = useState("");
 
@@ -77,7 +78,17 @@ export default function SalePage() {
     (acc, item) => acc + item.price * item.quantity,
     0,
   );
-  const payableAmount = Math.max(0, subTotal - Number(discount));
+
+
+
+  const numericDiscountInput = Number(discount) || 0;
+  const calculatedDiscountAmount = 
+  discountType === "PERCENTAGE" 
+    ? (subTotal * numericDiscountInput) / 100 
+    : numericDiscountInput;
+
+
+  const payableAmount = Math.max(0, subTotal - calculatedDiscountAmount);
   const changeAmount = receivedAmount
     ? Math.max(0, Number(receivedAmount) - payableAmount)
     : 0;
@@ -172,7 +183,7 @@ export default function SalePage() {
     setShowPackModal(false);
   };
 
-  
+
   const updateItemPack = (cartItemId, newPackId) => {
     setCart((prevCart) =>
       prevCart.map((item) => {
@@ -257,26 +268,32 @@ export default function SalePage() {
         ? selectedCustomer.id || selectedCustomer.customerId
         : null,
       customerName: customerSearch || "Walk-in Customer",
-      items: cart.map((item) => ({
-        productId: item.id || item.productId,
-        name: item.name,
-        sku: item.sku || "",
-        price: item.price,
-        purchasePrice: item.purchasePrice || 0,
-        quantity: item.quantity * (item.multiplier || 1), // ব্যাকএন্ডে স্টক কাটার জন্য মূল একক পরিমাণ পাঠানো
-        isPack: item.isPack || false,
-        packInfo: item.packInfo || null,
-        discount: 0,
-      })),
-      subTotal: subTotal,
+      items: cart.map((item) => {
+        const isPackItem = Boolean(item.packInfo || item.selectedPackId);
+
+        return {
+          productId: item.id || item.productId,
+          name: item.name,
+          sku: item.sku || "",
+          price: Number(item.price),
+          purchasePrice: Number(item.purchasePrice || 0),
+          // প্যাক হলে মোট ইউনিট (Quantity * Multiplier), সাধারণ হলে শুধু Quantity
+          quantity: Number(item.quantity) * Number(item.multiplier || 1),
+          isPack: isPackItem,
+          packId: item.selectedPackId || null,
+          packInfo: item.packInfo || null,
+          discount: 0,
+        };
+      }),
+      subTotal: Number(subTotal),
       discountType: "FIXED",
       discountValue: Number(discount) || 0,
       discountAmount: Number(discount) || 0,
       vatPercentage: 0,
       vatAmount: 0,
-      payableAmount: payableAmount,
-      receivedAmount: receivedAmount ? Number(receivedAmount) : payableAmount,
-      changeAmount: changeAmount,
+      payableAmount: Number(payableAmount),
+      receivedAmount: receivedAmount ? Number(receivedAmount) : Number(payableAmount),
+      changeAmount: Number(changeAmount || 0),
       paymentMethod: paymentMethod,
       paymentStatus:
         Number(receivedAmount) >= payableAmount
@@ -313,7 +330,7 @@ export default function SalePage() {
       console.error("Checkout error:", err);
       alert(
         err.response?.data?.message ||
-          "❌ সেল প্রসেস করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+        "❌ সেল প্রসেস করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
       );
     }
   };
@@ -445,11 +462,10 @@ export default function SalePage() {
                       return (
                         <div
                           key={product.id || product.productId}
-                          className={`px-4 py-3 border-b border-slate-50 last:border-0 flex justify-between items-center ${
-                            isOutOfStock
-                              ? "bg-slate-100 opacity-60 cursor-not-allowed"
-                              : "hover:bg-slate-50 cursor-pointer"
-                          }`}
+                          className={`px-4 py-3 border-b border-slate-50 last:border-0 flex justify-between items-center ${isOutOfStock
+                            ? "bg-slate-100 opacity-60 cursor-not-allowed"
+                            : "hover:bg-slate-50 cursor-pointer"
+                            }`}
                           onClick={() => {
                             if (isOutOfStock) {
                               alert("❌ এই প্রোডাক্টটির স্টক শেষ!");
@@ -493,10 +509,10 @@ export default function SalePage() {
                           .toLowerCase()
                           .includes(searchQuery.toLowerCase())),
                   ).length === 0 && (
-                    <div className="px-4 py-3 text-sm text-slate-400">
-                      No product found!
-                    </div>
-                  )}
+                      <div className="px-4 py-3 text-sm text-slate-400">
+                        No product found!
+                      </div>
+                    )}
                 </div>
               )}
             </div>
@@ -591,7 +607,7 @@ export default function SalePage() {
                                         {item.packs?.map((pack) => (
                                           <option key={pack.id} value={pack.id}>
                                             {pack.packName} (Qty:{" "}
-                                            {pack.multiplier}, ৳
+                                            {pack.stock}, ৳
                                             {pack.sellingPrice || item.price})
                                           </option>
                                         ))}
@@ -761,14 +777,29 @@ export default function SalePage() {
                 </span>
               </div>
 
-              <div className="flex justify-between items-center text-sm text-slate-500">
-                <span>Discount (৳):</span>
-                <input
-                  type="number"
-                  className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-right text-sm focus:outline-none"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                />
+              <div className="flex flex-col gap-1.5 py-2 border-t border-slate-100">
+                <div className="flex justify-between items-center text-sm text-slate-500">
+                  <span>Discount:</span>
+                  <div className="flex items-center gap-1.5">
+                    {/* ডিসকাউন্ট ইনপুট বক্স */}
+                    <input
+                      type="number"
+                      placeholder="0"
+                      className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-right text-sm focus:outline-none focus:border-indigo-500"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                    />
+                    {/* টাকা নাকি পার্সেন্টেজ ড্রপডাউন */}
+                    <select
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1 text-xs text-slate-700 font-medium focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="FIXED">৳ (Fixed)</option>
+                      <option value="PERCENTAGE">% (Percent)</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2 border-t border-dashed border-slate-200 flex justify-between items-center">
@@ -794,11 +825,10 @@ export default function SalePage() {
                     key={method}
                     type="button"
                     onClick={() => setPaymentMethod(method)}
-                    className={`py-2 text-xs font-bold rounded-xl border transition-all ${
-                      paymentMethod === method
-                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                    }`}
+                    className={`py-2 text-xs font-bold rounded-xl border transition-all ${paymentMethod === method
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
                   >
                     {method === "CASH"
                       ? "💵 Cash"
