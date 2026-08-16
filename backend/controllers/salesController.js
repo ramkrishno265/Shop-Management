@@ -79,21 +79,18 @@ export const createSale = async (req, res) => {
 
                     saleItems: {
                         create: items.map(item => {
-                            const cartQty = Number(item.quantity) || 1;
-                            const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1);
-
-                            // ডেটাবেজে দেখানোর জন্য মোট একক কোয়ান্টিটি (যেমন: ২ প্যাক × ৫ কেজি = ১০ কেজি)
-                            const actualQty = cartQty * multiplier;
-
+                            const cartQty = Number(item.quantity) || 1; // কার্টে ইউজার কয়টি প্যাক নিয়েছে (যেমন: ২)
+                            const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1); // প্যাকের multiplier (যেমন: ৫)
+                            
                             const price = Number(item.price) || 0;
                             const itemDiscount = Number(item.discount) || 0;
-
-                            // সাবটোটাল হবে কার্টের প্যাক সংখ্যা অনুযায়ী (যেমন: ২ প্যাক × ৫০০ টাকা = ১০০০ টাকা)
+                            
+                            // সাবটotal হবে: (প্যাকের দাম × প্যাকের সংখ্যা) - ডিসকাউন্ট
                             const itemSubtotal = (price * cartQty) - itemDiscount;
 
                             return {
                                 productId: Number(item.productId || item.id),
-                                quantity: actualQty, // স্টকের জন্য মোট একক পরিমাণ
+                                quantity: cartQty, // ইনভয়েসে প্যাকের সংখ্যা (যেমন: ২) সেভ হবে, যাতে দেখতে এলোমেলো না লাগে
                                 unitPrice: price,
                                 purchasePrice: Number(item.purchasePrice) || 0,
                                 discount: itemDiscount,
