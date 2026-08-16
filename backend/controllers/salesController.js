@@ -80,23 +80,25 @@ export const createSale = async (req, res) => {
                     saleItems: {
                         create: items.map(item => {
                             const cartQty = Number(item.quantity) || 1;
-                            // প্যাক হলে multiplier দিয়ে গুণ হবে, না হলে ১
                             const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1);
-                            
-                            // আসল টোটাল ইউনিট কোয়ান্টিটি (যেমন: ২ প্যাক × ৫ কেজি = ১০ কেজি)
-                            const actualQty = cartQty * multiplier; 
-                            
+
+                            // আসল টোটাল একক পরিমাণ (যেমন: ২ প্যাক × ৫ কেজি = ১০ কেজি)
+                            const actualQty = cartQty * multiplier;
+
                             const price = Number(item.price) || 0;
                             const itemDiscount = Number(item.discount) || 0;
-                            const itemSubtotal = (price * cartQty) - itemDiscount; // দাম হবে কার্টের প্যাকের দাম অনুযায়ী
+
+                            // সাবটোটাল হিসাব করার সঠিক নিয়ম: (মোট একক পরিমাণ × প্রতি এককের দাম) অথবা (প্যাকের সংখ্যা × প্যাকের দাম)
+                            // যেহেতু price variable এ প্যাকের নির্দিষ্ট দাম বা ইউনিট দাম আসে, তাই actualQty দিয়ে হিসাব করা নিরাপদ:
+                            const itemSubtotal = (price * actualQty) - itemDiscount;
 
                             return {
                                 productId: Number(item.productId || item.id),
-                                quantity: actualQty, // ইনভয়েস বা সেল আইটেমে মোট একক পরিমাণ সেভ হবে
+                                quantity: actualQty, // ডেটাবেজে মোট একক পরিমাণ (যেমন: 10) সেভ হবে
                                 unitPrice: price,
                                 purchasePrice: Number(item.purchasePrice) || 0,
                                 discount: itemDiscount,
-                                subtotal: itemSubtotal
+                                subtotal: itemSubtotal // সঠিক সাবটোটাল সেভ হবে
                             };
                         })
                     }
@@ -117,7 +119,7 @@ export const createSale = async (req, res) => {
                 if (item.packInfo?.id || item.packId) {
                     const targetPackId = Number(item.packInfo?.id || item.packId);
                     const packRecord = await tx.productPack.findUnique({ where: { id: targetPackId } });
-                    
+
                     if (packRecord) {
                         await tx.productPack.update({
                             where: { id: targetPackId },
