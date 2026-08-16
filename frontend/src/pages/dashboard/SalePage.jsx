@@ -271,8 +271,6 @@ export default function SalePage() {
       customerName: customerSearch || "Walk-in Customer",
       items: cart.map((item) => {
         const isPackItem = Boolean(item.packInfo || item.selectedPackId);
-
-        // প্যাক সিলেক্ট করা থাকলে প্যাকের নিজস্ব purchasePrice, না থাকলে মেইন প্রোডাক্টের purchasePrice
         const itemPurchasePrice = isPackItem && item.packInfo?.purchasePrice
           ? Number(item.packInfo.purchasePrice)
           : Number(item.purchasePrice || 0);
@@ -282,8 +280,9 @@ export default function SalePage() {
           name: item.name,
           sku: item.sku || "",
           price: Number(item.price),
-          purchasePrice: itemPurchasePrice, // 👈 এখানে আপডেট করা হলো
-          quantity: Number(item.quantity) * Number(item.multiplier || 1),
+          purchasePrice: itemPurchasePrice,
+          quantity: Number(item.quantity),          // ✅ raw quantity, multiply নেই
+          multiplier: Number(item.multiplier || 1),  // ✅ আলাদা করে পাঠান
           isPack: isPackItem,
           packId: item.selectedPackId || null,
           packInfo: item.packInfo || null,

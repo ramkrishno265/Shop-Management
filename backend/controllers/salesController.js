@@ -79,18 +79,15 @@ export const createSale = async (req, res) => {
 
                     saleItems: {
                         create: items.map(item => {
-                            const cartQty = Number(item.quantity) || 1; // কার্টে ইউজার কয়টি প্যাক নিয়েছে (যেমন: ২)
-                            const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1); // প্যাকের multiplier (যেমন: ৫)
-                            
+                            const cartQty = Number(item.quantity) || 1; // এখন সত্যিই প্যাক/ইউনিট সংখ্যা
                             const price = Number(item.price) || 0;
                             const itemDiscount = Number(item.discount) || 0;
-                            
-                            // সাবটotal হবে: (প্যাকের দাম × প্যাকের সংখ্যা) - ডিসকাউন্ট
-                            const itemSubtotal = (price * cartQty) - itemDiscount;
+
+                            const itemSubtotal = (price * cartQty) - itemDiscount; // ✅ সঠিক
 
                             return {
                                 productId: Number(item.productId || item.id),
-                                quantity: cartQty, // ইনভয়েসে প্যাকের সংখ্যা (যেমন: ২) সেভ হবে, যাতে দেখতে এলোমেলো না লাগে
+                                quantity: cartQty, // ✅ ইনভয়েসে প্যাক সংখ্যাই সেভ হবে
                                 unitPrice: price,
                                 purchasePrice: Number(item.purchasePrice) || 0,
                                 discount: itemDiscount,
@@ -108,32 +105,29 @@ export const createSale = async (req, res) => {
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
                 const cartQty = Number(item.quantity) || 0;
-                const multiplier = Number(item.packInfo?.multiplier || item.multiplier || 1);
-                const totalDeduductQty = cartQty * multiplier; // মোট কত একক বা স্টক কমবে
+                const multiplier = Number(item.multiplier || item.packInfo?.multiplier || 1);
+                const totalDeduductQty = cartQty * multiplier; // ✅ শুধু একবারই multiply
 
-                // ১. যদি প্যাক প্রোডাক্ট হয় এবং ডেটাবেজে আলাদা 'pack' টেবিল থাকে, তবে প্যাকের নিজস্ব স্টক কমানো
                 if (item.packInfo?.id || item.packId) {
                     const targetPackId = Number(item.packInfo?.id || item.packId);
                     const packRecord = await tx.productPack.findUnique({ where: { id: targetPackId } });
-
                     if (packRecord) {
                         await tx.productPack.update({
                             where: { id: targetPackId },
                             data: {
-                                stock: Math.max(0, Number(packRecord.stock || 0) - cartQty) // প্যাকের সংখ্যা থেকে মাইনাস হবে (যেমন ২ প্যাক কমে যাওয়া)
+                                stock: Math.max(0, Number(packRecord.stock || 0) - cartQty) // ✅ প্যাক সংখ্যা কাটবে
                             }
                         });
                     }
                 }
 
-                // ২. মূল প্রোডাক্টের স্টক বা পরিমাণ কমানো
                 const product = await tx.product.findUnique({ where: { id: prodId } });
                 const currentQty = product ? Number(product.quantity || 0) : 0;
 
                 await tx.product.update({
                     where: { id: prodId },
                     data: {
-                        quantity: Math.max(0, currentQty - totalDeduductQty) // মূল স্টক থেকে মোট একক (যেমন ১০ কেজি) মাইনাস হবে
+                        quantity: Math.max(0, currentQty - totalDeduductQty) // ✅ সঠিক total unit deduction
                     }
                 });
             }
