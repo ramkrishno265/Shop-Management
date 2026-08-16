@@ -24,6 +24,10 @@ const ProductEntry = () => {
   const [formData, setFormData] = useState({
     name: "",
     category: "",
+    brand: "",
+    sku: "",
+    barcode: "",
+    expireDate: "",
     inventoryType: "standard", // 'standard' or 'pack'
     baseUnit: "Kg",
     description: "",
@@ -46,15 +50,12 @@ const ProductEntry = () => {
 
       setCategoryLoading(true);
       try {
-        const response = await fetch(
-          `${API_URL}/categories?shopId=${shopId}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+        const response = await fetch(`${API_URL}/categories?shopId=${shopId}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-        );
+        });
 
         const data = await response.json();
         if (response.ok) {
@@ -185,7 +186,7 @@ const ProductEntry = () => {
 
     if (!SpeechRecognition) {
       alert(
-        "আপনার ব্রাউজার ভয়েস রিকগনিশন সাপোর্ট করে না। দয়া করে Google Chrome বা Microsoft Edge ব্যবহার করুন।"
+        "আপনার ব্রাউজার ভয়েস রিকগনিশন সাপোর্ট করে না। দয়া করে Google Chrome বা Microsoft Edge ব্যবহার করুন।",
       );
       return;
     }
@@ -198,15 +199,15 @@ const ProductEntry = () => {
     recognition.onstart = () => {
       setIsListening(true);
       setVoiceStatus(
-        "শুনছি... বলুন (যেমন: '২৫ কেজি মিনিকেট চাল ১৮৫০ টাকা দরে ১০ বস্তা add করো')"
+        "শুনছি... বলুন (যেমন: '২৫ কেজি মিনিকেট চাল ১৮৫০ টাকা দরে ১০ বস্তা add করো')",
       );
     };
 
     recognition.onresult = (event) => {
       const speechText = event.results[0][0].transcript;
       setVoiceStatus(`শোনা গেছে: "${speechText}" — AI প্রসেস করছে...`);
-      
-       sendTextToAIBackend(speechText); 
+
+      sendTextToAIBackend(speechText);
     };
 
     recognition.onerror = (event) => {
@@ -338,6 +339,10 @@ const ProductEntry = () => {
       setFormData({
         name: "",
         category: "",
+        brand: "",
+        sku: "",
+        barcode: "",
+        expireDate: "",
         inventoryType: "standard",
         baseUnit: "Kg",
         description: "",
@@ -482,6 +487,69 @@ const ProductEntry = () => {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Brand Name Input */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                ব্র্যান্ডের নাম (Brand Name){" "}
+                <span className="text-xs font-normal text-slate-400">(ঐচ্ছিক)</span>
+              </label>
+              <input
+                type="text"
+                name="brand"
+                value={formData.brand || ""}
+                onChange={handleInputChange}
+                placeholder="যেমন: ACI, Square, Pran"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-slate-50/50 hover:bg-white text-slate-800 font-medium"
+              />
+            </div>
+
+            {/* SKU Input */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                এসকেইউ (SKU / Product Code){" "}
+                <span className="text-xs font-normal text-slate-400">(ঐচ্ছিক)</span>
+              </label>
+              <input
+                type="text"
+                name="sku"
+                value={formData.sku || ""}
+                onChange={handleInputChange}
+                placeholder="যেমন: PRD-001"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-slate-50/50 hover:bg-white text-slate-800 font-medium"
+              />
+            </div>
+
+            {/* Barcode Input */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                বারকোড (Barcode){" "}
+                <span className="text-xs font-normal text-slate-400">(ঐচ্ছিক)</span>
+              </label>
+              <input
+                type="text"
+                name="barcode"
+                value={formData.barcode || ""}
+                onChange={handleInputChange}
+                placeholder="বারকোড স্ক্যান করুন বা লিখুন..."
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-slate-50/50 hover:bg-white text-slate-800 font-medium"
+              />
+            </div>
+
+            {/* Expire Date Input */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                মেয়াদ উত্তীর্ণের তারিখ (Expire Date){" "}
+                <span className="text-xs font-normal text-slate-400">(ঐচ্ছিক)</span>
+              </label>
+              <input
+                type="date"
+                name="expireDate"
+                value={formData.expireDate || ""}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-slate-50/50 hover:bg-white text-slate-800 font-medium"
+              />
             </div>
           </div>
 

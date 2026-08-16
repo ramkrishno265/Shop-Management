@@ -114,13 +114,15 @@ model Category {
 model Product {
   id            Int      @id @default(autoincrement())
   name          String
+  brand         String?  
   sku           String?  @unique
   barcode       String?  @unique 
-  quantity      Float    @default(0) // মোট বেস ইউনিটে স্টক
+  expireDate    DateTime? @map("expire_date") 
+  quantity      Float    @default(0) 
   
   // নতুন যোগ করা ফিল্ডস (স্ট্যান্ডার্ড বা প্যাক ক্যাটাগরি হ্যান্ডেল করার জন্য)
-  inventoryType String   @default("standard") @map("inventory_type") // 'standard' বা 'pack'
-  baseUnit      String   @default("Pcs") @map("base_unit") // Pcs, Kg, Liter, Box ইত্যাদি
+  inventoryType String   @default("standard") @map("inventory_type")
+  baseUnit      String   @default("Pcs") @map("base_unit") 
   
   lowStockLimit Float    @default(5)
   purchasePrice Float    @default(0)
