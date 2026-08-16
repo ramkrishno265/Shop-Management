@@ -90,7 +90,7 @@ export const createSale = async (req, res) => {
 
                             // সাবটোটাল হিসাব করার সঠিক নিয়ম: (মোট একক পরিমাণ × প্রতি এককের দাম) অথবা (প্যাকের সংখ্যা × প্যাকের দাম)
                             // যেহেতু price variable এ প্যাকের নির্দিষ্ট দাম বা ইউনিট দাম আসে, তাই actualQty দিয়ে হিসাব করা নিরাপদ:
-                            const itemSubtotal = (price * actualQty) - itemDiscount;
+                            const itemSubtotal = (price * cartQty) - itemDiscount;
 
                             return {
                                 productId: Number(item.productId || item.id),
