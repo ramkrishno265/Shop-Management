@@ -34,6 +34,7 @@ model Shop {
   purchases        Purchase[]
   expenses         Expense[]
   customerPayments CustomerPayment[]
+  inventoryLayers  InventoryLayer[]
 
   @@map("shops")
 }
@@ -112,35 +113,34 @@ model Category {
 }
 
 model Product {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   name          String
   brand         String?  
-  sku           String?  @unique
-  barcode       String?  @unique 
+  sku           String?   @unique
+  barcode       String?   @unique 
   expireDate    DateTime? @map("expire_date") 
-  quantity      Float    @default(0) 
+  quantity      Float     @default(0) 
   
-  // নতুন যোগ করা ফিল্ডস (স্ট্যান্ডার্ড বা প্যাক ক্যাটাগরি হ্যান্ডেল করার জন্য)
-  inventoryType String   @default("standard") @map("inventory_type")
-  baseUnit      String   @default("Pcs") @map("base_unit") 
+  inventoryType String    @default("standard") @map("inventory_type")
+  baseUnit      String    @default("Pcs") @map("base_unit") 
   
-  lowStockLimit Float    @default(5)
-  purchasePrice Float    @default(0)
-  sellingPrice  Float    @default(0)
+  lowStockLimit Float     @default(5)
+  purchasePrice Float     @default(0)
+  sellingPrice  Float     @default(0)
   description   String?
-  status        String   @default("ACTIVE")
+  status        String    @default("ACTIVE")
 
   categoryId    Int?
   category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   shopId        Int
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  // রিলেশনসমূহ
-  packs         ProductPack[] // প্যাক বা মাল্টি-ইউনিট কনভার্শন অপশন
-  saleItems     SaleItem[]
-  purchaseItems PurchaseItem[]
-  stockLogs     StockLog[]
+  packs           ProductPack[] 
+  saleItems       SaleItem[]
+  purchaseItems   PurchaseItem[]
+  stockLogs       StockLog[]
+  inventoryLayers InventoryLayer[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -148,16 +148,14 @@ model Product {
   @@map("products")
 }
 
-// নতুন যোগ করা মডেল: প্যাক প্রোডাক্টের মাল্টিপল ভ্যারিয়েন্ট বা সাইজ (যেমন: ২৫ কেজি ব্যাগ, ১০ পিসের বক্স ইত্যাদি)
-// প্যাক প্রোডাক্টের মাল্টিপল ভ্যারিয়েন্ট বা সাইজ এবং স্টক সংরক্ষণ করার জন্য
 model ProductPack {
   id            Int      @id @default(autoincrement())
   productId     Int      @map("product_id")
   product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   
-  packName      String   @map("pack_name") // যেমন: "25 Kg Bag", "1 Box"
-  multiplier    Float    @map("multiplier") // বেস ইউনিটের সাপেক্ষে কত গুণ (যেমন: ২৫ কেজির জন্য ২৫)
-  stock         Float    @default(0) @map("stock") // 👈 নতুন যোগ করা হলো: প্যাক বা বস্তার নিজস্ব স্টক
+  packName      String   @map("pack_name") 
+  multiplier    Float    @map("multiplier") 
+  stock         Float    @default(0) @map("stock") 
   purchasePrice Float    @default(0) @map("purchase_price")
   sellingPrice  Float    @default(0) @map("selling_price")
 
@@ -165,6 +163,49 @@ model ProductPack {
   updatedAt     DateTime @updatedAt
 
   @@map("product_packs")
+}
+
+// -----------------------------------------------------------------
+// নতুন যোগ করা মডেল: FIFO ইনভেন্টরি লেয়ার বা ব্যাচ ট্র্যাকিং
+// -----------------------------------------------------------------
+model InventoryLayer {
+  id            Int       @id @default(autoincrement())
+  shopId        Int
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  productId     Int
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  purchaseId    Int?
+  purchase      Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+
+  initialQty    Float     // ক্রয়ের সময় মোট পরিমাণ (বেস ইউনিটে)
+  remainingQty  Float     // বর্তমানে এই লেয়ারে আর কতটুকু স্টক বাকি আছে
+  unitCost      Float     // প্রতি একক ক্রয়মূল্য (Purchase Price)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  saleDeductions SaleItemLayer[]
+
+  @@map("inventory_layers")
+}
+
+// কোন সেল আইটেম কোন ইনভেন্টরি লেয়ার থেকে কত পিস স্টক কাটল, তা ট্র্যাক করার জন্য
+model SaleItemLayer {
+  id               Int            @id @default(autoincrement())
+  saleItemId       Int
+  saleItem         SaleItem       @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+
+  inventoryLayerId Int
+  inventoryLayer   InventoryLayer @relation(fields: [inventoryLayerId], references: [id], onDelete: Cascade)
+
+  quantityTaken    Float          // এই লেয়ার থেকে কতটুকু পরিমাণ মাইনাস হয়েছে
+  unitCost         Float          // ওই লেয়ারের ক্রয়মূল্য স্ন্যাপশট
+
+  createdAt        DateTime       @default(now())
+
+  @@map("sale_item_layers")
 }
 
 model StockLog {
@@ -210,6 +251,7 @@ model Purchase {
   user           User?        @relation(fields: [createdBy], references: [id])
 
   purchaseItems  PurchaseItem[]
+  inventoryLayers InventoryLayer[]
 
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -237,20 +279,26 @@ model PurchaseItem {
 }
 
 model SaleItem {
-  id            Int      @id @default(autoincrement())
-  saleId        Int
-  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  id              Int      @id @default(autoincrement())
+  saleId          Int
+  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
-  productId     Int
-  product       Product  @relation(fields: [productId], references: [id])
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id])
 
-  quantity      Float
-  unitPrice     Float
-  purchasePrice Float
-  discount      Float    @default(0)
-  subtotal      Float
+  quantity        Float
+  unitPrice       Float
+  purchasePrice   Float
+  discount        Float    @default(0)
+  subtotal        Float
 
-  createdAt     DateTime @default(now())
+  // FIFO অনুযায়ী হিস্টোরিক্যাল কস্ট স্ন্যাপশট সংরক্ষণের জন্য নতুন ফিল্ডস
+  costPriceAtSale Float    @default(0) @map("cost_price_at_sale")
+  totalCost       Float    @default(0) @map("total_cost")
+
+  layerDeductions SaleItemLayer[]
+
+  createdAt       DateTime @default(now())
 
   @@map("sale_items")
 }
