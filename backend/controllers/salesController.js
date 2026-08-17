@@ -38,7 +38,7 @@ export const createSale = async (req, res) => {
 
         const userId = req.user?.id;
         if (!userId) {
-            return res.status(401).json({ success: false, message: "❌ অথেন্টিকেশন এরর: ইউজার আইডি পাওয়া যায়নি!" });
+            return res.status(401).json({ success: false, message: "❌ অথেন্টিকেশন এরর: ইউজার আইডি পাওয়া যায়নি!" });
         }
 
         const subTotalVal = Number(subTotal) || 0;
@@ -57,6 +57,7 @@ export const createSale = async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
+            // ১. প্রথমে সেলস রেকর্ড তৈরি করা (saleItems ছাড়া, কারণ FIFO কস্ট হিসাব করে আইটেমগুলো পরে দেওয়া হবে)
             const newSale = await tx.sale.create({
                 data: {
                     invoiceNo: generateInvoiceNo(),
@@ -76,38 +77,92 @@ export const createSale = async (req, res) => {
                     paymentMethod: paymentMethod || "CASH",
                     paymentStatus: finalPaymentStatus,
                     notes: notes || (customerName ? `Customer: ${customerName}` : null),
-
-                    saleItems: {
-                        create: items.map(item => {
-                            const cartQty = Number(item.quantity) || 1; // এখন সত্যিই প্যাক/ইউনিট সংখ্যা
-                            const price = Number(item.price) || 0;
-                            const itemDiscount = Number(item.discount) || 0;
-
-                            const itemSubtotal = (price * cartQty) - itemDiscount; // ✅ সঠিক
-
-                            return {
-                                productId: Number(item.productId || item.id),
-                                quantity: cartQty, // ✅ ইনভয়েসে প্যাক সংখ্যাই সেভ হবে
-                                unitPrice: price,
-                                purchasePrice: Number(item.purchasePrice) || 0,
-                                discount: itemDiscount,
-                                subtotal: itemSubtotal
-                            };
-                        })
-                    }
-                },
-                include: {
-                    saleItems: true
                 }
             });
 
-            // স্টক ও প্যাক স্টক আপডেট করা
+            const saleItemsData = [];
+
+            // ২. প্রতিটি কার্ট আইটেমের জন্য FIFO লজিক চালিয়ে স্টক কাটা এবং কস্ট হিসাব করা
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
-                const cartQty = Number(item.quantity) || 0;
+                const cartQty = Number(item.quantity) || 1; // প্যাক বা ইউনিট সংখ্যা
                 const multiplier = Number(item.multiplier || item.packInfo?.multiplier || 1);
-                const totalDeduductQty = cartQty * multiplier; // ✅ শুধু একবারই multiply
+                const totalDeductQty = cartQty * multiplier; // মোট প্রকৃত ইউনিট পরিমাণ
 
+                const sellingPrice = Number(item.price) || 0;
+                const itemDiscount = Number(item.discount) || 0;
+                const itemSubtotal = (sellingPrice * cartQty) - itemDiscount;
+
+                // ক) FIFO নিয়মে পুরোনো লেয়ারগুলো থেকে স্টক কাটার জন্য ফেচ করা
+                const activeLayers = await tx.inventoryLayer.findMany({
+                    where: {
+                        productId: prodId,
+                        remainingQty: { gt: 0 }
+                    },
+                    orderBy: { createdAt: 'asc' } // সবচেয়ে পুরোনো লেয়ার আগে আসবে
+                });
+
+                let qtyNeeded = totalDeductQty;
+                let itemTotalCost = 0;
+                const layerDeductionsToCreate = [];
+
+                for (const layer of activeLayers) {
+                    if (qtyNeeded <= 0) break;
+
+                    const availableInLayer = Number(layer.remainingQty);
+                    const takeQty = Math.min(qtyNeeded, availableInLayer);
+
+                    // লেয়ারের বাকি স্টক কমানো
+                    await tx.inventoryLayer.update({
+                        where: { id: layer.id },
+                        data: {
+                            remainingQty: availableInLayer - takeQty
+                        }
+                    });
+
+                    layerDeductionsToCreate.push({
+                        inventoryLayerId: layer.id,
+                        quantityTaken: takeQty,
+                        unitCost: layer.unitCost
+                    });
+
+                    itemTotalCost += (takeQty * Number(layer.unitCost));
+                    qtyNeeded -= takeQty;
+                }
+
+                // যদি লেয়ারে পর্যাপ্ত স্টক না থাকে, তবে ফলব্যাক হিসেবে প্রোডাক্টের বর্তমান purchasePrice ধরা হবে
+                if (qtyNeeded > 0) {
+                    const fallbackPrice = Number(item.purchasePrice) || 0;
+                    itemTotalCost += (qtyNeeded * fallbackPrice);
+                }
+
+                const avgCostPerUnit = totalDeductQty > 0 ? (itemTotalCost / totalDeductQty) : 0;
+
+                // খ) SaleItem এবং FIFO Layer Deductions একসাথে তৈরি করার ডেটা প্রস্তুত করা
+                const createdSaleItem = await tx.saleItem.create({
+                    data: {
+                        saleId: newSale.id,
+                        productId: prodId,
+                        quantity: cartQty,
+                        unitPrice: sellingPrice,
+                        purchasePrice: Number(item.purchasePrice) || 0,
+                        discount: itemDiscount,
+                        subtotal: itemSubtotal,
+                        costPriceAtSale: avgCostPerUnit, // FIFO অনুযায়ী ঐ মুহূর্তের ইউনিট কস্ট স্ন্যাপশট
+                        totalCost: itemTotalCost,        // মোট COGS
+                        layerDeductions: {
+                            create: layerDeductionsToCreate.map(d => ({
+                                inventoryLayerId: d.inventoryLayerId,
+                                quantityTaken: d.quantityTaken,
+                                unitCost: d.unitCost
+                            }))
+                        }
+                    }
+                });
+
+                saleItemsData.push(createdSaleItem);
+
+                // গ) ProductPack স্টক আপডেট (যদি প্যাক থাকে)
                 if (item.packInfo?.id || item.packId) {
                     const targetPackId = Number(item.packInfo?.id || item.packId);
                     const packRecord = await tx.productPack.findUnique({ where: { id: targetPackId } });
@@ -115,29 +170,34 @@ export const createSale = async (req, res) => {
                         await tx.productPack.update({
                             where: { id: targetPackId },
                             data: {
-                                stock: Math.max(0, Number(packRecord.stock || 0) - cartQty) // ✅ প্যাক সংখ্যা কাটবে
+                                stock: Math.max(0, Number(packRecord.stock || 0) - cartQty)
                             }
                         });
                     }
                 }
 
-                const product = await tx.product.findUnique({ where: { id: prodId } });
-                const currentQty = product ? Number(product.quantity || 0) : 0;
+                // ঘ) মূল Product টেবিলের মেইন স্টক কমানো
+                const productRecord = await tx.product.findUnique({ where: { id: prodId } });
+                const currentQty = productRecord ? Number(productRecord.quantity || 0) : 0;
 
                 await tx.product.update({
                     where: { id: prodId },
                     data: {
-                        quantity: Math.max(0, currentQty - totalDeduductQty) // ✅ সঠিক total unit deduction
+                        quantity: Math.max(0, currentQty - totalDeductQty)
                     }
                 });
             }
 
-            return newSale;
+            // সম্পূর্ণ সেল রেকর্ড রিটার্ন করার সময় saleItems সহ রিটার্ন করা
+            return {
+                ...newSale,
+                saleItems: saleItemsData
+            };
         });
 
         return res.status(201).json({
             success: true,
-            message: "সেল এবং ইনভয়েস সফলভাবে তৈরি হয়েছে!",
+            message: "সেল এবং ইনভয়েস FIFO লেয়ার অনুযায়ী সফলভাবে তৈরি হয়েছে!",
             invoiceNo: result.invoiceNo,
             data: result
         });
@@ -146,18 +206,16 @@ export const createSale = async (req, res) => {
         console.error("Sale transaction critical error details:", error);
         return res.status(500).json({
             success: false,
-            message: `সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে: ${error.message}`, // মূল এরর মেসেজ সহ পাঠানো
+            message: `সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে: ${error.message}`,
             errorStack: error.stack
         });
     }
 };
 
-
 export const getSales = async (req, res) => {
     try {
-        const { shopId } = req.query; // URL থেকে shopId নিতে পারেন (যেমন: /sales?shopId=1)
+        const { shopId } = req.query; 
 
-        // কুয়েরিতে শপ আইডি না থাকলে লগইন করা ইউজারের shopId বা টোকেন থেকে নিতে পারেন
         const filterShopId = shopId ? Number(shopId) : (req.user?.shopId ? Number(req.user.shopId) : undefined);
 
         const sales = await prisma.sale.findMany({
@@ -166,12 +224,13 @@ export const getSales = async (req, res) => {
                 customer: true,
                 saleItems: {
                     include: {
-                        product: true // প্রোডাক্টের নাম বা ডিটেইলস সহ দেখতে চাইলে
+                        product: true,
+                        layerDeductions: true // FIFO লেয়ার ডিডাকশন দেখতে চাইলে
                     }
                 }
             },
             orderBy: {
-                createdAt: 'desc' // নতুন সেলগুলো সবার উপরে দেখানোর জন্য
+                createdAt: 'desc'
             }
         });
 
@@ -190,7 +249,6 @@ export const getSales = async (req, res) => {
         });
     }
 };
-
 
 export const getSalesSummary = async (req, res) => {
     try {
@@ -225,18 +283,14 @@ export const getSalesSummary = async (req, res) => {
             };
         }
 
-        // Prisma মডেলে সাধারণত singular নাম (prisma.sale) হয়, আপনার প্রজেক্ট অনুযায়ী 'sale' বা 'sales' দিন
-        const sales = await prisma.sales.findMany({
+        // আপনার প্রিজমা স্কিমা অনুযায়ী মডেলের নাম 'sale' বা 'sales' হতে পারে (এখানে 'sale' ব্যবহার করা হয়েছে)
+        const sales = await prisma.sale.findMany({
             where: {
                 shopId: Number(shopId),
                 ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
             },
             include: {
-                saleItems: {
-                    include: {
-                        product: true // প্রোডাক্ট টেবিল যুক্ত করা হলো যাতে ক্রয়মূল্য ব্যাকআপ হিসেবে পাওয়া যায়
-                    }
-                },
+                saleItems: true,
             },
         });
 
@@ -246,24 +300,29 @@ export const getSalesSummary = async (req, res) => {
         let totalProfit = 0;
 
         sales.forEach((sale) => {
+            totalSales += Number(sale.grandTotal) || 0;
+
+            if (sale.paymentMethod === 'CASH') {
+                cashSales += Number(sale.grandTotal) || 0;
+            } else {
+                digitalSales += Number(sale.grandTotal) || 0;
+            }
+
             if (sale.saleItems && Array.isArray(sale.saleItems)) {
                 sale.saleItems.forEach((item) => {
-                    const qty = Number(item.quantity) || 0;
-                    const unitPrice = Number(item.unitPrice) || 0;
-
-                    // অগ্রাধিকার: ১. SaleItem এর নিজস্ব purchasePrice, ২. না থাকলে Product টেবিলের বর্তমান purchasePrice
-                    const purchasePrice = Number(item.purchasePrice) || Number(item.product?.purchasePrice) || 0;
+                    const itemSubtotal = Number(item.subtotal) || 0;
+                    const itemTotalCost = Number(item.totalCost) || 0; // FIFO অনুযায়ী সঠিক মোট কস্ট (COGS)
                     const discount = Number(item.discount) || 0;
 
-                    // সঠিক প্রফিট সূত্র: ((বিক্রয়মূল্য - ক্রয়মূল্য) * পরিমাণ) - ডিসকাউন্ট
-                    const itemProfit = ((unitPrice - purchasePrice) * qty) - discount;
+                    // নিখুঁত প্রফিট সূত্র: সাবটোটাল - মোট FIFO কস্ট
+                    const itemProfit = itemSubtotal - itemTotalCost;
                     totalProfit += itemProfit;
                 });
             }
         });
 
         return res.status(200).json({
-            success: { success: true },
+            success: true,
             data: {
                 totalSales,
                 cashSales,
