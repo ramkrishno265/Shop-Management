@@ -164,7 +164,7 @@ const InventoryPage = () => {
 
           {/* Card 4: Out of Stock */}
           <div
-            onClick={() => navigate("/out_of_stock")}
+            onClick={() => navigate("/stock_low")}
             className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between cursor-pointer hover:shadow-lg hover:border-rose-300 transition-all duration-200"
           >
             <div>

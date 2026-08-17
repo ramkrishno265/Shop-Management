@@ -401,11 +401,10 @@ const ProductEntry = () => {
             <button
               type="button"
               onClick={startVoiceRecognition}
-              className={`px-4 py-3 rounded-2xl font-bold text-sm flex items-center gap-2.5 transition shadow-lg ${
-                isListening
-                  ? "bg-rose-500 text-white animate-pulse shadow-rose-500/50"
-                  : "bg-white text-indigo-700 hover:bg-indigo-50 shadow-black/10"
-              }`}
+              className={`px-4 py-3 rounded-2xl font-bold text-sm flex items-center gap-2.5 transition shadow-lg ${isListening
+                ? "bg-rose-500 text-white animate-pulse shadow-rose-500/50"
+                : "bg-white text-indigo-700 hover:bg-indigo-50 shadow-black/10"
+                }`}
             >
               <span>🎙️</span>{" "}
               {isListening ? "শোনা হচ্ছে..." : "মুখে বলুন (AI Voice Add)"}
@@ -581,11 +580,10 @@ const ProductEntry = () => {
                 onClick={() =>
                   setFormData({ ...formData, inventoryType: "standard" })
                 }
-                className={`cursor-pointer p-4 rounded-2xl border-2 transition-all flex items-start gap-3.5 ${
-                  formData.inventoryType === "standard"
-                    ? "border-indigo-600 bg-indigo-50/40 shadow-md shadow-indigo-100"
-                    : "border-slate-200 hover:border-slate-300 bg-white"
-                }`}
+                className={`cursor-pointer p-4 rounded-2xl border-2 transition-all flex items-start gap-3.5 ${formData.inventoryType === "standard"
+                  ? "border-indigo-600 bg-indigo-50/40 shadow-md shadow-indigo-100"
+                  : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
               >
                 <div
                   className={`p-3 rounded-xl ${formData.inventoryType === "standard" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" : "bg-slate-100 text-slate-600"}`}
@@ -606,11 +604,10 @@ const ProductEntry = () => {
                 onClick={() =>
                   setFormData({ ...formData, inventoryType: "pack" })
                 }
-                className={`cursor-pointer p-4 rounded-2xl border-2 transition-all flex items-start gap-3.5 ${
-                  formData.inventoryType === "pack"
-                    ? "border-indigo-600 bg-indigo-50/40 shadow-md shadow-indigo-100"
-                    : "border-slate-200 hover:border-slate-300 bg-white"
-                }`}
+                className={`cursor-pointer p-4 rounded-2xl border-2 transition-all flex items-start gap-3.5 ${formData.inventoryType === "pack"
+                  ? "border-indigo-600 bg-indigo-50/40 shadow-md shadow-indigo-100"
+                  : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
               >
                 <div
                   className={`p-3 rounded-xl ${formData.inventoryType === "pack" ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" : "bg-slate-100 text-slate-600"}`}
