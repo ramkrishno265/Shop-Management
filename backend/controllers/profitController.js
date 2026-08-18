@@ -7,7 +7,7 @@ export const getProfitReport = async (req, res) => {
     const { type, startDate, endDate } = req.query;
 
     const where = {
-      shopId,
+      shopId: Number(shopId),
     };
 
     // Today
@@ -40,17 +40,24 @@ export const getProfitReport = async (req, res) => {
     });
 
     let totalSale = 0;
-    let totalPurchase = 0;
+    let totalPurchase = 0; // এটি আসলে Total COGS (Cost of Goods Sold)
     let totalProfit = 0;
 
     sales.forEach((sale) => {
-      sale.saleItems.forEach((item) => {
-        const saleAmount = item.unitPrice * item.quantity;
-        const purchaseAmount = item.purchasePrice * item.quantity;
+      // যদি সেলস লেভেলে কোনো ডিসকাউন্ট থাকে, তা সেল অ্যামাউন্ট থেকে বাদ দেওয়া যেতে পারে
+      totalSale += Number(sale.grandTotal) || 0;
 
-        totalSale += saleAmount;
-        totalPurchase += purchaseAmount;
-        totalProfit += saleAmount - purchaseAmount;
+      sale.saleItems.forEach((item) => {
+        const itemSubtotal = Number(item.subtotal) || (Number(item.unitPrice) * Number(item.quantity));
+        
+        // FIFO অনুযায়ী সঠিক মোট কস্ট (যদি item.totalCost না থাকে, তবে ফলব্যাক হিসেবে purcahsePrice ব্যবহার হবে)
+        const itemCost = Number(item.totalCost) || (Number(item.purchasePrice) * Number(item.quantity));
+        
+        totalPurchase += itemCost;
+
+        // নিখুঁত প্রফিট: আইটেমের সাবটোটাল থেকে FIFO কস্ট বাদ দেওয়া
+        const itemProfit = itemSubtotal - itemCost;
+        totalProfit += itemProfit;
       });
     });
 
@@ -58,12 +65,12 @@ export const getProfitReport = async (req, res) => {
       success: true,
       type: type || "custom",
       totalInvoice: sales.length,
-      totalSale,
-      totalPurchase,
-      totalProfit,
+      totalSale: Math.round(totalSale * 100) / 100,
+      totalPurchase: Math.round(totalPurchase * 100) / 100, // Total COGS
+      totalProfit: Math.round(totalProfit * 100) / 100,
     });
   } catch (err) {
-    console.log(err);
+    console.log("Profit Report Error:", err);
 
     return res.status(500).json({
       success: false,

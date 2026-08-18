@@ -57,7 +57,23 @@ export const createSale = async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
-            // ১. প্রথমে সেলস রেকর্ড তৈরি করা (saleItems ছাড়া, কারণ FIFO কস্ট হিসাব করে আইটেমগুলো পরে দেওয়া হবে)
+            // ১. স্টক চেক করে নেওয়া যে পর্যাপ্ত পণ্য আছে কি না (Double validation to prevent overselling)
+            for (let item of items) {
+                const prodId = Number(item.productId || item.id);
+                const cartQty = Number(item.quantity) || 1;
+                const multiplier = Number(item.multiplier || item.packInfo?.multiplier || 1);
+                const totalDeductQty = cartQty * multiplier;
+
+                const productRecord = await tx.product.findUnique({ where: { id: prodId } });
+                if (!productRecord) {
+                    throw new Error(`প্রোডাক্ট আইডি ${prodId} পাওয়া যায়নি!`);
+                }
+                if (Number(productRecord.quantity || 0) < totalDeductQty) {
+                    throw new Error(`"${productRecord.name}" পণ্যের পর্যাপ্ত স্টক নেই! বর্তমান স্টক: ${productRecord.quantity}`);
+                }
+            }
+
+            // ২. সেলস রেকর্ড তৈরি করা
             const newSale = await tx.sale.create({
                 data: {
                     invoiceNo: generateInvoiceNo(),
@@ -82,24 +98,23 @@ export const createSale = async (req, res) => {
 
             const saleItemsData = [];
 
-            // ২. প্রতিটি কার্ট আইটেমের জন্য FIFO লজিক চালিয়ে স্টক কাটা এবং কস্ট হিসাব করা
+            // ৩. FIFO লজিক ও স্টক আপডেট
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
-                const cartQty = Number(item.quantity) || 1; // প্যাক বা ইউনিট সংখ্যা
+                const cartQty = Number(item.quantity) || 1;
                 const multiplier = Number(item.multiplier || item.packInfo?.multiplier || 1);
-                const totalDeductQty = cartQty * multiplier; // মোট প্রকৃত ইউনিট পরিমাণ
+                const totalDeductQty = cartQty * multiplier;
 
                 const sellingPrice = Number(item.price) || 0;
                 const itemDiscount = Number(item.discount) || 0;
                 const itemSubtotal = (sellingPrice * cartQty) - itemDiscount;
 
-                // ক) FIFO নিয়মে পুরোনো লেয়ারগুলো থেকে স্টক কাটার জন্য ফেচ করা
                 const activeLayers = await tx.inventoryLayer.findMany({
                     where: {
                         productId: prodId,
                         remainingQty: { gt: 0 }
                     },
-                    orderBy: { createdAt: 'asc' } // সবচেয়ে পুরোনো লেয়ার আগে আসবে
+                    orderBy: { createdAt: 'asc' }
                 });
 
                 let qtyNeeded = totalDeductQty;
@@ -112,7 +127,6 @@ export const createSale = async (req, res) => {
                     const availableInLayer = Number(layer.remainingQty);
                     const takeQty = Math.min(qtyNeeded, availableInLayer);
 
-                    // লেয়ারের বাকি স্টক কমানো
                     await tx.inventoryLayer.update({
                         where: { id: layer.id },
                         data: {
@@ -130,7 +144,6 @@ export const createSale = async (req, res) => {
                     qtyNeeded -= takeQty;
                 }
 
-                // যদি লেয়ারে পর্যাপ্ত স্টক না থাকে, তবে ফলব্যাক হিসেবে প্রোডাক্টের বর্তমান purchasePrice ধরা হবে
                 if (qtyNeeded > 0) {
                     const fallbackPrice = Number(item.purchasePrice) || 0;
                     itemTotalCost += (qtyNeeded * fallbackPrice);
@@ -138,7 +151,6 @@ export const createSale = async (req, res) => {
 
                 const avgCostPerUnit = totalDeductQty > 0 ? (itemTotalCost / totalDeductQty) : 0;
 
-                // খ) SaleItem এবং FIFO Layer Deductions একসাথে তৈরি করার ডেটা প্রস্তুত করা
                 const createdSaleItem = await tx.saleItem.create({
                     data: {
                         saleId: newSale.id,
@@ -148,8 +160,8 @@ export const createSale = async (req, res) => {
                         purchasePrice: Number(item.purchasePrice) || 0,
                         discount: itemDiscount,
                         subtotal: itemSubtotal,
-                        costPriceAtSale: avgCostPerUnit, // FIFO অনুযায়ী ঐ মুহূর্তের ইউনিট কস্ট স্ন্যাপশট
-                        totalCost: itemTotalCost,        // মোট COGS
+                        costPriceAtSale: avgCostPerUnit,
+                        totalCost: itemTotalCost,
                         layerDeductions: {
                             create: layerDeductionsToCreate.map(d => ({
                                 inventoryLayerId: d.inventoryLayerId,
@@ -162,7 +174,7 @@ export const createSale = async (req, res) => {
 
                 saleItemsData.push(createdSaleItem);
 
-                // গ) ProductPack স্টক আপডেট (যদি প্যাক থাকে)
+                // প্যাক স্টক আপডেট
                 if (item.packInfo?.id || item.packId) {
                     const targetPackId = Number(item.packInfo?.id || item.packId);
                     const packRecord = await tx.productPack.findUnique({ where: { id: targetPackId } });
@@ -176,7 +188,7 @@ export const createSale = async (req, res) => {
                     }
                 }
 
-                // ঘ) মূল Product টেবিলের মেইন স্টক কমানো
+                // মূল Product টেবিলের স্টক কমানো
                 const productRecord = await tx.product.findUnique({ where: { id: prodId } });
                 const currentQty = productRecord ? Number(productRecord.quantity || 0) : 0;
 
@@ -188,7 +200,6 @@ export const createSale = async (req, res) => {
                 });
             }
 
-            // সম্পূর্ণ সেল রেকর্ড রিটার্ন করার সময় saleItems সহ রিটার্ন করা
             return {
                 ...newSale,
                 saleItems: saleItemsData
@@ -197,7 +208,7 @@ export const createSale = async (req, res) => {
 
         return res.status(201).json({
             success: true,
-            message: "সেল এবং ইনভয়েস FIFO লেয়ার অনুযায়ী সফলভাবে তৈরি হয়েছে!",
+            message: "সেল এবং ইনভয়েস FIFO লেয়ার অনুযায়ী সফলভাবে তৈরি হয়েছে!",
             invoiceNo: result.invoiceNo,
             data: result
         });
@@ -206,8 +217,7 @@ export const createSale = async (req, res) => {
         console.error("Sale transaction critical error details:", error);
         return res.status(500).json({
             success: false,
-            message: `সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে: ${error.message}`,
-            errorStack: error.stack
+            message: `সার্ভারে সেল প্রসেস করতে সমস্যা হয়েছে: ${error.message}`
         });
     }
 };
