@@ -53,16 +53,13 @@ export const createProduct = async (req, res) => {
       lowStockLimit
     } = req.body;
 
-    // শপ আইডি নির্ধারণ
     const finalShopId = validateShopAccess(req.user, requestShopId);
     if (!finalShopId) return res.status(403).json({ message: "Access denied or Invalid Shop ID." });
 
-    // মৌলিক ভ্যালিডেশন
     if (!name || !category) {
       return res.status(400).json({ message: "Product name and category are required." });
     }
 
-    // ক্যাটাগরি নাম সুরক্ষিতভাবে বের করা
     let categoryName = '';
     if (typeof category === 'string') {
       categoryName = category.trim();
@@ -74,7 +71,6 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Invalid category format." });
     }
 
-    // ক্যাটাগরি হ্যান্ডলিং
     let dbCategory = await prisma.category.findFirst({
       where: {
         name: { equals: categoryName, mode: 'insensitive' },
@@ -98,7 +94,6 @@ export const createProduct = async (req, res) => {
     const type = inventoryType || 'standard';
     const unitVal = baseUnit || 'Pcs';
 
-    // ফ্রন্টএন্ড থেকে packs অবজেক্ট বা অ্যারে আকারে আসতে পারে, সেফটি চেক
     let parsedPacks = [];
     if (type === 'pack') {
       if (Array.isArray(packs)) {
@@ -108,25 +103,21 @@ export const createProduct = async (req, res) => {
       }
     }
 
-    // স্টক এবং প্রাইস ক্যালকুলেশন লজিক
     if (type === 'standard' && standardData) {
       purchasePrice = parseFloat(standardData.purchasePrice) || 0;
       sellingPrice = parseFloat(standardData.sellingPrice) || 0;
       quantity = parseFloat(standardData.stock) || 0;
     } else if (type === 'pack' && parsedPacks.length > 0) {
-      // প্যাকের স্টক এবং মাল্টিপ্লায়ার গুণ করে মোট বেস ইউনিট স্টক হিসাব করা
       quantity = parsedPacks.reduce((sum, p) => {
         const packStock = parseFloat(p.stock) || 0;
         const multiplier = parseFloat(p.multiplier) || 1;
         return sum + (packStock * multiplier);
       }, 0);
 
-      // প্রথম প্যাকের দাম ডিফল্ট প্রাইস হিসেবে ধরতে পারেন (অথবা ০ রাখতে পারেন)
       purchasePrice = parseFloat(parsedPacks[0].purchasePrice) || 0;
       sellingPrice = parseFloat(parsedPacks[0].sellingPrice) || 0;
     }
 
-    // ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক একসাথে সেভ করা
     const newProduct = await prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
@@ -135,7 +126,7 @@ export const createProduct = async (req, res) => {
           barcode: barcode ? barcode.trim() : null,
           inventoryType: type,
           baseUnit: unitVal,
-          quantity, // 👈 এখন প্যাকগুলোর গুণফল হিসাব করে টোটাল স্টক এখানে সেভ হবে
+          quantity,
           purchasePrice,
           sellingPrice,
           lowStockLimit: lowStockLimit ? parseFloat(lowStockLimit) : 5,
@@ -146,7 +137,6 @@ export const createProduct = async (req, res) => {
         }
       });
 
-      // প্যাক ডাটা এবং প্যাক স্টক ইনসার্ট করা
       if (type === 'pack' && parsedPacks.length > 0) {
         const packDataToInsert = parsedPacks.map(pack => ({
           productId: product.id,
@@ -162,12 +152,44 @@ export const createProduct = async (req, res) => {
         });
       }
 
+      if (quantity > 0) {
+        if (type === 'standard') {
+          await tx.inventoryLayer.create({
+            data: {
+              productId: product.id,
+              initialQty: quantity,
+              remainingQty: quantity,
+              unitCost: purchasePrice
+            }
+          });
+        } else if (type === 'pack') {
+          for (const pack of parsedPacks) {
+            const packStock = parseFloat(pack.stock) || 0;
+            const multiplier = parseFloat(pack.multiplier) || 1;
+            const totalBaseUnits = packStock * multiplier;
+            const packPurchasePrice = parseFloat(pack.purchasePrice) || 0;
+            const unitCostPerBase = multiplier > 0 ? (packPurchasePrice / multiplier) : packPurchasePrice;
+
+            if (totalBaseUnits > 0) {
+              await tx.inventoryLayer.create({
+                data: {
+                  productId: product.id,
+                  initialQty: totalBaseUnits,
+                  remainingQty: totalBaseUnits,
+                  unitCost: unitCostPerBase
+                }
+              });
+            }
+          }
+        }
+      }
+
       return product;
     });
 
     const createdProductWithRelations = await prisma.product.findUnique({
       where: { id: newProduct.id },
-      include: { category: true, packs: true }
+      include: { category: true, packs: true, inventoryLayers: true }
     });
 
     res.status(201).json(createdProductWithRelations);
