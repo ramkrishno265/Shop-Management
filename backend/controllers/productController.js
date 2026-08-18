@@ -152,10 +152,12 @@ export const createProduct = async (req, res) => {
         });
       }
 
+      // InventoryLayer এ সঠিক ডেটা ইনসার্ট করা (shopId সহ)
       if (quantity > 0) {
         if (type === 'standard') {
           await tx.inventoryLayer.create({
             data: {
+              shopId: finalShopId, // 👈 স্কিমা অনুযায়ী শপ আইডি যুক্ত করা হলো
               productId: product.id,
               initialQty: quantity,
               remainingQty: quantity,
@@ -173,6 +175,7 @@ export const createProduct = async (req, res) => {
             if (totalBaseUnits > 0) {
               await tx.inventoryLayer.create({
                 data: {
+                  shopId: finalShopId, // 👈 স্কিমা অনুযায়ী শপ আইডি যুক্ত করা হলো
                   productId: product.id,
                   initialQty: totalBaseUnits,
                   remainingQty: totalBaseUnits,
