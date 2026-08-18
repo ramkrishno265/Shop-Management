@@ -25,11 +25,29 @@ export const getProducts = async (req, res) => {
       include: {
         category: true,
         packs: true,
+        inventoryLayers: {
+          where: { 
+            remainingQty: { gt: 0 },
+            shopId: shopId // 👈 এখানে অবশ্যই shopId ফিল্টার দিতে হবে
+          },
+          orderBy: { createdAt: "asc" }, // সবচেয়ে পুরোনো লেয়ার আগে
+          take: 1, // ওই নির্দিষ্ট শপের বর্তমান লেয়ারটি নেবে
+        },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    res.status(200).json(products);
+    // প্রোডাক্টের মূল purchasePrice কে active layer এর unitCost দিয়ে ওভাররাইট করা
+    const formattedProducts = products.map((product) => {
+      const activeLayer = product.inventoryLayers?.[0];
+      return {
+        ...product,
+        // এখন এই দামটি শুধুমাত্র ওই শপের FIFO লেয়ার থেকেই আসবে
+        purchasePrice: activeLayer ? activeLayer.unitCost : product.purchasePrice,
+      };
+    });
+
+    res.status(200).json(formattedProducts);
   } catch (error) {
     console.error("Error fetching products:", error);
     res.status(500).json({ message: "Error fetching products", error: error.message });
