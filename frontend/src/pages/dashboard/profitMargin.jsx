@@ -131,8 +131,12 @@ const ShopDashboard = () => {
     fetchDashboardData();
   }, [filterType, startDate, endDate]);
 
+  const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
+
   const handleAddOrUpdateExpense = async (e) => {
     e.preventDefault();
+
+    if (isSubmittingExpense) return; // ✅ ইতিমধ্যে প্রসেস হচ্ছে, দ্বিতীয় কল আটকানো
 
     if (!expenseAmount) {
       alert("দয়া করে টাকার পরিমাণ লিখুন");
@@ -140,8 +144,9 @@ const ShopDashboard = () => {
     }
 
     try {
-      const token = localStorage.getItem("token");
+      setIsSubmittingExpense(true); // ✅ লক করা
 
+      const token = localStorage.getItem("token");
       const headers = {
         Authorization: `Bearer ${token}`,
       };
@@ -162,7 +167,6 @@ const ShopDashboard = () => {
         setEditingExpenseId(null);
       } else {
         // Add Expense
-        // এখানে shopId দেওয়ার দরকার নেই
         const expensePayload = {
           category: expenseCategory,
           amount: Number(expenseAmount),
@@ -183,11 +187,12 @@ const ShopDashboard = () => {
       fetchDashboardData();
     } catch (error) {
       console.error("Error saving expense:", error);
-
       alert(
         error.response?.data?.message ||
-          "কার্যক্রমটি সম্পন্ন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+        "কার্যক্রমটি সম্পন্ন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
       );
+    } finally {
+      setIsSubmittingExpense(false); // ✅ লক খুলে দেওয়া, সফল হোক বা fail হোক
     }
   };
 
@@ -401,11 +406,19 @@ const ShopDashboard = () => {
 
             <button
               type="submit"
-              className={`w-full text-white font-medium py-2.5 rounded-xl text-sm transition-colors shadow-sm ${editingExpenseId ? "bg-amber-600 hover:bg-amber-700 shadow-amber-200" : "bg-blue-600 hover:bg-blue-700 shadow-blue-200"}`}
+              disabled={isSubmittingExpense}
+              className={`w-full text-white font-medium py-2.5 rounded-xl text-sm transition-colors shadow-sm ${isSubmittingExpense
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : editingExpenseId
+                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-200"
+                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
+                }`}
             >
-              {editingExpenseId
-                ? "খরচ আপডেট করুন (Update Expense)"
-                : "খরচ যোগ করুন (Save Expense)"}
+              {isSubmittingExpense
+                ? "⏳ প্রসেসিং হচ্ছে..."
+                : editingExpenseId
+                  ? "খরচ আপডেট করুন (Update Expense)"
+                  : "খরচ যোগ করুন (Save Expense)"}
             </button>
 
             {editingExpenseId && (
