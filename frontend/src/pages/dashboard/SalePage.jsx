@@ -897,9 +897,11 @@ return (
           <button
             type="button"
             onClick={handleCheckout}
-            className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-2"
+            disabled={isSubmitting}
+            className={`w-full mt-2 py-3 font-bold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-2 text-white ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500'
+              }`}
           >
-            ✅ Proceed to Invoice & Print
+            {isSubmitting ? '⏳ প্রসেসিং হচ্ছে...' : '✅ Proceed to Invoice & Print'}
           </button>
         </div>
       </div>
