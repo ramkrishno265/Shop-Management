@@ -4,11 +4,8 @@ import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// শপের তথ্য দেখার রাউট
+// এখানে :id আবশ্যিক, যাতে ফ্রন্টএন্ড থেকে আইডি পাঠানো যায়
 router.get('/:id', protect, getShopProfile);
-
-// শপের তথ্য আপডেট করার রাউট
 router.put('/:id', protect, updateShopProfile);
 
-// ES Module নিয়মে এক্সপোর্ট
 export default router;

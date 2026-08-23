@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { HiOutlineBuildingStorefront, HiOutlineReceiptPercent, HiOutlinePhoto, HiOutlineCheckBadge, HiOutlineShieldCheck, HiOutlineCreditCard } from 'react-icons/hi2';
+import { HiOutlineBuildingStorefront, HiOutlinePhoto, HiOutlineCheckBadge } from 'react-icons/hi2';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// আপনার ব্যাকএন্ডের বেস ইউআরএল (এখানে শেষের দিকে /api রাখবেন না)
+const API_URL = import.meta.env.VITE_API_URL || 'https://shop-management-827d.onrender.com';
 
 export default function ShopProfile() {
   const [shopData, setShopData] = useState({
@@ -24,23 +25,18 @@ export default function ShopProfile() {
   const [fetching, setFetching] = useState(true);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // 🔐 লোকালস্টোরেজ থেকে টোকেন এবং ইউজার/শপ আইডি বের করে নেওয়া
-  // (আপনার প্রজেক্টে যে নামে সেভ করা আছে, যেমন: userInfo, token ইত্যাদি সেভাবে অ্যাডজাস্ট করে নেবেন)
   const token = localStorage.getItem('token') || ''; 
   const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-  
-  // ইউজার অবজেক্ট বা স্টেট থেকে শপ আইডি নেওয়া (যদি userInfo.shopId বা userInfo.id থাকে)
-  const shopId = userInfo.shopId || userInfo.id; 
+  const shopId = userInfo.shopId || userInfo.id || 1; 
 
-  // পেজ লোড হওয়ার সময় সার্ভার থেকে শপের ডেটা নিয়ে আসা
   useEffect(() => {
     const fetchShopProfile = async () => {
       try {
+        // সঠিক ইউআরএল: /api/shops/${shopId}
         const response = await fetch(`${API_URL}/shops_profile/${shopId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}` // 🔑 টোকেন পাঠানো হচ্ছে
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
+        
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -71,7 +67,6 @@ export default function ShopProfile() {
       fetchShopProfile();
     } else {
       setFetching(false);
-      setToast({ show: true, message: "অনুগ্রহ করে আবার লগইন করুন (টোকেন পাওয়া যায়নি)", type: "error" });
     }
   }, [shopId, token]);
 
@@ -93,12 +88,11 @@ export default function ShopProfile() {
     setLoading(true);
     
     try {
-      // 🚀 আপডেট রিকোয়েস্ট পাঠানো (টোকেনসহ)
       const response = await fetch(`${API_URL}/shops_profile/${shopId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // 🔑 এখানেও টোকেন পাস করা হলো
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(shopData),
       });
@@ -130,7 +124,7 @@ export default function ShopProfile() {
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12 font-sans">
       
-      {/* হেডার ও সেভ বাটন */}
+      {/* হেডার ব্যানার */}
       <div className="relative overflow-hidden bg-slate-900 rounded-2xl p-6 md:p-8 text-white shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="space-y-1">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/10 text-xs font-medium text-indigo-200">
@@ -161,21 +155,14 @@ export default function ShopProfile() {
         </button>
       </div>
 
-      {/* অ্যালার্ট মেসেজ */}
       {toast.show && (
         <div className={`flex items-center gap-3 p-4 border text-xs font-semibold rounded-xl shadow-xs ${
           toast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'
         }`}>
-          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-white text-[10px] ${
-            toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
-          }`}>
-            {toast.type === 'success' ? '✓' : '!'}
-          </span>
           {toast.message}
         </div>
       )}
 
-      {/* ফর্মের বাকি অংশ (আগের মতোই থাকবে) */}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* লোগো সেকশন */}
@@ -201,10 +188,12 @@ export default function ShopProfile() {
           </div>
         </div>
 
-        {/* ইনপুট ফিল্ডগুলো */}
+        {/* ইনপুট ফিল্ডস */}
         <div className="lg:col-span-2 space-y-6">
+          
+          {/* ১. সাধারণ তথ্য */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">১. সাধারণ তথ্য</h3>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b pb-2">১. সাধারণ তথ্য (General Information)</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">দোকানের নাম</label>
@@ -213,10 +202,22 @@ export default function ShopProfile() {
                   name="name"
                   value={shopData.name}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:outline-none"
                   required
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">ট্যাগলাইন / ক্যাটাগরি</label>
+                <input
+                  type="text"
+                  name="tagline"
+                  value={shopData.tagline}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:outline-none"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">হটলাইন / মোবাইল নম্বর</label>
                 <input
@@ -224,13 +225,114 @@ export default function ShopProfile() {
                   name="phone"
                   value={shopData.phone}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:outline-none"
                   required
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">ইমেল অ্যাড্রেস</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={shopData.email}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:outline-none"
+                />
+              </div>
             </div>
-            {/* বাকি ইনপুট ফিল্ডগুলো আগের মতোই এখানে থাকবে... */}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">দোকানের পূর্ণাঙ্গ ঠিকানা</label>
+              <textarea
+                name="address"
+                rows="2"
+                value={shopData.address}
+                onChange={handleChange}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 bg-slate-50/50 focus:bg-white focus:outline-none resize-none"
+              ></textarea>
+            </div>
           </div>
+
+          {/* ২. লিগ্যাল ও ট্যাক্স তথ্য */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b pb-2">২. লিগ্যাল ও ট্যাক্স তথ্য (Legal & Tax)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">ট্রেড লাইসেন্স নং</label>
+                <input
+                  type="text"
+                  name="tradeLicense"
+                  value={shopData.tradeLicense}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-slate-50/50 focus:bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">ভ্যাট / BIN নম্বর</label>
+                <input
+                  type="text"
+                  name="binNumber"
+                  value={shopData.binNumber}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-slate-50/50 focus:bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">TIN নম্বর</label>
+                <input
+                  type="text"
+                  name="tinNumber"
+                  value={shopData.tinNumber}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-slate-50/50 focus:bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ৩. পেমেন্ট মাধ্যম */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b pb-2">৩. মার্চেন্ট ও পেমেন্ট মাধ্যম</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">বিকাশ মার্চেন্ট নম্বর</label>
+                <input
+                  type="text"
+                  name="bkashMerchant"
+                  value={shopData.bkashMerchant}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-slate-50/50 focus:bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">নগদ নম্বর</label>
+                <input
+                  type="text"
+                  name="nagadPersonal"
+                  value={shopData.nagadPersonal}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-slate-50/50 focus:bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ৪. ক্যাশমেমো শর্তাবলী */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b pb-2">৪. ক্যাশমেমো শর্তাবলী</h3>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">মেমোর নিচে প্রিন্ট হওয়ার বার্তা</label>
+              <input
+                type="text"
+                name="invoiceFooterNote"
+                value={shopData.invoiceFooterNote}
+                onChange={handleChange}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-slate-50/50 focus:bg-white"
+              />
+            </div>
+          </div>
+
         </div>
 
       </form>
