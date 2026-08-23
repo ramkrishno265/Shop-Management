@@ -1,1 +1,43 @@
 @import "tailwindcss";
+
+@media print {
+  /* ওয়েবসাইটের সব কিছু লুকিয়ে ফেলবে */
+  body * {
+    visibility: hidden;
+  }
+
+  /* শুধু ইনভয়েস বক্স এবং তার ভেতরের জিনিসগুলো দেখাবে */
+  #printable-invoice, #printable-invoice * {
+    visibility: visible;
+  }
+
+  /* A4 পেজের মাপ অনুযায়ী ইনভয়েস ফিক্স করে দেওয়া */
+  #printable-invoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 15px !important;
+    box-shadow: none !important;
+    background: white !important;
+    border: none !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+    page-break-before: avoid !important;
+  }
+
+  /* ব্রাউজারকে সরাসরি বলে দেওয়া যে পেপার সাইজ হবে A4 এবং মার্জিন কম হবে */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  /* প্রিন্ট করার সময় ক্লোজ বা প্রিন্ট বাটনগুলো লুকিয়ে রাখবে */
+  .print\:hidden {
+    display: none !important;
+  }
+}

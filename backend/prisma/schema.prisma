@@ -16,10 +16,25 @@ enum Role {
 model Shop {
   id        Int      @id @default(autoincrement())
   name      String
+  tagline   String?  // নতুন: শপের ট্যাগলাইন বা সাবটাইটেল
   logo      String?
   phone     String?
   email     String?
   address   String?
+  
+  // নতুন: বাংলাদেশ কন্টেক্সটের লিগ্যাল ও ট্যাক্স ফিল্ড
+  tradeLicense String? // ট্রেড লাইসেন্স নম্বর
+  binNumber    String? // ভ্যাট / BIN নম্বর
+  tinNumber    String? // TIN নম্বর
+
+  // নতুন: পেমেন্ট বা মার্চেন্ট অ্যাকাউন্ট
+  bkashMerchant String? // বিকাশ মার্চেন্ট নম্বর
+  nagadPersonal String? // নগদ নম্বর
+  bankDetails   String? // ব্যাংক অ্যাকাউন্ট ডিটেইলস
+
+  // নতুন: ক্যাশমেমো বা ইনভয়েস ফুটার নোট
+  invoiceFooterNote String? 
+
   status    Boolean  @default(true)
 
   createdAt DateTime @default(now())

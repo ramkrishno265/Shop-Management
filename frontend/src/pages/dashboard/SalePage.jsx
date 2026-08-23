@@ -267,14 +267,32 @@ export default function SalePage() {
       return;
     }
 
+    // Received Amount payable amount-এর চেয়ে কম হলে
+    // Customer information অবশ্যই থাকতে হবে
+    if (
+      Number(receivedAmount || 0) < payableAmount ||
+      Number(receivedAmount || 0) === 0
+    ) {
+      if (!selectedCustomer) {
+        alert(
+          "❌ প্রাপ্ত অর্থ মোট প্রদেয়ের চেয়ে কম। অনুগ্রহ করে গ্রাহকের তথ্য যোগ করুন।"
+        );
+        return;
+      }
+    }
+
     const orderData = {
       shopId: Number(currentShopId),
+
       customerId: selectedCustomer
         ? selectedCustomer.id || selectedCustomer.customerId
         : null,
+
       customerName: customerSearch || "Walk-in Customer",
+
       items: cart.map((item) => {
         const isPackItem = Boolean(item.packInfo || item.selectedPackId);
+
         const itemPurchasePrice =
           isPackItem && item.packInfo?.purchasePrice
             ? Number(item.packInfo.purchasePrice)
@@ -286,47 +304,67 @@ export default function SalePage() {
           sku: item.sku || "",
           price: Number(item.price),
           purchasePrice: itemPurchasePrice,
-          quantity: Number(item.quantity), // raw quantity, multiply নেই
-          multiplier: Number(item.multiplier || 1), // আলাদা করে পাঠানো হচ্ছে
+          quantity: Number(item.quantity),
+          multiplier: Number(item.multiplier || 1),
           isPack: isPackItem,
           packId: item.selectedPackId || null,
           packInfo: item.packInfo || null,
           discount: 0,
         };
       }),
+
       subTotal: Number(subTotal),
+
       discountType: discountType,
+
       discountValue: Number(discount) || 0,
+
       discountAmount: Number(calculatedDiscountAmount) || 0,
+
       vatPercentage: 0,
+
       vatAmount: 0,
+
       payableAmount: Number(payableAmount),
-      // খালি রাখলে ০ পাঠাবো — ফুল টাকা ধরে নেওয়া হবে না, status হিসাবের সাথে সামঞ্জস্যপূর্ণ থাকার জন্য
-      receivedAmount: receivedAmount ? Number(receivedAmount) : 0,
+
+      // Received Amount খালি থাকলে 0 যাবে
+      receivedAmount: receivedAmount
+        ? Number(receivedAmount)
+        : 0,
+
       changeAmount: Number(changeAmount || 0),
+
       paymentMethod: paymentMethod,
+
       paymentStatus:
         Number(receivedAmount) >= payableAmount && payableAmount > 0
           ? "PAID"
           : Number(receivedAmount) > 0
             ? "PARTIAL"
             : "DUE",
+
       notes: "",
     };
 
     try {
       setIsSubmitting(true);
+
       const token = localStorage.getItem("token");
 
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/sales`,
         orderData,
-        { headers: { Authorization: `Bearer ${token}` } },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
 
       if (response.data.success) {
         alert(
-          `🎉 বিল ও সেল সফলভাবে সেভ হয়েছে!\nইনভয়েস আইডি: ${response.data.invoiceNo || "N/A"}\nসর্বমোট: ৳${payableAmount}`,
+          `🎉 বিল ও সেল সফলভাবে সেভ হয়েছে!\nইনভয়েস আইডি: ${response.data.invoiceNo || "N/A"
+          }\nসর্বমোট: ৳${payableAmount}`
         );
 
         setCart([]);
@@ -334,15 +372,15 @@ export default function SalePage() {
         setReceivedAmount("");
         setSelectedCustomer(null);
         setCustomerSearch("");
+
         fetchInitialData();
-
       }
-
     } catch (error) {
       console.error("Checkout Error:", error);
+
       alert(
         error.response?.data?.message ||
-        "❌ সেল প্রসেস করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+        "❌ সেল প্রসেস করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।"
       );
     } finally {
       setIsSubmitting(false);
@@ -485,8 +523,8 @@ export default function SalePage() {
                         <div
                           key={product.id || product.productId}
                           className={`px-4 py-3 border-b border-slate-50 last:border-0 flex justify-between items-center ${isOutOfStock
-                              ? "bg-slate-100 opacity-60 cursor-not-allowed"
-                              : "hover:bg-slate-50 cursor-pointer"
+                            ? "bg-slate-100 opacity-60 cursor-not-allowed"
+                            : "hover:bg-slate-50 cursor-pointer"
                             }`}
                           onClick={() => {
                             if (isOutOfStock) {
@@ -858,8 +896,8 @@ export default function SalePage() {
                     type="button"
                     onClick={() => setPaymentMethod(method)}
                     className={`py-2 text-xs font-bold rounded-xl border transition-all ${paymentMethod === method
-                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
                       }`}
                   >
                     {method === "CASH"
@@ -902,8 +940,8 @@ export default function SalePage() {
               onClick={handleCheckout}
               disabled={isSubmitting}
               className={`w-full mt-2 py-3 font-bold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-2 text-white ${isSubmitting
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-500"
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-emerald-600 hover:bg-emerald-500"
                 }`}
             >
               {isSubmitting

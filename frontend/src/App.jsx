@@ -17,7 +17,8 @@ import ProfitMargin from "./pages/dashboard/profitMargin.jsx";
 import ProductEntry from "./pages/dashboard/ProductEntry.jsx";
 import ProductEdit from "./pages/dashboard/ProductEdit.jsx";
 import AddCustomer from "./pages/dashboard/AddCustomer.jsx";
-import BulkImportPage from "./pages/dashboard/BulkImportPage.jsx"; // Import the BulkImportPage component
+import BulkImportPage from "./pages/dashboard/BulkImportPage.jsx";
+import ShopProfile from "./pages/Setting_Option/ShopProfile.jsx"; // Import the BulkImportPage component
 
 // Protected Route Guard Component
 const ProtectedRoute = ({ children }) => {
@@ -147,6 +148,17 @@ function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <BulkImportPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/shop_profile"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <ShopProfile />
               </DashboardLayout>
             </ProtectedRoute>
           }

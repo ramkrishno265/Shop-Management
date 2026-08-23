@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { HiOutlineMenu, HiOutlineX } from "react-icons/hi";
+import { HiOutlineMenu, HiOutlineX, HiChevronDown } from "react-icons/hi";
 
 export default function DashboardLayout({ children }) {
   const navigate = useNavigate();
@@ -8,6 +8,9 @@ export default function DashboardLayout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(
     window.innerWidth >= 768
   );
+
+  // কোন মেনুটিতে সাব-মেনু আছে এবং সেটি ওপেন কি না তা ট্র্যাক করার জন্য স্টেট
+  const [openSubmenu, setOpenSubmenu] = useState(null);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
@@ -36,20 +39,47 @@ export default function DashboardLayout({ children }) {
     navigate("/");
   };
 
+  // মেনু আইটেমগুলোতে সাব-মেনু বা children যোগ করা হলো
   const menuItems = [
     { name: "Dashboard", icon: "📊", path: "/dashboard" },
     { name: "Inventory", icon: "📦", path: "/inventory" },
     { name: "Sales & Billing", icon: "💼", path: "/salePage" },
     { name: "Purchase", icon: "🛒", path: "/purchase_page" },
     { name: "Profit & Margin", icon: "📈", path: "/profit" },
-    { name: "Staff Management", icon: "👥", path: "#" },
+    { name: "Staff Management", icon: "👥", path: "#"
+
+      
+     },
+    { 
+      name: "Settings", 
+      icon: "⚙️", 
+      path: "#",
+      // সাব-মেনু অপশনসমূহ
+      children: [
+        { name: "Shop Profile", path: "/shop_profile" },
+        { name: "Tax & VAT", path: "/settings/tax" },
+        { name: "Printer Setup", path: "/settings/printer" },
+      ]
+    },
   ];
 
-  const handleMenuClick = (path) => {
-    if (path !== "#") {
-      navigate(path);
+  const handleMenuClick = (item) => {
+    // যদি সাব-মেনু থাকে তবে শুধু টগল করবে
+    if (item.children) {
+      setOpenSubmenu(openSubmenu === item.name ? null : item.name);
+      return;
     }
 
+    if (item.path && item.path !== "#") {
+      navigate(item.path);
+      if (window.innerWidth < 768) {
+        setIsSidebarOpen(false);
+      }
+    }
+  };
+
+  const handleSubMenuClick = (path) => {
+    navigate(path);
     if (window.innerWidth < 768) {
       setIsSidebarOpen(false);
     }
@@ -70,13 +100,13 @@ export default function DashboardLayout({ children }) {
         className={`
           fixed top-0 left-0 z-30 h-screen bg-white border-r border-slate-200
           transition-transform duration-300 ease-in-out
-          w-64
+          w-64 flex flex-col
           ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0 md:sticky
         `}
       >
         {/* Sidebar Header */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200">
+        <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xl">🛒</span>
             <span className="font-bold tracking-tight text-sm">
@@ -93,18 +123,52 @@ export default function DashboardLayout({ children }) {
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-3 space-y-1">
-          {menuItems.map((item, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleMenuClick(item.path)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all cursor-pointer text-left"
-            >
-              <span>{item.icon}</span>
-              <span>{item.name}</span>
-            </button>
-          ))}
+        {/* Navigation - স্ক্রোলযোগ্য করা হয়েছে যাতে সাব-মেনু খুললে লিস্ট বড় হলে সমস্যা না হয় */}
+        <nav className="p-3 space-y-1 overflow-y-auto flex-1">
+          {menuItems.map((item, idx) => {
+            const hasChildren = item.children && item.children.length > 0;
+            const isOpen = openSubmenu === item.name;
+
+            return (
+              <div key={idx}>
+                {/* মূল মেনু বাটন */}
+                <button
+                  onClick={() => handleMenuClick(item)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all cursor-pointer text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <span>{item.icon}</span>
+                    <span>{item.name}</span>
+                  </div>
+
+                  {/* যদি সাব-মেনু থাকে তবে একটি ড্রপডাউন অ্যারো বা আইকন দেখাবে */}
+                  {hasChildren && (
+                    <HiChevronDown
+                      size={16}
+                      className={`transition-transform duration-200 ${
+                        isOpen ? "rotate-180 text-slate-900" : "text-slate-400"
+                      }`}
+                    />
+                  )}
+                </button>
+
+                {/* সাব-মেনু লিস্ট */}
+                {hasChildren && isOpen && (
+                  <div className="pl-9 pr-2 py-1 space-y-1 mt-1 border-l-2 border-slate-100 ml-4">
+                    {item.children.map((subItem, subIdx) => (
+                      <button
+                        key={subIdx}
+                        onClick={() => handleSubMenuClick(subItem.path)}
+                        className="w-full text-left px-3 py-2 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all"
+                      >
+                        {subItem.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
       </aside>
 
@@ -158,7 +222,7 @@ export default function DashboardLayout({ children }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto ">
           {children}
         </main>
       </div>
