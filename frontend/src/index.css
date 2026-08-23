@@ -1,42 +1,38 @@
 @import "tailwindcss";
 
 @media print {
-  /* ওয়েবসাইটের সব কিছু লুকিয়ে ফেলবে */
+  /* ড্যাশবোর্ডের সবকিছু লুকিয়ে ফেলবে */
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
 
-  /* শুধু ইনভয়েস বক্স এবং তার ভেতরের জিনিসগুলো দেখাবে */
+  /* শুধু ইনভয়েস বক্স এবং তার ভেতরের কন্টেন্ট দেখাবে */
   #printable-invoice, #printable-invoice * {
-    visibility: visible;
+    visibility: visible !important;
   }
 
-  /* A4 পেজের মাপ অনুযায়ী ইনভয়েস ফিক্স করে দেওয়া */
+  /* ইনভয়েস পজিশন একদম উপরে ফিক্সড করে দেবে যাতে ২য় পেজে না যায় */
   #printable-invoice {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
-    height: auto !important;
-    max-height: 100% !important;
     margin: 0 !important;
-    padding: 15px !important;
+    padding: 10mm !important;
     box-shadow: none !important;
-    background: white !important;
+    background: #ffffff !important;
     border: none !important;
-    page-break-inside: avoid !important;
-    page-break-after: avoid !important;
-    page-break-before: avoid !important;
+    z-index: 99999 !important;
   }
 
-  /* ব্রাউজারকে সরাসরি বলে দেওয়া যে পেপার সাইজ হবে A4 এবং মার্জিন কম হবে */
+  /* পেজের সাইজ এবং মার্জিন কন্ট্রোল করার জন্য */
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 5mm;
   }
 
-  /* প্রিন্ট করার সময় ক্লোজ বা প্রিন্ট বাটনগুলো লুকিয়ে রাখবে */
+  /* প্রিন্ট করার সময় ক্লোজ বা ডাউনলোড বাটনগুলো সম্পূর্ণ লুকিয়ে রাখবে */
   .print\:hidden {
     display: none !important;
   }
