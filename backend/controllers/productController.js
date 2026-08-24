@@ -1,5 +1,32 @@
 import prisma from "../config/db.js";
 
+// Utility: Prisma error-কে ইউজার-ফ্রেন্ডলি বাংলা মেসেজে রূপান্তর
+const friendlyFieldName = {
+  sku: "SKU (Product Code)",
+  barcode: "বারকোড (Barcode)",
+  name: "প্রোডাক্টের নাম",
+  invoiceNo: "ইনভয়েস নম্বর",
+};
+
+const getFriendlyErrorMessage = (error) => {
+  // Prisma Unique Constraint Violation (P2002)
+  if (error?.code === "P2002") {
+    const target = Array.isArray(error.meta?.target)
+      ? error.meta.target
+      : [error.meta?.target].filter(Boolean);
+    const fieldKey = target[0];
+    const fieldLabel = friendlyFieldName[fieldKey] || fieldKey || "একটি ফিল্ড";
+    return `এই ${fieldLabel} আগে থেকেই অন্য একটি প্রোডাক্টে ব্যবহৃত হয়েছে। দয়া করে একটি ভিন্ন ${fieldLabel} দিন।`;
+  }
+
+  // Prisma Foreign Key / Related Record Not Found (P2003, P2025)
+  if (error?.code === "P2003" || error?.code === "P2025") {
+    return "সম্পর্কিত তথ্য (যেমন ক্যাটাগরি) খুঁজে পাওয়া যায়নি। দয়া করে আবার চেষ্টা করুন।";
+  }
+
+  return null;
+};
+
 // Utility: শপ আইডি ভ্যালিডেশন
 const validateShopAccess = (user, requestShopId) => {
   const userShopId = user.shopId ? Number(user.shopId) : null;
@@ -218,6 +245,10 @@ export const createProduct = async (req, res) => {
     res.status(201).json(createdProductWithRelations);
   } catch (error) {
     console.error("Error creating product:", error);
+    const friendlyMessage = getFriendlyErrorMessage(error);
+    if (friendlyMessage) {
+      return res.status(409).json({ message: friendlyMessage });
+    }
     res.status(500).json({ message: "Error creating product", error: error.message });
   }
 };
@@ -392,6 +423,10 @@ export const updateProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating product:", error);
+    const friendlyMessage = getFriendlyErrorMessage(error);
+    if (friendlyMessage) {
+      return res.status(409).json({ message: friendlyMessage });
+    }
     res.status(500).json({
       message: "Error updating product",
       error: error.message,
@@ -645,7 +680,8 @@ export const bulkImportProducts = async (req, res) => {
 
         successCount++;
       } catch (err) {
-        failedProducts.push({ item: item.name, reason: err.message });
+        const friendlyMessage = getFriendlyErrorMessage(err);
+        failedProducts.push({ item: item.name, reason: friendlyMessage || err.message });
       }
     }
 
