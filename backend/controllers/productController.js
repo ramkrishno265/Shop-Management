@@ -30,19 +30,19 @@ export const getProducts = async (req, res) => {
             remainingQty: { gt: 0 },
             shopId: shopId // 👈 এখানে অবশ্যই shopId ফিল্টার দিতে হবে
           },
-          orderBy: { createdAt: "asc" }, // সবচেয়ে পুরোনো লেয়ার আগে
-          take: 1, // ওই নির্দিষ্ট শপের বর্তমান লেয়ারটি নেবে
+          orderBy: { createdAt: "asc" }, // সবচেয়ে পুরোনো লেয়ার আগে
+          take: 1, // ওই নির্দিষ্ট শপের বর্তমান লেয়ারটি নেবে
         },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    // প্রোডাক্টের মূল purchasePrice কে active layer এর unitCost দিয়ে ওভাররাইট করা
+    // প্রোডাক্টের মূল purchasePrice কে active layer এর unitCost দিয়ে ওভাররাইট করা
     const formattedProducts = products.map((product) => {
       const activeLayer = product.inventoryLayers?.[0];
       return {
         ...product,
-        // এখন এই দামটি শুধুমাত্র ওই শপের FIFO লেয়ার থেকেই আসবে
+        // এখন এই দামটি শুধুমাত্র ওই শপের FIFO লেয়ার থেকেই আসবে
         purchasePrice: activeLayer ? activeLayer.unitCost : product.purchasePrice,
       };
     });
@@ -61,6 +61,7 @@ export const createProduct = async (req, res) => {
       name,
       sku,
       barcode,
+      brand,
       category,
       inventoryType,
       baseUnit,
@@ -142,6 +143,7 @@ export const createProduct = async (req, res) => {
           name: name.trim(),
           sku: sku && sku.trim() !== "" ? sku.trim() : `SKU-${Date.now().toString().slice(-6)}`,
           barcode: barcode ? barcode.trim() : null,
+          brand: brand && brand.trim() !== "" ? brand.trim() : null,
           inventoryType: type,
           baseUnit: unitVal,
           quantity,
@@ -175,7 +177,7 @@ export const createProduct = async (req, res) => {
         if (type === 'standard') {
           await tx.inventoryLayer.create({
             data: {
-              shopId: finalShopId, // 👈 স্কিমা অনুযায়ী শপ আইডি যুক্ত করা হলো
+              shopId: finalShopId, // 👈 স্কিমা অনুযায়ী শপ আইডি যুক্ত করা হলো
               productId: product.id,
               initialQty: quantity,
               remainingQty: quantity,
@@ -193,7 +195,7 @@ export const createProduct = async (req, res) => {
             if (totalBaseUnits > 0) {
               await tx.inventoryLayer.create({
                 data: {
-                  shopId: finalShopId, // 👈 স্কিমা অনুযায়ী শপ আইডি যুক্ত করা হলো
+                  shopId: finalShopId, // 👈 স্কিমা অনুযায়ী শপ আইডি যুক্ত করা হলো
                   productId: product.id,
                   initialQty: totalBaseUnits,
                   remainingQty: totalBaseUnits,
@@ -250,6 +252,7 @@ export const updateProduct = async (req, res) => {
     const {
       name,
       sku,
+      brand,
       category,
       quantity,
       purchasePrice,
@@ -337,7 +340,7 @@ export const updateProduct = async (req, res) => {
           }));
           await tx.productPack.createMany({ data: packDataToInsert });
 
-          // যদি আপডেট করার সময় প্যাক থাকে, তবে নতুন প্যাকগুলোর স্টক থেকে টোটাল `quantity` রি-ক্যালকুলেট করে নেওয়া ভালো
+          // যদি আপডেট করার সময় প্যাক থাকে, তবে নতুন প্যাকগুলোর স্টক থেকে টোটাল `quantity` রি-ক্যালকুলেট করে নেওয়া ভালো
           if (currentInventoryType === 'pack') {
             finalQuantity = parsedPacks.reduce((sum, p) => {
               const packStock = parseFloat(p.stock) || 0;
@@ -366,6 +369,7 @@ export const updateProduct = async (req, res) => {
         data: {
           name: name ? name.trim() : existingProduct.name,
           sku: sku ? sku.trim() : existingProduct.sku,
+          brand: brand !== undefined ? (brand.trim() !== "" ? brand.trim() : null) : existingProduct.brand,
           inventoryType: currentInventoryType,
           baseUnit: baseUnit ?? existingProduct.baseUnit,
           quantity: finalQuantity, // 👈 সঠিক ক্যালকুলেটেড স্টক আপডেট হবে
@@ -519,8 +523,9 @@ export const bulkImportProducts = async (req, res) => {
         const productName = String(item.name).trim();
         const inventoryType = item.inventoryType === 'pack' ? 'pack' : 'standard';
         const baseUnit = item.baseUnit ? String(item.baseUnit).trim() : 'Pcs';
+        const brandValue = item.brand && String(item.brand).trim() !== "" ? String(item.brand).trim() : null;
 
-        // ২. ক্যাটাগরি হ্যান্ডলিং (নাম দিয়ে খুঁজে বা তৈরি করে নেওয়া)
+        // ২. ক্যাটাগরি হ্যান্ডলিং (নাম দিয়ে খুঁজে বা তৈরি করে নেওয়া)
         let categoryId = null;
         if (item.category) {
           const categoryName = typeof item.category === 'string' ? item.category.trim() : (item.category.name || '').trim();
@@ -545,7 +550,7 @@ export const bulkImportProducts = async (req, res) => {
           }
         }
 
-        // ৩. SKU এবং Barcode ইউনিক চেক ও ডুপ্লিকেট এড়ানোর লজিক
+        // ৩. SKU এবং Barcode ইউনিক চেক ও ডুপ্লিকেট এড়ানোর লজিক
         let baseSku = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
           ? String(item.sku).trim()
           : `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
@@ -607,6 +612,7 @@ export const bulkImportProducts = async (req, res) => {
               name: productName,
               sku: skuValue,
               barcode: barcodeValue,
+              brand: brandValue,
               inventoryType: inventoryType,
               baseUnit: baseUnit,
               quantity: quantity,
