@@ -12,12 +12,15 @@ import {
   FiLoader,
 } from "react-icons/fi";
 
+const ITEMS_PER_PAGE = 15;
+
 const InventoryPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [currentPage, setCurrentPage] = useState(1);
 
   // পপআপের জন্য স্টেট
   const [selectedProductPacks, setSelectedProductPacks] = useState(null);
@@ -29,14 +32,20 @@ const InventoryPage = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       if (!token) return;
+
       setLoading(true);
       try {
         const response = await fetch(`${API_URL}/products`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await response.json();
+
         if (response.ok) {
-          setProducts(Array.isArray(data) ? data : data.products || []);
+          // ডেটা অ্যারে সরাসরি হোক বা অবজেক্টের ভেতর থেকে আসুক, নিরাপদে সেট করা
+          const productList = Array.isArray(data) ? data : (data.products || data.data || []);
+          setProducts(productList);
+        } else {
+          console.error("Failed to fetch products:", data.message);
         }
       } catch (error) {
         console.error("Error fetching products:", error);
@@ -44,8 +53,14 @@ const InventoryPage = () => {
         setLoading(false);
       }
     };
+
     fetchProducts();
   }, [API_URL, token]);
+
+  // --- Search/Category পরিবর্তন হলে page 1-এ ফিরে যাবে ---
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
 
   // --- Delete Product Handler ---
   const handleDelete = async (id) => {
@@ -79,6 +94,43 @@ const InventoryPage = () => {
     const total = calculateTotalStock(p);
     return total > 0 && total <= (p.lowStockLimit || 5);
   }).length;
+
+  // --- Products থেকে ইউনিক ক্যাটাগরি লিস্ট বের করা (ড্রপডাউনের জন্য) ---
+  const categoryOptions = Array.from(
+    new Set(
+      products
+        .map((p) => p.category?.name || p.category)
+        .filter((c) => c && c.trim() !== ""),
+    ),
+  ).sort();
+
+  // --- Search + Category ফিল্টার করা লিস্ট ---
+  const filteredProducts = products.filter((p) => {
+    const term = searchTerm.trim().toLowerCase();
+    const productCategory = (p.category?.name || p.category || "").toLowerCase();
+
+    const matchesSearch =
+      term === "" ||
+      p.name.toLowerCase().includes(term) ||
+      (p.sku && p.sku.toLowerCase().includes(term)) ||
+      productCategory.includes(term);
+
+    const matchesCategory =
+      selectedCategory === "All Categories" ||
+      (p.category?.name || p.category) === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
+
+  // --- Pagination Calculation ---
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredProducts.length / ITEMS_PER_PAGE),
+  );
+  const paginatedProducts = filteredProducts.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
 
   return (
     <div className="min-h-screen bg-slate-50/70 p-4 md:p-8 font-sans">
@@ -204,8 +256,11 @@ const InventoryPage = () => {
               className="w-full px-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:outline-none font-medium text-slate-700"
             >
               <option value="All Categories">All Categories</option>
-              <option value="Rice">Rice</option>
-              <option value="Grocery">Grocery</option>
+              {categoryOptions.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -239,104 +294,93 @@ const InventoryPage = () => {
                       </div>
                     </td>
                   </tr>
-                ) : products.length > 0 ? (
-                  products
-                    .filter(
-                      (p) =>
-                        p.name
-                          .toLowerCase()
-                          .includes(searchTerm.toLowerCase()) ||
-                        (p.sku &&
-                          p.sku
-                            .toLowerCase()
-                            .includes(searchTerm.toLowerCase())),
-                    )
-                    .map((product) => {
-                      const totalStock = calculateTotalStock(product);
-                      const isPack =
-                        product.inventoryType === "pack" &&
-                        product.packs &&
-                        product.packs.length > 0;
+                ) : filteredProducts.length > 0 ? (
+                  paginatedProducts.map((product) => {
+                    const totalStock = calculateTotalStock(product);
+                    const isPack =
+                      product.inventoryType === "pack" &&
+                      product.packs &&
+                      product.packs.length > 0;
 
-                      return (
-                        <tr
-                          key={product.id}
-                          className="hover:bg-slate-50/50 transition"
-                        >
-                          <td className="p-4 font-bold text-slate-800">
-                            {product.name}
-                          </td>
-                          <td className="p-4 text-slate-500 font-mono text-xs">
-                            {product.sku}
-                          </td>
-                          <td className="p-4 text-slate-600">
-                            {product.category?.name ||
-                              product.category ||
-                              "N/A"}
-                          </td>
-                          <td className="p-4 text-slate-600">
-                            ৳{product.purchasePrice?.toFixed(2) || "0.00"}
-                          </td>
-                          <td className="p-4 text-slate-600">
-                            ৳{product.sellingPrice?.toFixed(2) || "0.00"}
-                          </td>
+                    return (
+                      <tr
+                        key={product.id}
+                        className="hover:bg-slate-50/50 transition"
+                      >
+                        <td className="p-4 font-bold text-slate-800">
+                          {product.name}
+                        </td>
+                        <td className="p-4 text-slate-500 font-mono text-xs">
+                          {product.sku}
+                        </td>
+                        <td className="p-4 text-slate-600">
+                          {product.category?.name ||
+                            product.category ||
+                            "N/A"}
+                        </td>
+                        <td className="p-4 text-slate-600">
+                          ৳{product.purchasePrice?.toFixed(2) || "0.00"}
+                        </td>
+                        <td className="p-4 text-slate-600">
+                          ৳{product.sellingPrice?.toFixed(2) || "0.00"}
+                        </td>
 
-                          {/* Stock Quantity Column with Popup Trigger for Pack Products */}
-                          <td className="p-4 flex items-center justify-center">
-                            {isPack ? (
-                              <button
-                                onClick={() => setSelectedProductPacks(product)}
-                                className="font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs text-xs"
-                                title="প্যাকের বিস্তারিত দেখতে ক্লিক করুন"
-                              >
-                                <span>
-                                  {totalStock} {product.baseUnit || "Pcs"}
-                                </span>
-                                <span className="text-[10px] bg-violet-200 text-violet-800 px-1.5 py-0.5 rounded-md">
-                                  ডিটেইলস
-                                </span>
-                              </button>
-                            ) : (
-                              <span className="font-semibold text-slate-700">
+                        {/* Stock Quantity Column with Popup Trigger for Pack Products */}
+                        <td className="p-4 flex items-center justify-center">
+                          {isPack ? (
+                            <button
+                              onClick={() => setSelectedProductPacks(product)}
+                              className="font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs text-xs"
+                              title="প্যাকের বিস্তারিত দেখতে ক্লিক করুন"
+                            >
+                              <span>
                                 {totalStock} {product.baseUnit || "Pcs"}
                               </span>
-                            )}
-                          </td>
-
-                          {/* Status Badge */}
-                          <td className="p-4">
-                            <span
-                              className={`px-2.5 py-1 text-xs font-bold rounded-lg ${product.status === "ACTIVE"
-                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
-                                  : "bg-rose-50 text-rose-600 border border-rose-200/50"
-                                }`}
-                            >
-                              {product.status || "ACTIVE"}
+                              <span className="text-[10px] bg-violet-200 text-violet-800 px-1.5 py-0.5 rounded-md">
+                                ডিটেইলস
+                              </span>
+                            </button>
+                          ) : (
+                            <span className="font-semibold text-slate-700">
+                              {totalStock} {product.baseUnit || "Pcs"}
                             </span>
-                          </td>
+                          )}
+                        </td>
 
-                          {/* Actions */}
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center gap-3">
-                              <button
-                                onClick={() =>
-                                  navigate(`/product_edit/${product.id}`)
-                                }
-                                className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                              >
-                                <FiEdit2 size={14} /> Edit
-                              </button>
-                              <button
-                                onClick={() => handleDelete(product.id)}
-                                className="text-rose-500 hover:text-rose-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                              >
-                                <FiTrash2 size={14} /> Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
+                        {/* Status Badge */}
+                        <td className="p-4">
+                          <span
+                            className={`px-2.5 py-1 text-xs font-bold rounded-lg ${product.status === "ACTIVE"
+                              ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
+                              : "bg-rose-50 text-rose-600 border border-rose-200/50"
+                              }`}
+                          >
+                            {product.status || "ACTIVE"}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              onClick={() =>
+                                navigate(`/product_edit/${product.id}`)
+                              }
+                              className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                              <FiEdit2 size={14} /> Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(product.id)}
+                              className="text-rose-500 hover:text-rose-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                              <FiTrash2 size={14} /> Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td
@@ -355,21 +399,31 @@ const InventoryPage = () => {
           {/* Table Footer Pagination */}
           <div className="p-4 bg-slate-50/50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
             <p>
-              Showing 1 to {products.length} of {products.length} results
+              Showing{" "}
+              {filteredProducts.length === 0
+                ? 0
+                : (currentPage - 1) * ITEMS_PER_PAGE + 1}{" "}
+              to{" "}
+              {Math.min(currentPage * ITEMS_PER_PAGE, filteredProducts.length)}{" "}
+              of {filteredProducts.length} results
             </p>
             <div className="flex items-center gap-2">
               <button
-                disabled
-                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 font-semibold cursor-not-allowed"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 font-semibold disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer hover:bg-slate-100 disabled:hover:bg-white transition"
               >
                 Previous
               </button>
               <span className="px-3 py-1.5 font-bold text-slate-700 bg-white border border-slate-200 rounded-lg">
-                Page 1 of 1
+                Page {currentPage} of {totalPages}
               </span>
               <button
-                disabled
-                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 font-semibold cursor-not-allowed"
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 font-semibold disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer hover:bg-slate-100 disabled:hover:bg-white transition"
               >
                 Next
               </button>
@@ -389,7 +443,7 @@ const InventoryPage = () => {
                   {selectedProductPacks.name}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  প্যাক অনুযায়ী স্টক বিবরণী
+                  প্যাক অনুযায়ী স্টক বিবরণী
                 </p>
               </div>
               <button

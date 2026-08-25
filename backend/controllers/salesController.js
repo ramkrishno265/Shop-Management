@@ -57,16 +57,22 @@ export const createSale = async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
-            // ১. স্টক চেক করে নেওয়া যে পর্যাপ্ত পণ্য আছে কি না (Double validation to prevent overselling)
+            // ১. স্টক চেক করার জন্য একসাথে প্রোডাক্ট ফেচ করা
+            const productIds = items.map(item => Number(item.productId || item.id));
+            const products = await tx.product.findMany({
+                where: { id: { in: productIds } }
+            });
+            const productMap = new Map(products.map(p => [p.id, p]));
+
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
                 const cartQty = Number(item.quantity) || 1;
                 const multiplier = Number(item.multiplier || item.packInfo?.multiplier || 1);
                 const totalDeductQty = cartQty * multiplier;
 
-                const productRecord = await tx.product.findUnique({ where: { id: prodId } });
+                const productRecord = productMap.get(prodId);
                 if (!productRecord) {
-                    throw new Error(`প্রোডাক্ট আইডি ${prodId} পাওয়া যায়নি!`);
+                    throw new Error(`প্রোডাক্ট আইডি ${prodId} পাওয়া যায়নি!`);
                 }
                 if (Number(productRecord.quantity || 0) < totalDeductQty) {
                     throw new Error(`"${productRecord.name}" পণ্যের পর্যাপ্ত স্টক নেই! বর্তমান স্টক: ${productRecord.quantity}`);
@@ -189,7 +195,7 @@ export const createSale = async (req, res) => {
                 }
 
                 // মূল Product টেবিলের স্টক কমানো
-                const productRecord = await tx.product.findUnique({ where: { id: prodId } });
+                const productRecord = productMap.get(prodId);
                 const currentQty = productRecord ? Number(productRecord.quantity || 0) : 0;
 
                 await tx.product.update({
@@ -204,6 +210,9 @@ export const createSale = async (req, res) => {
                 ...newSale,
                 saleItems: saleItemsData
             };
+        }, {
+            maxWait: 15000,
+            timeout: 15000
         });
 
         return res.status(201).json({
@@ -225,7 +234,6 @@ export const createSale = async (req, res) => {
 export const getSales = async (req, res) => {
     try {
         const { shopId } = req.query; 
-
         const filterShopId = shopId ? Number(shopId) : (req.user?.shopId ? Number(req.user.shopId) : undefined);
 
         const sales = await prisma.sale.findMany({
@@ -235,7 +243,7 @@ export const getSales = async (req, res) => {
                 saleItems: {
                     include: {
                         product: true,
-                        layerDeductions: true // FIFO লেয়ার ডিডাকশন দেখতে চাইলে
+                        layerDeductions: true 
                     }
                 }
             },
@@ -293,7 +301,6 @@ export const getSalesSummary = async (req, res) => {
             };
         }
 
-        // আপনার প্রিজমা স্কিমা অনুযায়ী মডেলের নাম 'sale' বা 'sales' হতে পারে (এখানে 'sale' ব্যবহার করা হয়েছে)
         const sales = await prisma.sale.findMany({
             where: {
                 shopId: Number(shopId),
@@ -321,10 +328,7 @@ export const getSalesSummary = async (req, res) => {
             if (sale.saleItems && Array.isArray(sale.saleItems)) {
                 sale.saleItems.forEach((item) => {
                     const itemSubtotal = Number(item.subtotal) || 0;
-                    const itemTotalCost = Number(item.totalCost) || 0; // FIFO অনুযায়ী সঠিক মোট কস্ট (COGS)
-                    const discount = Number(item.discount) || 0;
-
-                    // নিখুঁত প্রফিট সূত্র: সাবটোটাল - মোট FIFO কস্ট
+                    const itemTotalCost = Number(item.totalCost) || 0; 
                     const itemProfit = itemSubtotal - itemTotalCost;
                     totalProfit += itemProfit;
                 });

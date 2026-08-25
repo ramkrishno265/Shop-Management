@@ -22,6 +22,16 @@ export default function SalePage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
+  // ➕ নতুন কাস্টমার যোগ করার পপআপ স্টেট (আগে /add_customer পেজে যেত)
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+  });
+  const [savingCustomer, setSavingCustomer] = useState(false);
+
   // প্যাক সিলেকশন পপআপ স্টেট
   const [showPackModal, setShowPackModal] = useState(false);
   const [selectedProductForPack, setSelectedProductForPack] = useState(null);
@@ -252,6 +262,74 @@ export default function SalePage() {
     );
   };
 
+  // -------------------------------------------------------------
+  // ➕ নতুন কাস্টমার যোগ করার হ্যান্ডলার (পপআপ থেকে, পেজ রিলোড ছাড়াই)
+  // -------------------------------------------------------------
+  const handleNewCustomerChange = (e) => {
+    setNewCustomer({ ...newCustomer, [e.target.name]: e.target.value });
+  };
+
+  const handleSaveNewCustomer = async (e) => {
+    e.preventDefault();
+    if (savingCustomer) return;
+
+    if (!newCustomer.name.trim() || !newCustomer.phone.trim()) {
+      alert("নাম এবং মোবাইল নাম্বার আবশ্যক!");
+      return;
+    }
+
+    if (!currentShopId) {
+      alert("শপ আইডি পাওয়া যায়নি, দয়া করে আবার লগইন করুন!");
+      return;
+    }
+
+    try {
+      setSavingCustomer(true);
+      const token = localStorage.getItem("token");
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/add_customer`,
+        {
+          ...newCustomer,
+          shopId: Number(currentShopId),
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      // ব্যাকএন্ড যেভাবেই সেভ করা কাস্টমার অবজেক্ট রিটার্ন করুক (data / customer / সরাসরি)
+      const savedCustomer =
+        response.data?.customer || response.data?.data || response.data;
+
+      const customerToAdd =
+        savedCustomer && (savedCustomer.id || savedCustomer.customerId)
+          ? savedCustomer
+          : { ...newCustomer, id: Date.now() }; // ফলব্যাক, যদি ব্যাকএন্ড অবজেক্ট না দেয়
+
+      // ✅ কাস্টমার লিস্টে সরাসরি যোগ করা হলো - পেজ রিলোড ছাড়াই তালিকায় থাকবে
+      setCustomers((prev) => [customerToAdd, ...prev]);
+
+      // এই নতুন কাস্টমারকেই বিক্রয়ের জন্য সিলেক্ট করে দেওয়া হলো
+      setSelectedCustomer(customerToAdd);
+      setCustomerSearch(customerToAdd.name);
+
+      // ফর্ম রিসেট ও মোডাল বন্ধ
+      setNewCustomer({ name: "", phone: "", email: "", address: "" });
+      setShowAddCustomerModal(false);
+      setShowCustomerDropdown(false);
+    } catch (err) {
+      console.error("Error saving customer:", err);
+      alert(
+        err.response?.data?.error ||
+          err.response?.data?.message ||
+          "কাস্টমার সেভ করতে সমস্যা হয়েছে!",
+      );
+    } finally {
+      setSavingCustomer(false);
+    }
+  };
+
   const handleCheckout = async (e) => {
     e.preventDefault();
 
@@ -267,7 +345,7 @@ export default function SalePage() {
       return;
     }
 
-    // Received Amount payable amount-এর চেয়ে কম হলে
+    // Received Amount payable amount-এর চেয়ে কম হলে
     // Customer information অবশ্যই থাকতে হবে
     if (
       Number(receivedAmount || 0) < payableAmount ||
@@ -439,6 +517,108 @@ export default function SalePage() {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 👤➕ নতুন কাস্টমার যোগ করার পপআপ মোডাল (আগে যেখানে /add_customer পেজে navigate করতো) */}
+      {showAddCustomerModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">
+                  নতুন কাস্টমার যোগ করুন
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  তথ্য দিয়ে সেভ করুন, সাথে সাথে লিস্টে যুক্ত হয়ে যাবে
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomerModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewCustomer} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  কাস্টমারের নাম <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={newCustomer.name}
+                  onChange={handleNewCustomerChange}
+                  placeholder="যেমন: আব্দুর রহিম"
+                  required
+                  className="w-full px-3.5 py-2.5 text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  মোবাইল নাম্বার <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={newCustomer.phone}
+                  onChange={handleNewCustomerChange}
+                  placeholder="যেমন: 01712345678"
+                  required
+                  className="w-full px-3.5 py-2.5 text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  ইমেইল (যদি থাকে)
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={newCustomer.email}
+                  onChange={handleNewCustomerChange}
+                  placeholder="example@gmail.com"
+                  className="w-full px-3.5 py-2.5 text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  ঠিকানা
+                </label>
+                <textarea
+                  name="address"
+                  rows="2"
+                  value={newCustomer.address}
+                  onChange={handleNewCustomerChange}
+                  placeholder="গ্রাম/মহল্লা, থানা, জেলা"
+                  className="w-full px-3.5 py-2.5 text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none text-sm"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomerModal(false)}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl transition-colors"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCustomer}
+                  className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+                >
+                  {savingCustomer ? "সেভ হচ্ছে..." : "সেভ করুন"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -829,7 +1009,10 @@ export default function SalePage() {
                 <button
                   type="button"
                   className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-sm font-bold rounded-xl transition-colors"
-                  onClick={() => navigate("/add_customer")}
+                  onClick={() => {
+                    setShowCustomerDropdown(false);
+                    setShowAddCustomerModal(true);
+                  }}
                 >
                   ➕
                 </button>
