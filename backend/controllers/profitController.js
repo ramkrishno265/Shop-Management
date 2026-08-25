@@ -32,10 +32,10 @@ export const getProfitReport = async (req, res) => {
       };
     }
 
-    const sales = await prisma.sale.findMany({
+    const sales = await prisma.sales.findMany({
       where,
       include: {
-        saleItems: true,
+        sale_Items: true,
       },
     });
 
@@ -45,13 +45,13 @@ export const getProfitReport = async (req, res) => {
 
     sales.forEach((sale) => {
       // যদি সেলস লেভেলে কোনো ডিসকাউন্ট থাকে, তা সেল অ্যামাউন্ট থেকে বাদ দেওয়া যেতে পারে
-      totalSale += Number(sale.grandTotal) || 0;
+      totalSale += Number(sale.grandTotal)|| 0;
 
-      sale.saleItems.forEach((item) => {
-        const itemSubtotal = Number(item.subtotal) || (Number(item.unitPrice) * Number(item.quantity));
+      sale.sale_Items.forEach((item) => {
+        const itemSubtotal = (Number(item.unitPrice) * Number(item.quantity));
         
-        // FIFO অনুযায়ী সঠিক মোট কস্ট (যদি item.totalCost না থাকে, তবে ফলব্যাক হিসেবে purcahsePrice ব্যবহার হবে)
-        const itemCost = Number(item.totalCost) || (Number(item.purchasePrice) * Number(item.quantity));
+        // FIFO অনুযায়ী সঠিক মোট কস্ট (যদি item.totalCost না থাকে, তবে ফলব্যাক হিসেবে purcahsePrice ব্যবহার হবে)
+        const itemCost = (Number(item.purchasePrice) * Number(item.quantity));
         
         totalPurchase += itemCost;
 

@@ -24,8 +24,6 @@ import ShopProfile from "./pages/Setting_Option/ShopProfile.jsx"; // Import the 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem("token");
 
-  console.log("Token:", token);
-
   if (!token) {
     return <Navigate to="/" replace />;
   }
