@@ -1,3 +1,5 @@
+
+import prisma from "../config/db.js";
 export const getProfitReport = async (req, res) => {
   try {
     const shopId = req.user.shopId;
