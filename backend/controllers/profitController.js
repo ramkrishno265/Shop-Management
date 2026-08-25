@@ -29,7 +29,7 @@ export const getProfitReport = async (req, res) => {
       };
     }
 
-    const sales = await prisma.sales.findMany({
+    const sales = await prisma.sale.findMany({
       where,
       include: {
         saleItems: true, // ✅ এখানে 'sale_Items' এর বদলে সঠিক নামটি বসানো হলো ('saleItems')
