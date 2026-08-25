@@ -1,9 +1,6 @@
-import prisma from "../config/db.js";
-
 export const getProfitReport = async (req, res) => {
   try {
     const shopId = req.user.shopId;
-
     const { type, startDate, endDate } = req.query;
 
     const where = {
@@ -35,27 +32,29 @@ export const getProfitReport = async (req, res) => {
     const sales = await prisma.sales.findMany({
       where,
       include: {
-        sale_Items: true,
+        saleItems: true, // ✅ এখানে 'sale_Items' এর বদলে সঠিক নামটি বসানো হলো ('saleItems')
       },
     });
 
     let totalSale = 0;
-    let totalPurchase = 0; // এটি আসলে Total COGS (Cost of Goods Sold)
+    let totalPurchase = 0; // Total COGS
     let totalProfit = 0;
 
     sales.forEach((sale) => {
-      // যদি সেলস লেভেলে কোনো ডিসকাউন্ট থাকে, তা সেল অ্যামাউন্ট থেকে বাদ দেওয়া যেতে পারে
-      totalSale += Number(sale.grandTotal)|| 0;
+      totalSale += Number(sale.grandTotal) || 0;
 
-      sale.sale_Items.forEach((item) => {
-        const itemSubtotal = (Number(item.unitPrice) * Number(item.quantity));
+      // এখন এখানেও 'saleItems' ব্যবহার করতে হবে
+      sale.saleItems.forEach((item) => {
+        const itemSubtotal = Number(item.subtotal) || (Number(item.unitPrice) * Number(item.quantity));
         
-        // FIFO অনুযায়ী সঠিক মোট কস্ট (যদি item.totalCost না থাকে, তবে ফলব্যাক হিসেবে purcahsePrice ব্যবহার হবে)
-        const itemCost = (Number(item.purchasePrice) * Number(item.quantity));
+        // FIFO বা সেলের সময় সেভ করা totalCost ব্যবহার করা সবচেয়ে নিরাপদ
+        const itemCost = Number(item.totalCost) > 0 
+          ? Number(item.totalCost) 
+          : (Number(item.purchasePrice) * Number(item.quantity));
         
         totalPurchase += itemCost;
 
-        // নিখুঁত প্রফিট: আইটেমের সাবটোটাল থেকে FIFO কস্ট বাদ দেওয়া
+        // নিখুঁত প্রফিট: সাবটোটাল থেকে কস্ট বাদ দেওয়া
         const itemProfit = itemSubtotal - itemCost;
         totalProfit += itemProfit;
       });
@@ -66,7 +65,7 @@ export const getProfitReport = async (req, res) => {
       type: type || "custom",
       totalInvoice: sales.length,
       totalSale: Math.round(totalSale * 100) / 100,
-      totalPurchase: Math.round(totalPurchase * 100) / 100, // Total COGS
+      totalPurchase: Math.round(totalPurchase * 100) / 100,
       totalProfit: Math.round(totalProfit * 100) / 100,
     });
   } catch (err) {
