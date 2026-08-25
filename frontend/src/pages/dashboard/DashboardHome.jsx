@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -125,6 +125,13 @@ export default function DashboardHome() {
 
   const fmt = (n) => Number(n || 0).toLocaleString('en-BD', { minimumFractionDigits: 0 });
 
+  // Positive => change to return to customer. Negative => customer still owes (due).
+  const getBalance = (inv) => {
+    const paid = Number(inv?.paidAmount) || 0;
+    const payable = Number(inv?.totalPayable) || 0;
+    return paid - payable;
+  };
+
   const handleDownloadPDF = () => {
     if (!currentInvoice) return;
     try {
@@ -241,7 +248,8 @@ export default function DashboardHome() {
       const discount = currentInvoice.discount || 0;
       const totalPayable = currentInvoice.totalPayable || 0;
       const paidAmount = currentInvoice.paidAmount || 0;
-      const changeBack = currentInvoice.changeBack || 0;
+      const balance = getBalance(currentInvoice); // + = change, - = due
+      const isDue = balance < 0;
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
@@ -273,9 +281,18 @@ export default function DashboardHome() {
       doc.text("Paid Amount:", labelX, y);
       doc.text(`Tk ${Number(paidAmount).toLocaleString()}`, rightX, y, { align: 'right' });
 
-      y += 5;
-      doc.text("Change Returned:", labelX, y);
-      doc.text(`Tk ${Number(changeBack).toLocaleString()}`, rightX, y, { align: 'right' });
+      y += 6;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      if (isDue) {
+        doc.setTextColor(200, 30, 30);
+        doc.text("Due:", labelX, y);
+        doc.text(`Tk ${Number(Math.abs(balance)).toLocaleString()}`, rightX, y, { align: 'right' });
+      } else {
+        doc.setTextColor(20, 120, 80);
+        doc.text("Change Returned:", labelX, y);
+        doc.text(`Tk ${Number(balance).toLocaleString()}`, rightX, y, { align: 'right' });
+      }
 
       // --- Footer Note ---
       y += 20;
@@ -301,285 +318,307 @@ export default function DashboardHome() {
     }
   };
 
+  // Shared invoice markup — used both for the on-screen preview and the print-only block,
+  // so print always shows exactly the same content, once.
+  const renderInvoiceBody = () => {
+    const balance = getBalance(currentInvoice);
+    const isDue = balance < 0;
+
+    return (
+      <>
+        {/* Letterhead */}
+        <div className="flex items-start justify-between pb-5 border-b-2 border-slate-800">
+          <div>
+            <h1 className="text-[22px] font-extrabold tracking-tight text-slate-900 leading-tight">
+              {shopInfo.name}
+            </h1>
+            <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed max-w-[260px]">{shopInfo.address}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{shopInfo.phone} {shopInfo.email ? `• ${shopInfo.email}` : ''}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">Invoice</p>
+            <p className="text-base font-bold text-slate-900 mt-0.5">{currentInvoice?.invoiceNo || "#INV-001"}</p>
+            <p className="text-[10px] text-slate-400 mt-2">Date issued</p>
+            <p className="text-[11px] font-medium text-slate-700">{currentInvoice?.date || "N/A"}</p>
+          </div>
+        </div>
+
+        {/* Bill to / Served by */}
+        <div className="grid grid-cols-2 gap-4 py-5">
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase mb-1">Billed to</p>
+            <p className="text-[13px] font-semibold text-slate-800">{currentInvoice?.customerName || "Walk-in Customer"}</p>
+            {currentInvoice?.customerPhone && (
+              <p className="text-[11px] text-slate-500 mt-0.5">{currentInvoice.customerPhone}</p>
+            )}
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase mb-1">Served by</p>
+            <p className="text-[13px] font-semibold text-slate-800">{currentInvoice?.cashierName || "Cashier"}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Payment: <span className="font-semibold text-slate-700">{currentInvoice?.paymentMethod || 'CASH'}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Items table */}
+        <table className="w-full text-left text-[12px] border-collapse">
+          <thead>
+            <tr className="bg-slate-900 text-white">
+              <th className="py-2 px-3 font-semibold rounded-l-md">Item</th>
+              <th className="py-2 px-3 font-semibold text-center">Qty</th>
+              <th className="py-2 px-3 font-semibold text-right">Unit price</th>
+              <th className="py-2 px-3 font-semibold text-right rounded-r-md">Amount</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {currentInvoice?.items && currentInvoice.items.length > 0 ? (
+              currentInvoice.items.map((item, index) => {
+                const price = item.price ?? item.unitPrice ?? 0;
+                const total = item.total ?? (item.quantity * price);
+                return (
+                  <tr key={index}>
+                    <td className="py-2.5 px-3 font-medium text-slate-800">{item.name || item.productName || 'Product'}</td>
+                    <td className="py-2.5 px-3 text-center text-slate-600">{item.quantity}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-600">৳{fmt(price)}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-slate-800">৳{fmt(total)}</td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan="4" className="py-6 text-center text-slate-400">No items found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        {/* Totals */}
+        <div className="flex justify-end mt-5">
+          <div className="w-full max-w-[240px] space-y-1.5">
+            <div className="flex justify-between text-[12px] text-slate-500">
+              <span>Subtotal</span>
+              <span className="text-slate-700 font-medium">৳{fmt(currentInvoice?.subTotal)}</span>
+            </div>
+            <div className="flex justify-between text-[12px] text-slate-500">
+              <span>Discount</span>
+              <span className="text-slate-700 font-medium">− ৳{fmt(currentInvoice?.discount)}</span>
+            </div>
+            <div className="flex justify-between items-center text-[14px] font-bold text-slate-900 pt-2.5 mt-1.5 border-t-2 border-slate-800">
+              <span>Total payable</span>
+              <span>৳{fmt(currentInvoice?.totalPayable)}</span>
+            </div>
+            <div className="flex justify-between text-[11px] text-slate-500 pt-1">
+              <span>Paid</span>
+              <span className="font-medium text-slate-700">৳{fmt(currentInvoice?.paidAmount)}</span>
+            </div>
+            <div className={`flex justify-between text-[11px] pt-1 ${isDue ? 'border-t border-red-100 mt-1' : ''}`}>
+              <span className={isDue ? 'font-semibold text-red-600' : 'text-slate-500'}>
+                {isDue ? 'Due' : 'Change returned'}
+              </span>
+              <span className={`font-semibold ${isDue ? 'text-red-600' : 'text-emerald-600'}`}>
+                ৳{fmt(Math.abs(balance))}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center pt-6 mt-6 border-t border-dashed border-slate-300">
+          <p className="text-[12px] font-semibold text-slate-700">{shopInfo.invoiceFooterNote}</p>
+          <p className="text-[9px] text-slate-400 mt-1 tracking-wide">Software powered by Matipul POS System</p>
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="p-1 text-slate-900">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Shop Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Real-time statistics and quick shop metrics.</p>
-        </div>
-        <button
-          onClick={() => navigate('/salePage')}
-          className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm">
-          <span>➕</span> New Sale (POS)
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-        {kpiCards.map((card, idx) => (
-          <div key={idx} className={`bg-white p-5 rounded-2xl border-l-4 border border-slate-200/80 shadow-xs flex items-center justify-between transition-all hover:shadow-md ${card.color}`}>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{card.title}</p>
-              <h3 className="text-2xl font-bold text-slate-800 mt-1.5">{loading ? '...' : card.value}</h3>
-              <p className="text-xs text-slate-400 mt-1">{card.change}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-white border border-slate-100 shadow-2xs">
-              {card.icon}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+      {/* Your global index.css already handles print visibility for
+          #printable-invoice (visibility:hidden on body *, visibility:visible
+          + position:fixed on #printable-invoice). Don't wrap this in
+          print:hidden / display:none — that would hide #printable-invoice
+          too, since a display:none ancestor overrides a visible descendant. */}
+      <div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
-            <div className="flex justify-between items-center mb-5">
-              <h2 className="text-lg font-bold text-slate-800">Recent Invoices</h2>
-              <button onClick={() => navigate('/sales')} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5">
-                View All ↗
-              </button>
-            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Shop Dashboard</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Real-time statistics and quick shop metrics.</p>
+          </div>
+          <button
+            onClick={() => navigate('/salePage')}
+            className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm">
+            <span>➕</span> New Sale (POS)
+          </button>
+        </div>
 
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="py-10 text-center text-slate-400 text-sm">Loading invoices...</div>
-              ) : recentInvoices.length === 0 ? (
-                <div className="py-10 text-center text-slate-400 text-sm">কোনো সাম্প্রতিক সেল বা ইনভয়েস পাওয়া যায়নি।</div>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-medium">
-                      <th className="pb-3 font-semibold">Invoice No</th>
-                      <th className="pb-3 font-semibold">Customer</th>
-                      <th className="pb-3 font-semibold">Amount</th>
-                      <th className="pb-3 font-semibold">Method</th>
-                      <th className="pb-3 font-semibold text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {recentInvoices.map((inv, i) => (
-                      <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3.5 font-medium text-slate-700">{inv.invoiceNo}</td>
-                        <td className="py-3.5 text-slate-600">
-                          <div>{inv.customerName}</div>
-                          <div className="text-[11px] text-slate-400">{inv.time}</div>
-                        </td>
-                        <td className="py-3.5 font-semibold text-slate-800">৳{fmt(inv.totalPayable)}</td>
-                        <td className="py-3.5">
-                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide ${inv.paymentMethod === 'CASH' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-pink-50 text-pink-700 border border-pink-200'}`}>
-                            {inv.paymentMethod}
-                          </span>
-                        </td>
-                        <td className="py-3.5 text-right">
-                          <button
-                            onClick={() => {
-                              setCurrentInvoice(inv);
-                              setShowDetails(true);
-                            }}
-                            className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium transition-colors"
-                            title="View Details"
-                          >
-                            👁️ View
-                          </button>
-                        </td>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          {kpiCards.map((card, idx) => (
+            <div key={idx} className={`bg-white p-5 rounded-2xl border-l-4 border border-slate-200/80 shadow-xs flex items-center justify-between transition-all hover:shadow-md ${card.color}`}>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{card.title}</p>
+                <h3 className="text-2xl font-bold text-slate-800 mt-1.5">{loading ? '...' : card.value}</h3>
+                <p className="text-xs text-slate-400 mt-1">{card.change}</p>
+              </div>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-white border border-slate-100 shadow-2xs">
+                {card.icon}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="text-lg font-bold text-slate-800">Recent Invoices</h2>
+                <button onClick={() => navigate('/sales')} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5">
+                  View All ↗
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                {loading ? (
+                  <div className="py-10 text-center text-slate-400 text-sm">Loading invoices...</div>
+                ) : recentInvoices.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-sm">কোনো সাম্প্রতিক সেল বা ইনভয়েস পাওয়া যায়নি।</div>
+                ) : (
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-slate-400 font-medium">
+                        <th className="pb-3 font-semibold">Invoice No</th>
+                        <th className="pb-3 font-semibold">Customer</th>
+                        <th className="pb-3 font-semibold">Amount</th>
+                        <th className="pb-3 font-semibold">Method</th>
+                        <th className="pb-3 font-semibold text-right">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {recentInvoices.map((inv, i) => (
+                        <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3.5 font-medium text-slate-700">{inv.invoiceNo}</td>
+                          <td className="py-3.5 text-slate-600">
+                            <div>{inv.customerName}</div>
+                            <div className="text-[11px] text-slate-400">{inv.time}</div>
+                          </td>
+                          <td className="py-3.5 font-semibold text-slate-800">৳{fmt(inv.totalPayable)}</td>
+                          <td className="py-3.5">
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide ${inv.paymentMethod === 'CASH' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-pink-50 text-pink-700 border border-pink-200'}`}>
+                              {inv.paymentMethod}
+                            </span>
+                          </td>
+                          <td className="py-3.5 text-right">
+                            <button
+                              onClick={() => {
+                                setCurrentInvoice(inv);
+                                setShowDetails(true);
+                              }}
+                              className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium transition-colors"
+                              title="View Details"
+                            >
+                              👁️ View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-            <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-              Low Stock Notifications
-            </h2>
-            <div className="space-y-3">
-              {lowStockProducts.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">সব প্রোডাক্টের স্টক পর্যাপ্ত আছে! 🎉</p>
-              ) : (
-                lowStockProducts.map((prod, i) => (
-                  <div key={i} className="p-3 bg-amber-50/40 border border-amber-100 rounded-xl flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-800">{prod.name}</h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{prod.sku}</p>
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+              <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                Low Stock Notifications
+              </h2>
+              <div className="space-y-3">
+                {lowStockProducts.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">সব প্রোডাক্টের স্টক পর্যাপ্ত আছে! 🎉</p>
+                ) : (
+                  lowStockProducts.map((prod, i) => (
+                    <div key={i} className="p-3 bg-amber-50/40 border border-amber-100 rounded-xl flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-800">{prod.name}</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{prod.sku}</p>
+                      </div>
+                      <span className="text-xs font-bold text-amber-700 bg-amber-100/70 px-2 py-1 rounded-lg">
+                        {prod.stock}
+                      </span>
                     </div>
-                    <span className="text-xs font-bold text-amber-700 bg-amber-100/70 px-2 py-1 rounded-lg">
-                      {prod.stock}
-                    </span>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xs relative overflow-hidden">
-            <h3 className="text-base font-bold mb-1.5">POS Billing Active 🛍️</h3>
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">
-              আপনার কাউন্টারটি সেলস নেওয়ার জন্য সম্পূর্ণ প্রস্তুত।
-            </p>
-            <div className="text-xs font-mono text-slate-500 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
-              Counter Status: Operational
+            <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xs relative overflow-hidden">
+              <h3 className="text-base font-bold mb-1.5">POS Billing Active 🛍️</h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                আপনার কাউন্টারটি সেলস নেওয়ার জন্য সম্পূর্ণ প্রস্তুত।
+              </p>
+              <div className="text-xs font-mono text-slate-500 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                Counter Status: Operational
+              </div>
             </div>
           </div>
         </div>
+
+        {/* ===================== INVOICE MODAL (screen only) ===================== */}
+        {showDetails && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm">
+            <div className="flex w-full max-w-xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden max-h-[92vh]">
+              {/* Toolbar */}
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-3.5 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <h2 className="text-sm font-bold text-slate-800">Invoice Preview</h2>
+                </div>
+                <button
+                  onClick={() => setShowDetails(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto bg-slate-50">
+                <div
+                  ref={invoiceContentRef}
+                  id="printable-invoice"
+                  className="bg-white mx-auto my-4 p-8 max-w-[560px] shadow-sm border border-slate-100 font-[system-ui] text-slate-800"
+                >
+                  {renderInvoiceBody()}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-white px-6 py-3.5 shrink-0">
+                <button
+                  onClick={() => setShowDetails(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition shadow-xs"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={downloadingPDF}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span>⬇️</span> {downloadingPDF ? 'Generating...' : 'Download PDF'}
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition"
+                >
+                  <span>🖨️</span> Print Invoice
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* ===================== PROFESSIONAL INVOICE MODAL ===================== */}
-      {showDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm print:bg-white print:p-0 print:items-start">
-          <div
-            className="flex w-full max-w-xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden max-h-[92vh] print:max-h-none print:shadow-none print:rounded-none print:w-full print:max-w-none"
-          >
-            {/* Toolbar (hidden on print) */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-3.5 print:hidden shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <h2 className="text-sm font-bold text-slate-800">Invoice Preview</h2>
-              </div>
-              <button
-                onClick={() => setShowDetails(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto bg-slate-50 print:bg-white print:overflow-visible">
-              <div
-                ref={invoiceContentRef}
-                id="printable-invoice"
-                className="bg-white mx-auto my-4 p-8 max-w-[560px] shadow-sm border border-slate-100 print:shadow-none print:border-none print:m-0 print:p-6 print:max-w-none font-[system-ui] text-slate-800"
-              >
-                {/* Letterhead */}
-                <div className="flex items-start justify-between pb-5 border-b-2 border-slate-800">
-                  <div>
-                    <h1 className="text-[22px] font-extrabold tracking-tight text-slate-900 leading-tight">
-                      {shopInfo.name}
-                    </h1>
-                    <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed max-w-[260px]">{shopInfo.address}</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{shopInfo.phone} {shopInfo.email ? `• ${shopInfo.email}` : ''}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">Invoice</p>
-                    <p className="text-base font-bold text-slate-900 mt-0.5">{currentInvoice?.invoiceNo || "#INV-001"}</p>
-                    <p className="text-[10px] text-slate-400 mt-2">Date issued</p>
-                    <p className="text-[11px] font-medium text-slate-700">{currentInvoice?.date || "N/A"}</p>
-                  </div>
-                </div>
-
-                {/* Bill to / Served by */}
-                <div className="grid grid-cols-2 gap-4 py-5">
-                  <div>
-                    <p className="text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase mb-1">Billed to</p>
-                    <p className="text-[13px] font-semibold text-slate-800">{currentInvoice?.customerName || "Walk-in Customer"}</p>
-                    {currentInvoice?.customerPhone && (
-                      <p className="text-[11px] text-slate-500 mt-0.5">{currentInvoice.customerPhone}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase mb-1">Served by</p>
-                    <p className="text-[13px] font-semibold text-slate-800">{currentInvoice?.cashierName || "Cashier"}</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Payment: <span className="font-semibold text-slate-700">{currentInvoice?.paymentMethod || 'CASH'}</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Items table */}
-                <table className="w-full text-left text-[12px] border-collapse">
-                  <thead>
-                    <tr className="bg-slate-900 text-white">
-                      <th className="py-2 px-3 font-semibold rounded-l-md">Item</th>
-                      <th className="py-2 px-3 font-semibold text-center">Qty</th>
-                      <th className="py-2 px-3 font-semibold text-right">Unit price</th>
-                      <th className="py-2 px-3 font-semibold text-right rounded-r-md">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {currentInvoice?.items && currentInvoice.items.length > 0 ? (
-                      currentInvoice.items.map((item, index) => {
-                        const price = item.price ?? item.unitPrice ?? 0;
-                        const total = item.total ?? (item.quantity * price);
-                        return (
-                          <tr key={index}>
-                            <td className="py-2.5 px-3 font-medium text-slate-800">{item.name || item.productName || 'Product'}</td>
-                            <td className="py-2.5 px-3 text-center text-slate-600">{item.quantity}</td>
-                            <td className="py-2.5 px-3 text-right text-slate-600">৳{fmt(price)}</td>
-                            <td className="py-2.5 px-3 text-right font-semibold text-slate-800">৳{fmt(total)}</td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan="4" className="py-6 text-center text-slate-400">No items found.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-
-                {/* Totals */}
-                <div className="flex justify-end mt-5">
-                  <div className="w-full max-w-[240px] space-y-1.5">
-                    <div className="flex justify-between text-[12px] text-slate-500">
-                      <span>Subtotal</span>
-                      <span className="text-slate-700 font-medium">৳{fmt(currentInvoice?.subTotal)}</span>
-                    </div>
-                    <div className="flex justify-between text-[12px] text-slate-500">
-                      <span>Discount</span>
-                      <span className="text-slate-700 font-medium">− ৳{fmt(currentInvoice?.discount)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-[14px] font-bold text-slate-900 pt-2.5 mt-1.5 border-t-2 border-slate-800">
-                      <span>Total payable</span>
-                      <span>৳{fmt(currentInvoice?.totalPayable)}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] text-slate-500 pt-1">
-                      <span>Paid</span>
-                      <span className="font-medium text-slate-700">৳{fmt(currentInvoice?.paidAmount)}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] text-slate-500">
-                      <span>Change returned</span>
-                      <span className="font-medium text-emerald-600">৳{fmt(currentInvoice?.changeBack)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="text-center pt-6 mt-6 border-t border-dashed border-slate-300">
-                  <p className="text-[12px] font-semibold text-slate-700">{shopInfo.invoiceFooterNote}</p>
-                  <p className="text-[9px] text-slate-400 mt-1 tracking-wide">Software powered by Matipul POS System</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions (hidden on print) */}
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-white px-6 py-3.5 print:hidden shrink-0">
-              <button
-                onClick={() => setShowDetails(false)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition shadow-xs"
-              >
-                Close
-              </button>
-              <button
-                onClick={handleDownloadPDF}
-                disabled={downloadingPDF}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span>⬇️</span> {downloadingPDF ? 'Generating...' : 'Download PDF'}
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition"
-              >
-                <span>🖨️</span> Print Invoice
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

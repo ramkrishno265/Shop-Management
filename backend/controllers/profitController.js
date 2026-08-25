@@ -1,5 +1,5 @@
-
 import prisma from "../config/db.js";
+
 export const getProfitReport = async (req, res) => {
   try {
     const shopId = req.user.shopId;
@@ -34,33 +34,39 @@ export const getProfitReport = async (req, res) => {
     const sales = await prisma.sale.findMany({
       where,
       include: {
-        saleItems: true, // ✅ এখানে 'sale_Items' এর বদলে সঠিক নামটি বসানো হলো ('saleItems')
+        saleItems: true,
       },
     });
 
     let totalSale = 0;
     let totalPurchase = 0; // Total COGS
     let totalProfit = 0;
+    let totalDiscount = 0; // মোট ডিসকাউন্ট রাখার জন্য ভেরিয়েবল
 
     sales.forEach((sale) => {
       totalSale += Number(sale.grandTotal) || 0;
+      
+      // ইনভয়েসের ডিসকাউন্টগুলো যোগ করে রাখা
+      totalDiscount += Number(sale.discountAmount) || 0;
 
-      // এখন এখানেও 'saleItems' ব্যবহার করতে হবে
       sale.saleItems.forEach((item) => {
         const itemSubtotal = Number(item.subtotal) || (Number(item.unitPrice) * Number(item.quantity));
-        
-        // FIFO বা সেলের সময় সেভ করা totalCost ব্যবহার করা সবচেয়ে নিরাপদ
-        const itemCost = Number(item.totalCost) > 0 
-          ? Number(item.totalCost) 
+
+        // FIFO বা সেলের সময় সেভ করা totalCost ব্যবহার করা সবচেয়ে নিরাপদ
+        const itemCost = Number(item.totalCost) > 0
+          ? Number(item.totalCost)
           : (Number(item.purchasePrice) * Number(item.quantity));
-        
+
         totalPurchase += itemCost;
 
-        // নিখুঁত প্রফিট: সাবটোটাল থেকে কস্ট বাদ দেওয়া
+        // নিখুঁত প্রফিট: সাবটোটাল থেকে কস্ট বাদ দেওয়া
         const itemProfit = itemSubtotal - itemCost;
         totalProfit += itemProfit;
       });
     });
+
+    // ✅ সমস্ত আইটেমের প্রফিট যোগ করা শেষ হওয়ার পর এখানে ডিসকাউন্ট বাদ দেওয়া হলো
+    const finalProfit = totalProfit - totalDiscount;
 
     return res.status(200).json({
       success: true,
@@ -68,7 +74,7 @@ export const getProfitReport = async (req, res) => {
       totalInvoice: sales.length,
       totalSale: Math.round(totalSale * 100) / 100,
       totalPurchase: Math.round(totalPurchase * 100) / 100,
-      totalProfit: Math.round(totalProfit * 100) / 100,
+      totalProfit: Math.round(finalProfit * 100) / 100,
     });
   } catch (err) {
     console.log("Profit Report Error:", err);
