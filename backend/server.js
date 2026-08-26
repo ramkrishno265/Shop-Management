@@ -10,6 +10,7 @@ import expenseRoutes from './routes/expenseRoutes.js';
 import profitRoutes from "./routes/profitRoutes.js";
 import AddCustomer from './routes/customer.routes.js';
 import shopRoutes from './routes/shopProfileRouter.js';
+import FieldRouter from './routes/FieldRouter.js';
 
 dotenv.config();
 
@@ -29,7 +30,7 @@ app.use('/api', expenseRoutes);
 app.use("/api/profit", profitRoutes);
 app.use('/api/add_customer', AddCustomer);
 app.use('/api/shops_profile', shopRoutes);
-
+app.use('/api/fields', FieldRouter);
 
 // Test Base Route
 app.get('/', (req, res) => {

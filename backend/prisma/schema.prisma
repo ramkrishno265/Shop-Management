@@ -42,6 +42,7 @@ model Shop {
 
   users            User[]
   products         Product[]
+  fieldConfigs     ShopFieldConfig[]
   sales            Sale[]
   customers        Customer[]
   categories       Category[]
@@ -144,6 +145,7 @@ model Product {
   sellingPrice  Float     @default(0)
   description   String?
   status        String    @default("ACTIVE")
+  customFields  Json?     @map("custom_fields")
 
   categoryId    Int?
   category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -388,4 +390,24 @@ model Expense {
   createdAt DateTime @default(now())
 
   @@map("expenses")
+}
+
+model ShopFieldConfig {
+  id          Int      @id @default(autoincrement())
+  
+  shopId      Int
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  fieldName   String   // ফিল্ডের কি বা নাম (যেমন: size, color, expiry_date)
+  fieldLabel  String   // ইউজারের সামনে যা দেখাবে (যেমন: Product Size)
+  fieldType   String   // টাইপ (text, number, select, date)
+  options     String?  // ড্রপডাউন অপশন কমা দিয়ে সেভ রাখার জন্য (যেমন: "S, M, L")
+  isRequired  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([shopId, fieldName]) // একই শপে যেন একই নামের ফিল্ড দুইবার তৈরি না হয়
+  @@map("shop_field_configs")
 }

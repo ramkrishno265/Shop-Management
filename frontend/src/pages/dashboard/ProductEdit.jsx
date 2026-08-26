@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   FiPlus,
@@ -36,6 +36,7 @@ const ProductEdit = () => {
   const [existingCategories, setExistingCategories] = useState([]);
   const [categoryInput, setCategoryInput] = useState("");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryBoxRef = useRef(null); // dropdown এর বাইরে ক্লিক ধরার জন্য
 
   // Standard Product State
   const [standardData, setStandardData] = useState({
@@ -55,6 +56,10 @@ const ProductEdit = () => {
       sellingPrice: "",
     },
   ]);
+
+  // কাস্টম ফিল্ডের স্টেট (ProductEntry-এর সাথে মিলিয়ে)
+  const [customFieldsConfig, setCustomFieldsConfig] = useState([]);
+  const [customFieldValues, setCustomFieldValues] = useState({});
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const token = localStorage.getItem("token");
@@ -92,7 +97,35 @@ const ProductEdit = () => {
     fetchCategories();
   }, [API_URL, token, shopId]);
 
-  // --- 2. Fetch Existing Product Data ---
+  // --- 2. Fetch Custom Field Config (same as ProductEntry) ---
+  useEffect(() => {
+    const fetchCustomFields = async () => {
+      try {
+        const response = await fetch(`${API_URL}/fields`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        const data = await response.json();
+        if (data.success) {
+          setCustomFieldsConfig(data.data || []);
+        }
+      } catch (error) {
+        console.error("Error fetching custom fields config:", error);
+      }
+    };
+
+    fetchCustomFields();
+  }, []);
+
+  const handleCustomFieldChange = (fieldName, value) => {
+    setCustomFieldValues({
+      ...customFieldValues,
+      [fieldName]: value,
+    });
+  };
+
+  // --- 3. Fetch Existing Product Data ---
   useEffect(() => {
     const fetchProductDetails = async () => {
       if (!token || !id) return;
@@ -120,6 +153,11 @@ const ProductEdit = () => {
             description: product.description || "",
           });
           setCategoryInput(categoryName);
+
+          // প্রোডাক্টের বিদ্যমান কাস্টম ফিল্ড ভ্যালু দিয়ে ফর্ম প্রি-ফিল করা
+          if (product.customFields && typeof product.customFields === "object") {
+            setCustomFieldValues(product.customFields);
+          }
 
           if (product.inventoryType === "standard" || !product.inventoryType) {
             setStandardData({
@@ -149,6 +187,21 @@ const ProductEdit = () => {
 
     fetchProductDetails();
   }, [id, API_URL, token]);
+
+  // --- ক্যাটাগরি ড্রপডাউন বাইরে ক্লিক করলে বন্ধ করার জন্য ---
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        categoryBoxRef.current &&
+        !categoryBoxRef.current.contains(event.target)
+      ) {
+        setShowCategoryDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Handlers
   const handleInputChange = (e) => {
@@ -240,7 +293,7 @@ const ProductEdit = () => {
     cat.toLowerCase().includes(categoryInput.toLowerCase()),
   );
 
-  // --- 3. Update Product API Call ---
+  // --- 4. Update Product API Call ---
   const handleUpdate = async (e) => {
     e.preventDefault();
 
@@ -265,6 +318,7 @@ const ProductEdit = () => {
             stock: Number(standardData.stock),
           }
         : { packs }),
+      customFields: customFieldValues, // 👈 ProductEntry-এর মতো এখন এটাও আপডেট পেলোডে যাচ্ছে
     };
 
     setLoading(true);
@@ -338,7 +392,7 @@ const ProductEdit = () => {
             </div>
 
             {/* Dynamic Searchable Category Input */}
-            <div className="relative">
+            <div className="relative" ref={categoryBoxRef}>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 ক্যাটাগরি (Category) *
               </label>
@@ -468,6 +522,57 @@ const ProductEdit = () => {
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-slate-50/50 hover:bg-white text-slate-800 text-sm"
             />
           </div>
+
+          {/* --- ডাইনামিক কাস্টম ফিল্ড সেকশন (ProductEntry-এর সাথে মিলিয়ে) --- */}
+          {customFieldsConfig.length > 0 && (
+            <div className="bg-indigo-50/30 p-5 rounded-2xl border border-indigo-100 space-y-4 my-4">
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider text-indigo-900 flex items-center gap-2">
+                <span>⚙️</span> অতিরিক্ত বা কাস্টম তথ্যাবলী
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {customFieldsConfig.map((field) => (
+                  <div key={field.fieldName}>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                      {field.fieldLabel} {field.isRequired && <span className="text-rose-500">*</span>}
+                    </label>
+
+                    {field.fieldType === "SELECT" ? (
+                      <select
+                        value={customFieldValues[field.fieldName] || ""}
+                        onChange={(e) => handleCustomFieldChange(field.fieldName, e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 text-sm"
+                        required={field.isRequired}
+                      >
+                        <option value="">সিলেক্ট করুন</option>
+                        {field.options &&
+                          field.options.split(",").map((opt, i) => (
+                            <option key={i} value={opt.trim()}>
+                              {opt.trim()}
+                            </option>
+                          ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={
+                          field.fieldType === "NUMBER"
+                            ? "number"
+                            : field.fieldType === "DATE"
+                              ? "date"
+                              : "text"
+                        }
+                        placeholder={`${field.fieldLabel} লিখুন`}
+                        value={customFieldValues[field.fieldName] || ""}
+                        onChange={(e) => handleCustomFieldChange(field.fieldName, e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 text-sm"
+                        required={field.isRequired}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Section 2: Inventory Type Selector Cards */}
           <div>

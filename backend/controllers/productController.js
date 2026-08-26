@@ -96,7 +96,8 @@ export const createProduct = async (req, res) => {
       packs,
       description,
       requestShopId,
-      lowStockLimit
+      lowStockLimit,
+      customFields
     } = req.body;
 
     const finalShopId = validateShopAccess(req.user, requestShopId);
@@ -180,7 +181,8 @@ export const createProduct = async (req, res) => {
           categoryId: dbCategory.id,
           shopId: finalShopId,
           description: description ? description.trim() : null,
-          status: quantity > 0 || type === 'pack' ? "ACTIVE" : "INACTIVE"
+          status: quantity > 0 || type === 'pack' ? "ACTIVE" : "INACTIVE",
+          customFields: customFields || {}
         }
       });
 
@@ -293,7 +295,8 @@ export const updateProduct = async (req, res) => {
       inventoryType,
       baseUnit,
       packs,
-      standardData
+      standardData,
+      customFields
     } = req.body;
 
     const { role, shopId } = req.user;
@@ -409,6 +412,7 @@ export const updateProduct = async (req, res) => {
           description: description !== undefined ? description.trim() : existingProduct.description,
           status: status ?? (finalQuantity > 0 ? "ACTIVE" : "INACTIVE"),
           categoryId,
+          customFields: customFields !== undefined ? customFields : existingProduct.customFields,
         },
         include: {
           category: true,
@@ -657,7 +661,8 @@ export const bulkImportProducts = async (req, res) => {
               categoryId: categoryId,
               shopId: finalShopId,
               description: item.description ? String(item.description).trim() : null,
-              status: quantity > 0 || inventoryType === 'pack' ? "ACTIVE" : "INACTIVE"
+              status: quantity > 0 || inventoryType === 'pack' ? "ACTIVE" : "INACTIVE",
+              customFields: item.customFields || {}
             }
           });
 

@@ -46,10 +46,7 @@ export default function DashboardLayout({ children }) {
     { name: "Sales & Billing", icon: "💼", path: "/salePage" },
     { name: "Purchase", icon: "🛒", path: "/purchase_page" },
     { name: "Profit & Margin", icon: "📈", path: "/profit" },
-    { name: "Staff Management", icon: "👥", path: "#"
-
-      
-     },
+    { name: "Staff Management", icon: "👥", path: "#"},
     { 
       name: "Settings", 
       icon: "⚙️", 
@@ -57,7 +54,7 @@ export default function DashboardLayout({ children }) {
       // সাব-মেনু অপশনসমূহ
       children: [
         { name: "Shop Profile", path: "/shop_profile" },
-        { name: "Tax & VAT", path: "/settings/tax" },
+        { name: "Product Field Settings", path: "/product_field_settings" },
         { name: "Printer Setup", path: "/settings/printer" },
       ]
     },
