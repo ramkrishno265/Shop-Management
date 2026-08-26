@@ -46,10 +46,10 @@ export default function DashboardLayout({ children }) {
     { name: "Sales & Billing", icon: "💼", path: "/salePage" },
     { name: "Purchase", icon: "🛒", path: "/purchase_page" },
     { name: "Profit & Margin", icon: "📈", path: "/profit" },
-    { name: "Staff Management", icon: "👥", path: "#"},
-    { 
-      name: "Settings", 
-      icon: "⚙️", 
+    { name: "Staff Management", icon: "👥", path: "#" },
+    {
+      name: "Settings",
+      icon: "⚙️",
       path: "#",
       // সাব-মেনু অপশনসমূহ
       children: [
@@ -142,9 +142,8 @@ export default function DashboardLayout({ children }) {
                   {hasChildren && (
                     <HiChevronDown
                       size={16}
-                      className={`transition-transform duration-200 ${
-                        isOpen ? "rotate-180 text-slate-900" : "text-slate-400"
-                      }`}
+                      className={`transition-transform duration-200 ${isOpen ? "rotate-180 text-slate-900" : "text-slate-400"
+                        }`}
                     />
                   )}
                 </button>
@@ -219,7 +218,7 @@ export default function DashboardLayout({ children }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto ">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 w-full">
           {children}
         </main>
       </div>

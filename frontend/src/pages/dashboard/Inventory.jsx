@@ -133,8 +133,8 @@ const InventoryPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50/70 p-4 md:p-8 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-50/70 p-4  font-sans">
+      <div className=" mx-auto space-y-6">
         {/* Top Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>

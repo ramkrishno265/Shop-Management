@@ -303,7 +303,7 @@ export default function InventoryManagement() {
     setSupNote("");
   };
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 bg-gray-50/50 min-h-screen">
+    <div className=" mx-auto px-4  bg-gray-50/50 min-h-screen">
       {/* Standard Header Navigation Tabs */}
       <div className="flex flex-wrap items-center gap-2 mb-8 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 w-fit">
         <button
