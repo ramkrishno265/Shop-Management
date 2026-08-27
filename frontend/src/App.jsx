@@ -19,7 +19,7 @@ import ProductEdit from "./pages/dashboard/ProductEdit.jsx";
 import AddCustomer from "./pages/dashboard/AddCustomer.jsx";
 import BulkImportPage from "./pages/dashboard/BulkImportPage.jsx";
 import ShopProfile from "./pages/Setting_Option/ShopProfile.jsx"; // Import the BulkImportPage component
-import ProductFieldSettings from "./pages/dashboard/ProductFieldSettings.jsx"; // Import the BulkImportPage component
+import ProductFieldSettings from "./pages/Setting_Option/ProductFieldSettings.jsx"; // Import the BulkImportPage component
 
 
 // Protected Route Guard Component

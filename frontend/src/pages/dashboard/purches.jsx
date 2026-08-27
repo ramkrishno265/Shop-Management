@@ -23,6 +23,11 @@ export default function InventoryManagement() {
   const [date, setDate] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("Paid");
   const [product, setProduct] = useState("");
+  // ✅ নতুন: শুধু নাম না, প্রোডাক্টের পুরো রেকর্ড ট্র্যাক করা হচ্ছে যাতে inventoryType
+  // ও packs জানা যায় — এটা ছাড়া pack প্রোডাক্ট সঠিকভাবে restock করা সম্ভব না।
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedPackId, setSelectedPackId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [note, setNote] = useState("");
@@ -33,9 +38,19 @@ export default function InventoryManagement() {
   const [supAddress, setSupAddress] = useState("");
   const [supNote, setSupNote] = useState("");
 
+  const isPackProduct = selectedProduct?.inventoryType === 'pack';
+  const selectedPack = isPackProduct
+    ? (selectedProduct?.packs || []).find((p) => String(p.id) === String(selectedPackId))
+    : null;
+
   // Calculations
   const totalAmount = Number(quantity) * Number(unitPrice) || 0;
   const dueAmount = Math.max(0, totalAmount - (Number(paidAmount) || 0));
+  // শুধু তথ্যের জন্য: pack হলে এই purchase-এ আসলে কত base-unit স্টক যোগ হবে তা দেখানো,
+  // যাতে ইউজার সেভ করার আগেই বুঝতে পারে (backend-ও একই হিসাব করবে)
+  const baseUnitsToAdd = isPackProduct && selectedPack
+    ? (Number(quantity) || 0) * (Number(selectedPack.multiplier) || 1)
+    : Number(quantity) || 0;
 
   useEffect(() => {
     fetchProducts();
@@ -95,6 +110,27 @@ export default function InventoryManagement() {
     setSupplierNumber(foundSupplier ? (foundSupplier.phone || foundSupplier.number || '') : '');
   };
 
+  // ✅ নতুন: প্রোডাক্ট সিলেক্ট করার সময় পুরো রেকর্ড সেভ করা এবং pack selection রিসেট করা
+  const handleSelectProduct = (p) => {
+    const pName = typeof p === 'string' ? p : (p.name || p.product_name || '');
+    setProduct(pName);
+    setSelectedProductId(p.id || "");
+    setSelectedProduct(p);
+    setSelectedPackId("");
+    setUnitPrice("");
+    setIsDropdownOpen(false);
+  };
+
+  const handleSelectPack = (e) => {
+    const packId = e.target.value;
+    setSelectedPackId(packId);
+    const pack = (selectedProduct?.packs || []).find((p) => String(p.id) === String(packId));
+    if (pack) {
+      // pack নির্বাচন করলে ইউনিট প্রাইস ফিল্ডে ডিফল্ট হিসেবে "প্রতি প্যাকের ক্রয়মূল্য" বসিয়ে দেওয়া (ইউজার চাইলে বদলাতে পারবে)
+      setUnitPrice(pack.purchasePrice || "");
+    }
+  };
+
   // Save / Update Purchase
   const handleSavePurchase = async (e) => {
     e.preventDefault();
@@ -118,12 +154,26 @@ export default function InventoryManagement() {
       return;
     }
 
+    if (!selectedProductId) {
+      alert("দয়া করে লিস্ট থেকে একটি প্রোডাক্ট নির্বাচন করুন।");
+      return;
+    }
+
+    if (isPackProduct && !selectedPackId) {
+      alert("এটি একটি Pack প্রোডাক্ট। কোন প্যাক (যেমন: ২৫ কেজি বস্তা) দিয়ে কেনা হয়েছে তা নির্বাচন করুন।");
+      return;
+    }
+
     const purchaseData = {
       shopId: currentShopId,
       supplier_id: supplierId,
       date,
       payment_status: paymentStatus,
       product,
+      productId: selectedProductId,
+      // ✅ pack হলে packId পাঠানো — backend এটা দিয়ে multiplier বের করে quantity/unit_price
+      // কে base-unit-এ কনভার্ট করবে। standard প্রোডাক্টে এটা undefined থাকবে।
+      packId: isPackProduct ? selectedPackId : undefined,
       quantity: Number(quantity),
       unit_price: Number(unitPrice),
       total_amount: totalAmount,
@@ -148,6 +198,7 @@ export default function InventoryManagement() {
       if (response.ok) {
         alert(editingPurchaseId ? "Purchase updated successfully!" : "Purchase saved successfully!");
         fetchPurchases();
+        fetchProducts(); // স্টক আপডেট রিফ্লেক্ট করার জন্য
         setActiveTab("purchase_list");
         resetPurchaseForm();
       } else {
@@ -236,6 +287,16 @@ export default function InventoryManagement() {
     setQuantity(item.quantity || "");
     setUnitPrice(item.unitPrice || item.unit_price || "");
     setNote(item.note || "");
+
+    // ✅ এডিটের সময় প্রোডাক্ট ও প্যাক তথ্যও রিস্টোর করা, নাহলে pack প্রোডাক্ট আপডেট করলে
+    // আবার সেই পুরনো non-pack-aware বাগে ফিরে যাবে।
+    const purchaseItem = item.purchaseItems?.[0];
+    const linkedProductId = purchaseItem?.productId || item.productId || "";
+    const foundProduct = products.find((p) => String(p.id) === String(linkedProductId));
+    setSelectedProductId(linkedProductId);
+    setSelectedProduct(foundProduct || null);
+    setSelectedPackId(item.packId || item.pack?.id || "");
+
     setActiveTab("purchase_add");
   };
 
@@ -256,9 +317,15 @@ export default function InventoryManagement() {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }
       });
+      const result = await response.json().catch(() => ({}));
       if (response.ok) {
         alert("Purchase deleted successfully!");
         fetchPurchases();
+        fetchProducts();
+      } else {
+        // ✅ নতুন: ডিলিট এখন block হতে পারে (যদি এই পারচেজ থেকে ইতিমধ্যে বিক্রি হয়ে থাকে) —
+        // আগে এই এরর কখনো দেখানো হতো না কারণ ব্যাকএন্ড আগে কখনো fail-ই করত না।
+        alert(`Failed: ${result.message || "Could not delete purchase."}`);
       }
     } catch (error) {
       console.error("Error deleting purchase:", error);
@@ -290,6 +357,9 @@ export default function InventoryManagement() {
     setDate("");
     setPaymentStatus("Paid");
     setProduct("");
+    setSelectedProductId("");
+    setSelectedProduct(null);
+    setSelectedPackId("");
     setQuantity("");
     setUnitPrice("");
     setNote("");
@@ -372,7 +442,14 @@ export default function InventoryManagement() {
                   purchases.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50/60 transition">
                       <td className="p-4 text-gray-600 font-medium">{item.date}</td>
-                      <td className="p-4 font-semibold text-gray-800">{item.product}</td>
+                      <td className="p-4 font-semibold text-gray-800">
+                        {item.product}
+                        {item.pack?.packName && (
+                          <span className="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full align-middle">
+                            {item.pack.packName}
+                          </span>
+                        )}
+                      </td>
                       <td className="p-4 text-gray-600">{item.quantity}</td>
                       <td className="p-4 text-gray-600 font-mono">৳{item.unit_price || item.unitPrice}</td>
                       <td className="p-4 font-bold text-gray-900 font-mono">৳{item.total_amount || item.totalAmount}</td>
@@ -464,7 +541,13 @@ export default function InventoryManagement() {
                   <input
                     type="text"
                     value={product}
-                    onChange={(e) => { setProduct(e.target.value); setIsDropdownOpen(true); }}
+                    onChange={(e) => {
+                      setProduct(e.target.value);
+                      setSelectedProductId("");
+                      setSelectedProduct(null);
+                      setSelectedPackId("");
+                      setIsDropdownOpen(true);
+                    }}
                     onFocus={() => setIsDropdownOpen(true)}
                     placeholder="Type to search product..."
                     className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium"
@@ -482,16 +565,13 @@ export default function InventoryManagement() {
                           return (
                             <li
                               key={p.id || index}
-                              onClick={() => {
-                                setProduct(pName);
-                                if (p.buying_price || p.unitPrice || p.price) {
-                                  setUnitPrice(p.buying_price || p.unitPrice || p.price);
-                                }
-                                setIsDropdownOpen(false);
-                              }}
-                              className="p-3 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer font-medium"
+                              onClick={() => handleSelectProduct(p)}
+                              className="p-3 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer font-medium flex items-center justify-between"
                             >
-                              {pName}
+                              <span>{pName}</span>
+                              {p.inventoryType === 'pack' && (
+                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">Pack</span>
+                              )}
                             </li>
                           );
                         })}
@@ -499,13 +579,38 @@ export default function InventoryManagement() {
                   )}
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Quantity <span className="text-red-500">*</span></label>
+                {/* ✅ নতুন: Pack প্রোডাক্ট হলে কোন প্যাক দিয়ে কেনা হচ্ছে তা বেছে নেওয়ার ড্রপডাউন।
+                    এটা ছাড়া backend জানতেই পারে না multiplier কত, ফলে base-unit স্টক ভুল হয়ে যায়। */}
+                {isPackProduct && (
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Pack Type <span className="text-red-500">*</span></label>
+                    <select
+                      value={selectedPackId}
+                      onChange={handleSelectPack}
+                      className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium"
+                      required
+                    >
+                      <option value="">Select Pack</option>
+                      {(selectedProduct?.packs || []).map((pack) => (
+                        <option key={pack.id} value={pack.id}>
+                          {pack.packName} (× {pack.multiplier})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className={isPackProduct ? "md:col-span-2" : "md:col-span-2"}>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    {isPackProduct ? "No. of Packs" : "Quantity"} <span className="text-red-500">*</span>
+                  </label>
                   <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0" className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium" required />
                 </div>
 
-                <div className="md:col-span-3">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Unit Price (৳) <span className="text-red-500">*</span></label>
+                <div className={isPackProduct ? "md:col-span-3" : "md:col-span-3"}>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    {isPackProduct ? "Price per Pack (৳)" : "Unit Price (৳)"} <span className="text-red-500">*</span>
+                  </label>
                   <input type="number" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} placeholder="0.00" className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium" required />
                 </div>
 
@@ -513,6 +618,15 @@ export default function InventoryManagement() {
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">Total Amount (৳)</label>
                   <input type="text" value={`৳ ${totalAmount.toFixed(2)}`} readOnly className="w-full border border-blue-200 rounded-xl p-3 text-sm bg-blue-50/50 text-blue-700 font-bold font-mono" />
                 </div>
+
+                {isPackProduct && selectedPack && (
+                  <div className="md:col-span-12">
+                    <p className="text-xs text-gray-500 bg-white border border-gray-200 rounded-xl p-3">
+                      স্টকে যোগ হবে: <span className="font-bold text-gray-800">{baseUnitsToAdd} {selectedProduct?.baseUnit || 'Pcs'}</span>
+                      {' '}(প্রতি {selectedProduct?.baseUnit || 'unit'}-এর ক্রয়মূল্য ≈ ৳{selectedPack.multiplier > 0 ? (Number(unitPrice) / Number(selectedPack.multiplier)).toFixed(2) : '0.00'})
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

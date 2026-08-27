@@ -36,6 +36,8 @@ export default function SalePage() {
   const [showPackModal, setShowPackModal] = useState(false);
   const [selectedProductForPack, setSelectedProductForPack] = useState(null);
   const [productPacks, setProductPacks] = useState([]);
+  // ✅ null হলে নতুন আইটেম যোগ হচ্ছে, cartItemId থাকলে ঐ cart item-এর pack বদলানো হচ্ছে
+  const [editingPackCartItemId, setEditingPackCartItemId] = useState(null);
 
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState("FIXED");
@@ -52,8 +54,6 @@ export default function SalePage() {
   // ২. সাইড-ইফেক্ট (useEffect) - প্রোডাক্ট ও কাস্টমার লোড করা
   // -------------------------------------------------------------
   useEffect(() => {
-
-
     if (currentShopId) {
       fetchInitialData();
     }
@@ -109,6 +109,11 @@ export default function SalePage() {
   // -------------------------------------------------------------
   // ৪. ইভেন্ট হ্যান্ডলার ও স্টক লজিক ফাংশনসমূহ
   // -------------------------------------------------------------
+
+  // ✅ ব্যাকএন্ড থেকে packs অ্যারে যে নামেই আসুক (product_packs / packs / productPacks), সঠিকভাবে বের করা
+  const getProductPacks = (product) =>
+    product.product_packs || product.packs || product.productPacks || [];
+
   const handleProductSelect = (product) => {
     const currentStock = Number(product.quantity) || 0;
 
@@ -117,14 +122,21 @@ export default function SalePage() {
       return;
     }
 
+    // ✅ ব্যাকএন্ডে field নাম/কেসিং আলাদা হতে পারে, তাই একাধিক variant চেক করা হচ্ছে
+    const packsArray = getProductPacks(product);
+    const invType = (
+      product.inventory_type ||
+      product.inventoryType ||
+      ""
+    )
+      .toString()
+      .toLowerCase();
+
     // যদি প্রোডাক্টটি প্যাক টাইপের হয়, তবে প্যাকগুলো পপআপে দেখাবো
-    if (
-      product.inventory_type === "pack" &&
-      product.product_packs &&
-      product.product_packs.length > 0
-    ) {
+    if (invType === "pack" && packsArray.length > 0) {
+      setEditingPackCartItemId(null); // নতুন আইটেম যোগ করা হচ্ছে
       setSelectedProductForPack(product);
-      setProductPacks(product.product_packs);
+      setProductPacks(packsArray);
       setShowPackModal(true);
       setShowResults(false);
       setSearchQuery("");
@@ -138,26 +150,31 @@ export default function SalePage() {
     const productId = product.id || product.productId;
     // ইউনিক কার্ট আইডি তৈরি (যদি প্যাক হয় তবে প্যাক আইডি সহ আলাদা আইটেম হিসেবে গণ্য হবে)
     const cartItemId = packInfo
-      ? `${productId}-pack-${packInfo.id || packInfo.packId}`
+      ? `${productId}-pack-${packInfo.id ?? packInfo.packId}`
       : `${productId}-single`;
 
-    const currentStock = Number(product.quantity) || 0;
+    // ✅ স্ট্যান্ডার্ড ফিল্ড রিডিং - সব জায়গায় একই fallback অর্ডার
     const itemPrice = packInfo
-      ? Number(packInfo.price)
+      ? Number(packInfo.sellingPrice ?? packInfo.price ?? 0)
       : Number(product.sellingPrice || product.price);
     const itemName = packInfo
-      ? `${product.name} (${packInfo.name || packInfo.packName || "Pack"})`
+      ? `${product.name} (${packInfo.packName || packInfo.name || "Pack"})`
       : product.name;
     const itemMultiplier = packInfo
-      ? Number(packInfo.multiplier || packInfo.quantity || 1)
+      ? Number(packInfo.multiplier ?? packInfo.quantity ?? 1)
       : 1;
+
+    // ✅ প্যাক হলে প্যাকের নিজস্ব স্টক চেক হবে, না হলে মূল প্রোডাক্টের স্টক
+    const availableStock = packInfo
+      ? Number(packInfo.stock ?? 0)
+      : Number(product.quantity) || 0;
 
     const existingItem = cart.find((item) => item.cartItemId === cartItemId);
     const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
 
-    // মোট প্রয়োজনীয় স্টক চেক (প্যাক হলে প্যাকের ইউনিট অনুযায়ী মোট স্টক কাটবে)
-    if ((currentQuantityInCart + qtyToAdd) * itemMultiplier > currentStock) {
-      alert(`❌ এর বেশি স্টক নেই! (সর্বোচ্চ মজুদ: ${currentStock}টি একক)`);
+    const neededQty = currentQuantityInCart + qtyToAdd;
+    if (neededQty > availableStock) {
+      alert(`❌ এর বেশি স্টক নেই! (সর্বোচ্চ মজুদ: ${availableStock}টি)`);
       return;
     }
 
@@ -179,14 +196,16 @@ export default function SalePage() {
           name: itemName,
           price: itemPrice,
           quantity: qtyToAdd,
-          stock: currentStock,
+          stock: availableStock, // ✅ এখন সবসময় সঠিক স্টক (প্রোডাক্ট বা প্যাক অনুযায়ী)
           isPack: !!packInfo,
           inventory_type:
-            product.inventory_type || (packInfo ? "pack" : "single"),
-          packs: product.product_packs || [], // ✅ ফিক্স: dropdown-এর জন্য সঠিক key
+            product.inventory_type ||
+            product.inventoryType ||
+            (packInfo ? "pack" : "single"),
+          packs: getProductPacks(product), // ✅ যেকোনো field নাম থেকে packs ঠিকভাবে বসবে
           packInfo: packInfo,
           multiplier: itemMultiplier,
-          selectedPackId: packInfo ? packInfo.id || packInfo.packId : null,
+          selectedPackId: packInfo ? (packInfo.id ?? packInfo.packId) : null,
         },
       ]);
     }
@@ -195,34 +214,55 @@ export default function SalePage() {
     setShowPackModal(false);
   };
 
-  const updateItemPack = (cartItemId, newPackId) => {
+  // ✅ কার্টে থাকা একটা আইটেমের জন্য pack select/change করার modal খোলা
+  const openPackModalForCartItem = (item) => {
+    const packsArray =
+      item.packs && item.packs.length > 0 ? item.packs : getProductPacks(item);
+    if (!packsArray || packsArray.length === 0) {
+      alert("এই প্রোডাক্টের জন্য কোনো প্যাক পাওয়া যায়নি!");
+      return;
+    }
+    setEditingPackCartItemId(item.cartItemId);
+    setSelectedProductForPack(item);
+    setProductPacks(packsArray);
+    setShowPackModal(true);
+  };
+
+  // ✅ modal থেকে বাছাই করা pack, ইতিমধ্যে কার্টে থাকা আইটেমের উপর বসানো (দাম/স্টক/টোটাল রিক্যালকুলেট হবে)
+  const applyPackToCartItem = (cartItemId, pack) => {
+    const packId = pack.id ?? pack.packId;
+    const packName = pack.packName || pack.name || "Pack";
+    const packPrice = Number(pack.sellingPrice ?? pack.price ?? 0);
+    const packMultiplier = Number(pack.multiplier ?? pack.quantity ?? 1);
+    const packStock = Number(pack.stock ?? 0);
+
     setCart((prevCart) =>
       prevCart.map((item) => {
-        if (item.cartItemId === cartItemId) {
-          // 'packs' অ্যারে থেকে সিলেক্ট করা প্যাকটি খোঁজা
-          const selectedPack = item.packs?.find(
-            (p) => String(p.id) === String(newPackId),
-          );
+        if (item.cartItemId !== cartItemId) return item;
 
-          if (!selectedPack) return item;
+        const productId = item.id;
+        const newCartItemId = `${productId}-pack-${packId}`;
+        const baseName = item.name.split(" (")[0];
 
-          const productId = item.id;
-          const newCartItemId = `${productId}-pack-${selectedPack.id}`;
-          const itemMultiplier = Number(selectedPack.multiplier || 1);
-
-          return {
-            ...item,
-            cartItemId: newCartItemId,
-            selectedPackId: selectedPack.id,
-            name: `${item.name.split(" (")[0]} (${selectedPack.packName})`,
-            price: Number(selectedPack.sellingPrice || item.price),
-            packInfo: selectedPack,
-            multiplier: itemMultiplier,
-          };
-        }
-        return item;
+        return {
+          ...item,
+          cartItemId: newCartItemId,
+          selectedPackId: packId,
+          name: `${baseName} (${packName})`,
+          price: packPrice,
+          stock: packStock, // ✅ প্যাক অনুযায়ী স্টক আপডেট
+          packInfo: pack,
+          multiplier: packMultiplier,
+          inventory_type: "pack",
+          // নতুন প্যাকের স্টকের চেয়ে বেশি quantity থাকলে অ্যাডজাস্ট করা
+          quantity:
+            packStock > 0 ? Math.min(item.quantity, packStock) : item.quantity,
+        };
       }),
     );
+
+    setShowPackModal(false);
+    setEditingPackCartItemId(null);
   };
 
   const updateQuantity = (cartItemId, newQty) => {
@@ -235,14 +275,11 @@ export default function SalePage() {
     setCart((prevCart) =>
       prevCart.map((item) => {
         if (item.cartItemId === cartItemId) {
-          // প্যাক সিলেক্ট করা থাকলে প্যাকের নিজস্ব স্টক, না থাকলে মেইন প্রোডাক্টের স্টক (ইউনিটে)
-          const availableStock = Number(item.packInfo?.stock ?? item.stock ?? 0);
-          const multiplier = Number(item.multiplier || 1);
-          const totalNeeded = qty * multiplier;
+          // ✅ item.stock এ ইতিমধ্যে সঠিক স্টক থাকে (প্রোডাক্ট বা প্যাক অনুযায়ী)
+          const availableStock = Number(item.stock ?? 0);
 
-          if (totalNeeded > availableStock) {
-            const maxQty = Math.floor(availableStock / multiplier);
-            alert(`❌ পর্যাপ্ত স্টক নেই! সর্বোচ্চ ${maxQty} টি যোগ করতে পারবেন।`);
+          if (qty > availableStock) {
+            alert(`❌ পর্যাপ্ত স্টক নেই! সর্বোচ্চ ${availableStock} টি যোগ করতে পারবেন।`);
             return item; // আগের অবস্থায় আটকে রাখবে
           }
 
@@ -337,6 +374,18 @@ export default function SalePage() {
 
     if (cart.length === 0) {
       alert("❌ কার্ট সম্পূর্ণ খালি! আগে প্রোডাক্ট যোগ করুন।");
+      return;
+    }
+
+    // ✅ প্যাক-টাইপ আইটেমের জন্য pack সিলেক্ট করা বাধ্যতামূলক
+    const missingPackItem = cart.find(
+      (item) =>
+        (item.inventory_type === "pack" ||
+          (item.packs && item.packs.length > 0)) &&
+        !item.selectedPackId,
+    );
+    if (missingPackItem) {
+      alert(`❌ "${missingPackItem.name}" এর জন্য প্যাক সিলেক্ট করুন আগে।`);
       return;
     }
 
@@ -475,46 +524,99 @@ export default function SalePage() {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
             <h3 className="text-lg font-bold text-slate-800 mb-1">
-              Select Pack Type
+              প্যাক সিলেক্ট করুন
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Choose a packaging option for{" "}
               <span className="font-semibold text-slate-700">
                 {selectedProductForPack.name}
-              </span>
+              </span>{" "}
+              এর জন্য কোন প্যাকেজিং অপশনে বিক্রি করবেন, তা বেছে নিন
             </p>
 
             <div className="space-y-2.5 max-h-60 overflow-y-auto mb-5">
-              {productPacks.map((pack, idx) => (
-                <div
-                  key={idx}
-                  onClick={() =>
-                    addToCartDirectly(selectedProductForPack, pack, 1)
-                  }
-                  className="p-3.5 bg-slate-50 hover:bg-slate-900 hover:text-white border border-slate-200 rounded-xl cursor-pointer transition-all flex justify-between items-center group"
-                >
-                  <div>
-                    <p className="font-bold text-sm text-slate-800 group-hover:text-white">
-                      {pack.name || pack.packName}
-                    </p>
-                    <p className="text-xs text-slate-400 group-hover:text-slate-300">
-                      Contains: {pack.multiplier || pack.quantity} units
+              {productPacks.map((pack) => {
+                // ✅ স্ট্যান্ডার্ড ফিল্ড রিডিং - সব ফিল্ডে fallback
+                const packId = pack.id ?? pack.packId;
+                const packName = pack.packName || pack.name || "Pack";
+                const packPrice = Number(pack.sellingPrice ?? pack.price ?? 0);
+                const packMultiplier = Number(
+                  pack.multiplier ?? pack.quantity ?? 1,
+                );
+                const packStock = Number(pack.stock ?? 0);
+                const isOut = packStock <= 0;
+
+                return (
+                  <div
+                    key={packId}
+                    onClick={() => {
+                      if (isOut) {
+                        alert(`❌ "${packName}" প্যাকের স্টক শেষ!`);
+                        return;
+                      }
+                      if (editingPackCartItemId) {
+                        // ✅ ইতিমধ্যে কার্টে থাকা আইটেমের pack বদলানো হচ্ছে
+                        applyPackToCartItem(editingPackCartItemId, pack);
+                      } else {
+                        // নতুন আইটেম কার্টে যোগ হচ্ছে
+                        addToCartDirectly(selectedProductForPack, pack, 1);
+                      }
+                    }}
+                    className={`p-3.5 border rounded-xl transition-all flex justify-between items-center group ${
+                      isOut
+                        ? "bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed"
+                        : "bg-slate-50 hover:bg-slate-900 hover:text-white border-slate-200 cursor-pointer"
+                    }`}
+                  >
+                    <div>
+                      <p
+                        className={`font-bold text-sm text-slate-800 ${
+                          !isOut && "group-hover:text-white"
+                        }`}
+                      >
+                        {packName}
+                        {isOut && (
+                          <span className="ml-2 text-red-500 text-[10px] font-bold">
+                            (Stock Out)
+                          </span>
+                        )}
+                      </p>
+                      <p
+                        className={`text-xs text-slate-400 mt-0.5 ${
+                          !isOut && "group-hover:text-slate-300"
+                        }`}
+                      >
+                        প্রতি প্যাকে: {packMultiplier} ইউনিট &nbsp;|&nbsp; স্টক:{" "}
+                        {packStock}
+                      </p>
+                    </div>
+                    <p
+                      className={`font-extrabold text-slate-900 text-base ${
+                        !isOut && "group-hover:text-emerald-400"
+                      }`}
+                    >
+                      ৳{packPrice}
                     </p>
                   </div>
-                  <p className="font-extrabold text-slate-900 group-hover:text-emerald-400 text-base">
-                    ৳{pack.price}
-                  </p>
+                );
+              })}
+
+              {productPacks.length === 0 && (
+                <div className="text-center py-6 text-sm text-slate-400">
+                  কোনো প্যাক পাওয়া যায়নি
                 </div>
-              ))}
+              )}
             </div>
 
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowPackModal(false)}
+                onClick={() => {
+                  setShowPackModal(false);
+                  setEditingPackCartItemId(null);
+                }}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl transition-colors"
               >
-                Cancel
+                বাতিল
               </button>
             </div>
           </div>
@@ -825,44 +927,43 @@ export default function SalePage() {
                                 item.inventory_type === "pack" ||
                                 (item.packs && item.packs.length > 0);
 
+                              // সাধারণ (non-pack) প্রোডাক্ট — শুধু SKU/Stock দেখাবে
+                              if (!hasPacks) {
+                                return (
+                                  <div className="text-[11px] text-slate-400 mt-0.5">
+                                    SKU: {item.sku || "N/A"} | Stock: {item.stock}
+                                  </div>
+                                );
+                              }
+
+                              // প্যাক প্রোডাক্ট, কিন্তু এখনো কোনো প্যাক সিলেক্ট করা হয়নি
+                              if (!item.selectedPackId) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPackModalForCartItem(item)
+                                    }
+                                    className="mt-1 px-2 py-0.5 text-[11px] font-semibold text-red-600 border border-red-400 rounded-md hover:bg-red-50 transition-colors"
+                                  >
+                                    Select Pack
+                                  </button>
+                                );
+                              }
+
+                              // প্যাক সিলেক্ট করা আছে — স্টক দেখাবে + Change Pack অপশন
                               return (
-                                <div className="text-[11px] text-slate-400 mt-0.5">
-                                  {hasPacks ? (
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                      <span className="font-medium text-slate-500">
-                                        Pack:
-                                      </span>
-                                      <select
-                                        value={item.selectedPackId || ""}
-                                        onChange={(e) =>
-                                          updateItemPack(
-                                            item.cartItemId,
-                                            e.target.value,
-                                          )
-                                        }
-                                        className="bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-indigo-500"
-                                      >
-                                        <option value="" disabled>
-                                          Select Pack
-                                        </option>
-                                        {item.packs?.map((pack) => (
-                                          <option
-                                            key={pack.id}
-                                            value={pack.id}
-                                          >
-                                            {pack.packName} (Qty:{" "}
-                                            {pack.stock}, ৳
-                                            {pack.sellingPrice || item.price})
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      SKU: {item.sku || "N/A"} | Stock:{" "}
-                                      {item.stock}
-                                    </>
-                                  )}
+                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                                  <span>Stock: {item.stock}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openPackModalForCartItem(item)
+                                    }
+                                    className="text-indigo-600 font-semibold hover:underline"
+                                  >
+                                    Change Pack
+                                  </button>
                                 </div>
                               );
                             })()}
