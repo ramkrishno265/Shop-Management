@@ -5,7 +5,8 @@ import axios from 'axios';
 
 const LowStockPage = () => {
     const API_URL = `${import.meta.env.VITE_API_URL}/products`;
-    
+    const navigate = useNavigate();
+
     // States
     const [allProducts, setAllProducts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -18,6 +19,8 @@ const LowStockPage = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [newStockValue, setNewStockValue] = useState('');
+    // ✅ নতুন: সেভ হওয়ার সময় বাটনে loading/disabled দেখানোর জন্য
+    const [isSavingStock, setIsSavingStock] = useState(false);
 
     // Auth Header Helper
     const getAuthHeader = () => {
@@ -26,36 +29,37 @@ const LowStockPage = () => {
     };
 
     // Fetch Products on Load
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                const productsRes = await axios.get(API_URL, { headers: getAuthHeader() });
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const productsRes = await axios.get(API_URL, { headers: getAuthHeader() });
 
-                if (Array.isArray(productsRes.data)) {
-                    setAllProducts(productsRes.data);
+            if (Array.isArray(productsRes.data)) {
+                setAllProducts(productsRes.data);
 
-                    const lowStock = productsRes.data.filter(
-                        (product) => {
-                            const stock = Number(product.stock ?? product.quantity) || 0;
-                            const minStock = Number(product.minStock) || 5;
-                            return stock > 0 && stock <= minStock;
-                        }
-                    );
+                const lowStock = productsRes.data.filter(
+                    (product) => {
+                        const stock = Number(product.stock ?? product.quantity) || 0;
+                        const minStock = Number(product.minStock) || 5;
+                        return stock > 0 && stock <= minStock;
+                    }
+                );
 
-                    setLowProductList(lowStock);
-                } else {
-                    setAllProducts([]);
-                    setLowProductList([]);
-                }
-            } catch (error) {
-                console.error("Error fetching data:", error);
-            } finally {
-                setLoading(false);
+                setLowProductList(lowStock);
+            } else {
+                setAllProducts([]);
+                setLowProductList([]);
             }
-        };
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [API_URL]);
 
     // Filter Products securely
@@ -82,7 +86,7 @@ const LowStockPage = () => {
 
             const name = typeof product.name === 'string' ? product.name.toLowerCase() : '';
             const sku = typeof product.sku === 'string' ? product.sku.toLowerCase() : '';
-            
+
             // ক্যাটাগরি অবজেক্ট বা স্ট্রিং যাই হোক হ্যান্ডেল করার জন্য
             let catStr = '';
             if (typeof product.category === 'string') {
@@ -95,38 +99,67 @@ const LowStockPage = () => {
         });
     }, [allProducts, searchQuery, filterStatus]);
 
-    // Handle opening the stock edit modal
+    // Handle opening the stock edit modal (manual quick-edit, separate from Restock flow)
     const handleOpenEdit = (product) => {
         setSelectedProduct(product);
         setNewStockValue(product.stock ?? product.quantity ?? 0);
         setIsEditing(true);
     };
 
-    // Handle saving the updated stock value (Prevents Page Reload)
+    // ✅ ফিক্স: এই ফাংশনটা আগে কোথাও ডিফাইন করা ছিল না, অথচ মোডালের ফর্মে
+    // onSubmit={handleSaveStock} বসানো ছিল — ফলে মোডাল থেকে Save করলে
+    // ReferenceError দিত। এখন এটা API কল করে stock আপডেট করে, তারপর
+    // লিস্ট রিফ্রেশ করে ও মোডাল বন্ধ করে।
     const handleSaveStock = async (e) => {
-        e.preventDefault(); 
-        const updatedStock = parseInt(newStockValue, 10);
+        e.preventDefault();
+        if (!selectedProduct || isSavingStock) return;
 
-        if (isNaN(updatedStock) || updatedStock < 0) {
-            alert('Please enter a valid stock quantity.');
+        const id = selectedProduct.id || selectedProduct._id;
+        const value = Number(newStockValue);
+
+        if (!id) {
+            alert("Product ID পাওয়া যায়নি, স্টক আপডেট করা সম্ভব হচ্ছে না।");
+            return;
+        }
+        if (Number.isNaN(value) || value < 0) {
+            alert("সঠিক একটি স্টক পরিমাণ দিন।");
             return;
         }
 
+        setIsSavingStock(true);
         try {
-            setAllProducts(prevProducts =>
-                prevProducts.map(p =>
-                    (p.id === selectedProduct.id || p._id === selectedProduct._id) 
-                        ? { ...p, stock: updatedStock, quantity: updatedStock } 
-                        : p
-                )
+            await axios.patch(
+                `${API_URL}/${id}`,
+                { stock: value },
+                { headers: getAuthHeader() }
             );
-
+            alert("Stock updated successfully!");
             setIsEditing(false);
             setSelectedProduct(null);
+            fetchData(); // লিস্ট রিফ্রেশ করে আপডেটেড স্টক দেখানো
         } catch (error) {
             console.error("Error updating stock:", error);
-            alert("Failed to update stock!");
+            alert(`দুঃখিত, স্টক আপডেট করা যায়নি।\n(${error.message})`);
+        } finally {
+            setIsSavingStock(false);
         }
+    };
+
+    // ✅ ফিক্স: আগে এই ফাংশন ও তার সাথে useNavigate() একটা আলাদা,
+    // কখনো-না-কল-হওয়া `productList` ফাংশনের ভেতরে আটকে ছিল — তাই Restock
+    // বাটনে ক্লিক করলে handleRestockRedirect আসলে scope-এই ছিল না
+    // (ReferenceError)। এখন এটা কম্পোনেন্টের মূল বডিতে সরানো হয়েছে এবং
+    // Purchase পেজে গিয়ে ফর্ম প্রি-ফিল করার জন্য প্রয়োজনীয় সব তথ্য
+    // navigate state এ পাঠানো হচ্ছে।
+    const handleRestockRedirect = (product) => {
+        navigate('/purchase_page', {
+            state: {
+                productId: product.id || product._id,
+                productName: product.name,
+                productSKU: product.sku || 'N/A',
+                currentStock: Number(product.stock ?? product.quantity) || 0,
+            }
+        });
     };
 
     return (
@@ -218,7 +251,7 @@ const LowStockPage = () => {
                                     const minStock = Number(product.minStock) || 5;
                                     const isOut = currentStock === 0;
 
-                                    // ক্যাটাগরি রেন্ডার করার সময় সেফ চেক (অবজেক্ট হলে যেন ক্র্যাশ না করে)
+                                    // ক্যাটাগরি রেন্ডার করার সময় সেফ চেক (অবজেক্ট হলে যেন ক্র্যাশ না করে)
                                     const categoryName = typeof product.category === 'object' && product.category !== null
                                         ? (product.category.name || 'General')
                                         : (product.category || 'General');
@@ -251,12 +284,21 @@ const LowStockPage = () => {
                                                 )}
                                             </td>
                                             <td className="py-3.5 px-4 text-center">
-                                                <button
-                                                    onClick={() => handleOpenEdit(product)}
-                                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-medium transition-colors"
-                                                >
-                                                    <Edit3 size={14} /> Edit Stock
-                                                </button>
+                                                <div className="inline-flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handleRestockRedirect(product)}
+                                                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-medium transition-colors"
+                                                    >
+                                                        Restock
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleOpenEdit(product)}
+                                                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-50 text-gray-600 hover:bg-gray-100 rounded-lg text-xs font-medium transition-colors"
+                                                        title="Quick edit stock"
+                                                    >
+                                                        <Edit3 size={12} /> Edit
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -273,7 +315,7 @@ const LowStockPage = () => {
                 </div>
             </div>
 
-            {/* Stock Edit Modal */}
+            {/* Stock Edit Modal (quick manual override — separate from full Restock/Purchase flow) */}
             {isEditing && selectedProduct && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
                     <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
@@ -324,9 +366,12 @@ const LowStockPage = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                                    disabled={isSavingStock}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium text-white shadow-sm transition-colors ${
+                                        isSavingStock ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                                    }`}
                                 >
-                                    Save Changes
+                                    {isSavingStock ? 'Saving...' : 'Save Changes'}
                                 </button>
                             </div>
                         </form>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   FiPlus,
   FiTrash2,
@@ -37,11 +37,45 @@ const ProductEntry = () => {
   const [existingCategories, setExistingCategories] = useState([]);
   const [categoryInput, setCategoryInput] = useState("");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryBoxRef = useRef(null); // dropdown এর বাইরে ক্লিক ধরার জন্য
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const token = localStorage.getItem("token");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const shopId = user.shopId;
+
+  // ১. কাস্টম ফিল্ডের স্টেট
+  const [customFieldsConfig, setCustomFieldsConfig] = useState([]);
+  const [customFieldValues, setCustomFieldValues] = useState({});
+
+  // ২. ব্যাকএন্ড থেকে কাস্টম ফিল্ড ফেচ করার জন্য useEffect
+  useEffect(() => {
+    const fetchCustomFields = async () => {
+      try {
+        const response = await fetch(`${API_URL}/fields`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        const data = await response.json();
+        if (data.success) {
+          setCustomFieldsConfig(data.data || []);
+        }
+      } catch (error) {
+        console.error("Error fetching custom fields config:", error);
+      }
+    };
+
+    fetchCustomFields();
+  }, []);
+
+  // ৩. কাস্টম ফিল্ড ইনপুট হ্যান্ডলার
+  const handleCustomFieldChange = (fieldName, value) => {
+    setCustomFieldValues({
+      ...customFieldValues,
+      [fieldName]: value,
+    });
+  };
 
   // --- Fetch Existing Categories from Database on Mount ---
   useEffect(() => {
@@ -72,7 +106,22 @@ const ProductEntry = () => {
     };
 
     fetchCategories();
-  }, [API_URL, token, shopId]); // Dependency array te shopId add kore dite hobe
+  }, [API_URL, token, shopId]);
+
+  // --- ক্যাটাগরি ড্রপডাউন বাইরে ক্লিক করলে বন্ধ করার জন্য ---
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        categoryBoxRef.current &&
+        !categoryBoxRef.current.contains(event.target)
+      ) {
+        setShowCategoryDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // For Standard Product Pricing & Stock
   const [standardData, setStandardData] = useState({
@@ -192,7 +241,7 @@ const ProductEntry = () => {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = "bn-BD"; // বাংলা ভাষা সেট করার জন্য
+    recognition.lang = "bn-BD";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
@@ -215,7 +264,6 @@ const ProductEntry = () => {
       setIsListening(false);
     };
 
-    // কথা বলা থামানোর সময় হঠাৎ যেন বন্ধ না হয়ে যায়, তাই recognition.stop() সরিয়ে দেওয়া হয়েছে
     recognition.onspeechend = () => {
       setIsListening(false);
     };
@@ -223,7 +271,6 @@ const ProductEntry = () => {
     recognition.start();
   };
 
-  // --- Send Spoken Text to Backend for AI Parsing ---
   // --- Send Spoken Text to Backend for AI Parsing ---
   const sendTextToAIBackend = async (text) => {
     try {
@@ -245,7 +292,6 @@ const ProductEntry = () => {
         return;
       }
 
-      // ফর্ম স্টেট আপডেট
       setFormData((prev) => ({
         ...prev,
         name: aiData.name || "",
@@ -311,6 +357,7 @@ const ProductEntry = () => {
     const finalPayload = {
       ...formData,
       ...(formData.inventoryType === "standard" ? { standardData } : { packs }),
+      customFields: customFieldValues,
     };
 
     setLoading(true);
@@ -359,6 +406,7 @@ const ProductEntry = () => {
           sellingPrice: "",
         },
       ]);
+      setCustomFieldValues({}); // 👈 আগের প্রোডাক্টের কাস্টম ফিল্ড ভ্যালু রয়ে যাওয়ার বাগ ফিক্স
       setVoiceStatus("মাইক্রোফোন চালু করতে 'মুখে বলুন' বাটনে ক্লিক করুন");
 
       if (
@@ -413,7 +461,7 @@ const ProductEntry = () => {
 
           {/* Live Voice Status Bar */}
           <div className="mt-4 px-4 py-2 bg-white/10 rounded-xl text-indigo-100 text-xs backdrop-blur-sm flex items-center gap-2">
-            <span>💡</span> <b>ভয়েস স্ট্যাটাস:</b> {voiceStatus}
+            <span>💡</span> <b>ভয়েস স্ট্যাটাস:</b> {voiceStatus}
           </div>
         </div>
 
@@ -437,7 +485,7 @@ const ProductEntry = () => {
             </div>
 
             {/* Dynamic Searchable Category Input */}
-            <div className="relative">
+            <div className="relative" ref={categoryBoxRef}>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 ক্যাটাগরি (Category) *
               </label>
@@ -448,9 +496,9 @@ const ProductEntry = () => {
                   value={categoryInput}
                   onChange={(e) => {
                     handleCategoryInput(e);
-                    setShowCategoryDropdown(true); // কিছু টাইপ করলেই ড্রপডাউন ওপেন হবে
+                    setShowCategoryDropdown(true);
                   }}
-                  onClick={() => setShowCategoryDropdown(true)} // ইনপুটে ক্লিক করলেই ড্রপডাউন ওপেন হবে
+                  onClick={() => setShowCategoryDropdown(true)}
                   placeholder={
                     categoryLoading
                       ? "ক্যাটাগরি লোড হচ্ছে..."
@@ -471,7 +519,7 @@ const ProductEntry = () => {
                       <div
                         key={index}
                         onMouseDown={(e) => {
-                          e.preventDefault(); // ফোকাস লস আটকাবে
+                          e.preventDefault();
                           selectCategory(cat);
                         }}
                         className="px-4 py-3 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer transition font-medium"
@@ -539,7 +587,7 @@ const ProductEntry = () => {
             {/* Expire Date Input */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                মেয়াদ উত্তীর্ণের তারিখ (Expire Date){" "}
+                মেয়াদ উত্তীর্ণের তারিখ (Expire Date){" "}
                 <span className="text-xs font-normal text-slate-400">(ঐচ্ছিক)</span>
               </label>
               <input
@@ -569,6 +617,57 @@ const ProductEntry = () => {
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition bg-slate-50/50 hover:bg-white text-slate-800 text-sm"
             />
           </div>
+
+          {/* --- ডাইনামিক কাস্টম ফিল্ড সেকশন --- */}
+          {customFieldsConfig.length > 0 && (
+            <div className="bg-indigo-50/30 p-5 rounded-2xl border border-indigo-100 space-y-4 my-4">
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider text-indigo-900 flex items-center gap-2">
+                <span>⚙️</span> অতিরিক্ত বা কাস্টম তথ্যাবলী
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {customFieldsConfig.map((field) => (
+                  <div key={field.fieldName}>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                      {field.fieldLabel} {field.isRequired && <span className="text-rose-500">*</span>}
+                    </label>
+
+                    {field.fieldType === "SELECT" ? (
+                      <select
+                        value={customFieldValues[field.fieldName] || ""}
+                        onChange={(e) => handleCustomFieldChange(field.fieldName, e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 text-sm"
+                        required={field.isRequired}
+                      >
+                        <option value="">সিলেক্ট করুন</option>
+                        {field.options &&
+                          field.options.split(",").map((opt, i) => (
+                            <option key={i} value={opt.trim()}>
+                              {opt.trim()}
+                            </option>
+                          ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={
+                          field.fieldType === "NUMBER"
+                            ? "number"
+                            : field.fieldType === "DATE"
+                              ? "date"
+                              : "text"
+                        }
+                        placeholder={`${field.fieldLabel} লিখুন`}
+                        value={customFieldValues[field.fieldName] || ""}
+                        onChange={(e) => handleCustomFieldChange(field.fieldName, e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 text-sm"
+                        required={field.isRequired}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Section 2: Inventory Type Selector Cards */}
           <div>

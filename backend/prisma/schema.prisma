@@ -32,7 +32,7 @@ model Shop {
   nagadPersonal String? // নগদ নম্বর
   bankDetails   String? // ব্যাংক অ্যাকাউন্ট ডিটেইলস
 
-  // নতুন: ক্যাশমেমো বা ইনভয়েস ফুটার নোট
+  // নতুন: ক্যাশমেমো বা ইনভয়েস ফুটার নোট
   invoiceFooterNote String? 
 
   status    Boolean  @default(true)
@@ -42,6 +42,7 @@ model Shop {
 
   users            User[]
   products         Product[]
+  fieldConfigs     ShopFieldConfig[]
   sales            Sale[]
   customers        Customer[]
   categories       Category[]
@@ -144,6 +145,7 @@ model Product {
   sellingPrice  Float     @default(0)
   description   String?
   status        String    @default("ACTIVE")
+  customFields  Json?     @map("custom_fields")
 
   categoryId    Int?
   category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -177,6 +179,9 @@ model ProductPack {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // নতুন: এই প্যাক দিয়ে করা পারচেজগুলো ট্র্যাক করার জন্য (restock কে pack-aware করতে)
+  purchases     Purchase[]
+
   @@map("product_packs")
 }
 
@@ -194,9 +199,9 @@ model InventoryLayer {
   purchaseId    Int?
   purchase      Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
 
-  initialQty    Float     // ক্রয়ের সময় মোট পরিমাণ (বেস ইউনিটে)
+  initialQty    Float     // ক্রয়ের সময় মোট পরিমাণ (বেস ইউনিটে)
   remainingQty  Float     // বর্তমানে এই লেয়ারে আর কতটুকু স্টক বাকি আছে
-  unitCost      Float     // প্রতি একক ক্রয়মূল্য (Purchase Price)
+  unitCost      Float     // প্রতি একক ক্রয়মূল্য (Purchase Price) — সবসময় base-unit ভিত্তিক
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -215,8 +220,8 @@ model SaleItemLayer {
   inventoryLayerId Int
   inventoryLayer   InventoryLayer @relation(fields: [inventoryLayerId], references: [id], onDelete: Cascade)
 
-  quantityTaken    Float          // এই লেয়ার থেকে কতটুকু পরিমাণ মাইনাস হয়েছে
-  unitCost         Float          // ওই লেয়ারের ক্রয়মূল্য স্ন্যাপশট
+  quantityTaken    Float          // এই লেয়ার থেকে কতটুকু পরিমাণ মাইনাস হয়েছে
+  unitCost         Float          // ওই লেয়ারের ক্রয়মূল্য স্ন্যাপশট
 
   createdAt        DateTime       @default(now())
 
@@ -255,12 +260,21 @@ model Purchase {
   date           String
   payment_status String       @default("Paid")
   product        String
-  quantity       Float
-  unit_price     Float
+  quantity       Float        // যেভাবে ইউজার এন্ট্রি দিয়েছে: standard হলে base unit, pack হলে প্যাক-সংখ্যা
+  unit_price     Float        // standard হলে per-base-unit দাম, pack হলে per-pack দাম
   total_amount   Float
   paid_amount    Float        @default(0)
   due_amount     Float        @default(0)
   note           String?
+
+  // নতুন: এই পারচেজ কোন প্যাক দিয়ে করা হয়েছিল (থাকলে) — pack-aware conversion এর জন্য
+  packId         Int?
+  pack           ProductPack? @relation(fields: [packId], references: [id], onDelete: SetNull)
+
+  // নতুন: এই পারচেজের কারণে product.quantity-তে ঠিক কত base-unit যোগ হয়েছিল
+  // (delete/update-এর সময় নির্ভুলভাবে reverse করার জন্য — quantity/multiplier থেকে
+  // recompute করার উপর নির্ভর করা হয় না, কারণ পরে multiplier বদলাতে পারে)
+  baseUnitQuantity Float      @default(0)
 
   createdBy      Int?
   user           User?        @relation(fields: [createdBy], references: [id])
@@ -307,7 +321,7 @@ model SaleItem {
   discount        Float    @default(0)
   subtotal        Float
 
-  // FIFO অনুযায়ী হিস্টোরিক্যাল কস্ট স্ন্যাপশট সংরক্ষণের জন্য নতুন ফিল্ডস
+  // FIFO অনুযায়ী হিস্টোরিক্যাল কস্ট স্ন্যাপশট সংরক্ষণের জন্য নতুন ফিল্ডস
   costPriceAtSale Float    @default(0) @map("cost_price_at_sale")
   totalCost       Float    @default(0) @map("total_cost")
 
@@ -388,4 +402,24 @@ model Expense {
   createdAt DateTime @default(now())
 
   @@map("expenses")
+}
+
+model ShopFieldConfig {
+  id          Int      @id @default(autoincrement())
+  
+  shopId      Int
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  fieldName   String   // ফিল্ডের কি বা নাম (যেমন: size, color, expiry_date)
+  fieldLabel  String   // ইউজারের সামনে যা দেখাবে (যেমন: Product Size)
+  fieldType   String   // টাইপ (text, number, select, date)
+  options     String?  // ড্রপডাউন অপশন কমা দিয়ে সেভ রাখার জন্য (যেমন: "S, M, L")
+  isRequired  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([shopId, fieldName]) // একই শপে যেন একই নামের ফিল্ড দুইবার তৈরি না হয়
+  @@map("shop_field_configs")
 }
