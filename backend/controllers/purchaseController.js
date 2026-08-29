@@ -139,6 +139,7 @@ const resolvePurchaseConversion = ({ product, pack, enteredQuantity, enteredUnit
 };
 
 // ২. নতুন পারচেজ সেভ করা (FIFO Inventory Layer + Pack-aware)
+// ২. নতুন পারচেজ সেভ করা (FIFO Inventory Layer + Pack-aware, Multi-item Supported)
 export const createPurchase = async (req, res) => {
   try {
     const {
@@ -146,11 +147,7 @@ export const createPurchase = async (req, res) => {
       supplier_id,
       date,
       payment_status,
-      productId,
-      product,
-      packId, // নতুন: pack প্রোডাক্ট হলে কোন pack থেকে কেনা হয়েছে
-      quantity,
-      unit_price,
+      items, // 👈 ফ্রন্টএন্ড থেকে পাঠানো items অ্যারে
       total_amount,
       paid_amount,
       due_amount,
@@ -158,55 +155,81 @@ export const createPurchase = async (req, res) => {
       createdBy = req.user?.id || 1
     } = req.body;
 
+    const numericShopId = Number(shopId);
+    if (!numericShopId || !supplier_id) {
+      return res.status(400).json({ success: false, message: "Shop ID and Supplier are required" });
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: "At least one purchase item is required" });
+    }
+
     const invoiceNo = `INV-${Date.now().toString().slice(-8)}`;
 
-    const enteredQuantity = Number(quantity) || 0;
-    const enteredUnitPrice = Number(unit_price) || 0;
-    const parsedTotalAmount = Number(total_amount) || 0;
-    const numericShopId = Number(shopId);
-
-    let targetProductId = Number(productId);
-    if (!targetProductId && product) {
-      const foundProd = await prisma.product.findFirst({
-        where: { shopId: numericShopId, name: product }
-      });
-      if (foundProd) targetProductId = foundProd.id;
-    }
-
-    if (!targetProductId) {
-      return res.status(400).json({ success: false, message: "Valid product or productId is required for purchase" });
-    }
-
-    // ✅ পুরো অপারেশন — read, write, stockLog সবকিছু একই transaction (`tx`)-এর মধ্যে।
-    // আগে product.update এবং findUnique `tx` না ব্যবহার করে সরাসরি `prisma` দিয়ে করা হতো,
-    // ফলে সেগুলো transaction-এর বাইরে আলাদাভাবে কমিট হয়ে যেত — কোথাও পরে fail করলে
-    // (যেমন stockLog.create) rollback শুধু purchase/layer মুছত কিন্তু product.quantity
-    // বাড়তিই থেকে যেত। এখন সব একসাথে atomic।
     const newPurchase = await prisma.$transaction(async (tx) => {
-      const productRecord = await tx.product.findUnique({ where: { id: targetProductId } });
-      if (!productRecord) {
-        throw new Error("প্রোডাক্ট খুঁজে পাওয়া যায়নি!");
-      }
+      let calculatedTotal = 0;
+      const purchaseItemsData = [];
+      const inventoryLayersData = [];
+      const productUpdates = [];
+      const stockLogsData = [];
+      const packUpdates = [];
 
-      let packRecord = null;
-      if (packId) {
-        packRecord = await tx.productPack.findUnique({ where: { id: Number(packId) } });
-        if (!packRecord || packRecord.productId !== productRecord.id) {
-          throw new Error("নির্বাচিত প্যাকটি এই প্রোডাক্টের সাথে মিলছে না!");
+      for (const item of items) {
+        let targetProductId = Number(item.productId);
+        const enteredQuantity = Number(item.quantity) || 0;
+        const enteredUnitPrice = Number(item.unit_price) || 0;
+        const itemTotal = enteredQuantity * enteredUnitPrice;
+        calculatedTotal += itemTotal;
+
+        if (!targetProductId && item.product) {
+          const foundProd = await tx.product.findFirst({
+            where: { shopId: numericShopId, name: item.product }
+          });
+          if (foundProd) targetProductId = foundProd.id;
         }
+
+        const productRecord = await tx.product.findUnique({ where: { id: targetProductId } });
+        if (!productRecord) {
+          throw new Error(`প্রোডাক্ট (${item.product || targetProductId}) খুঁজে পাওয়া যায়নি!`);
+        }
+
+        let packRecord = null;
+        if (item.packId) {
+          packRecord = await tx.productPack.findUnique({ where: { id: Number(item.packId) } });
+          if (!packRecord || packRecord.productId !== productRecord.id) {
+            throw new Error(`নির্বাচিত প্যাকটি ${productRecord.name} প্রোডাক্টের সাথে মিলছে না!`);
+          }
+        }
+
+        if (productRecord.inventoryType === 'pack' && !packRecord) {
+          throw new Error(`${productRecord.name} একটি Pack প্রোডাক্ট — কোন প্যাক দিয়ে কেনা হয়েছে তা নির্বাচন করা আবশ্যক!`);
+        }
+
+        const { baseQty, unitCostPerBase, packCount } = resolvePurchaseConversion({
+          product: productRecord,
+          pack: packRecord,
+          enteredQuantity,
+          enteredUnitPrice,
+        });
+
+        purchaseItemsData.push({
+          productId: targetProductId,
+          productName: item.product || productRecord.name,
+          quantity: enteredQuantity,
+          unitPrice: enteredUnitPrice,
+          totalPrice: itemTotal,
+        });
+
+        // সাময়িক পারচেজ অবজেক্টের জন্য বেস ইউনিট কোয়ান্টিটি হিসাব রাখা
+        // (নিচে purchase তৈরির সময় মূল data-তে এটি হ্যান্ডেল করা হবে)
+        item._baseQty = baseQty;
+        item._unitCostPerBase = unitCostPerBase;
+        item._packCount = packCount;
+        item._productRecord = productRecord;
+        item._packRecord = packRecord;
       }
 
-      if (productRecord.inventoryType === 'pack' && !packRecord) {
-        throw new Error("এটি একটি Pack প্রোডাক্ট — কোন প্যাক দিয়ে কেনা হয়েছে তা নির্বাচন করা আবশ্যক!");
-      }
-
-      const { baseQty, unitCostPerBase, packCount } = resolvePurchaseConversion({
-        product: productRecord,
-        pack: packRecord,
-        enteredQuantity,
-        enteredUnitPrice,
-      });
-
+      // মূল Purchase রেকর্ড তৈরি
       const purchase = await tx.purchase.create({
         data: {
           invoiceNo,
@@ -214,27 +237,19 @@ export const createPurchase = async (req, res) => {
           supplier_id: Number(supplier_id),
           date: date || new Date().toISOString().split('T')[0],
           payment_status: payment_status || "Paid",
-          product: product || productRecord.name,
-          quantity: enteredQuantity, // ইউজার যা এন্ট্রি দিয়েছে তাই (প্যাক-সংখ্যা বা base unit)
-          unit_price: enteredUnitPrice, // ইউজার যা এন্ট্রি দিয়েছে তাই (per-pack বা per-base-unit)
-          total_amount: parsedTotalAmount,
+          product: items.length === 1 ? (items[0].product || items[0].productName) : "Multiple Items",
+          quantity: items.reduce((acc, curr) => acc + Number(curr.quantity), 0),
+          unit_price: items.length === 1 ? Number(items[0].unit_price) : 0,
+          total_amount: Number(total_amount) || calculatedTotal,
           paid_amount: Number(paid_amount) || 0,
           due_amount: Number(due_amount) || 0,
           note: note || "",
           createdBy: Number(createdBy),
-          packId: packRecord ? packRecord.id : null,
-          baseUnitQuantity: baseQty, // 👈 delete/update-এর সময় নির্ভুলভাবে reverse করার জন্য স্ন্যাপশট
+          packId: items.length === 1 && items[0].packId ? Number(items[0].packId) : null,
+          baseUnitQuantity: items.reduce((acc, curr) => acc + curr._baseQty, 0),
 
           purchaseItems: {
-            create: [
-              {
-                productId: targetProductId,
-                productName: product || productRecord.name,
-                quantity: enteredQuantity,
-                unitPrice: enteredUnitPrice,
-                totalPrice: parsedTotalAmount,
-              }
-            ]
+            create: purchaseItemsData
           }
         },
         include: {
@@ -244,51 +259,49 @@ export const createPurchase = async (req, res) => {
         }
       });
 
-      // FIFO-র জন্য নতুন Inventory Layer — সবসময় base-unit ভিত্তিক
-      await tx.inventoryLayer.create({
-        data: {
-          shopId: numericShopId,
-          productId: targetProductId,
-          purchaseId: purchase.id,
-          initialQty: baseQty,
-          remainingQty: baseQty,
-          unitCost: unitCostPerBase,
+      // প্রতিটা আইটেমের জন্য ইনভেন্টরি লেয়ার, স্টক এবং লগ আপডেট
+      for (const item of items) {
+        await tx.inventoryLayer.create({
+          data: {
+            shopId: numericShopId,
+            productId: item._productRecord.id,
+            purchaseId: purchase.id,
+            initialQty: item._baseQty,
+            remainingQty: item._baseQty,
+            unitCost: item._unitCostPerBase,
+          }
+        });
+
+        const previousStock = Number(item._productRecord.quantity) || 0;
+        const newStock = previousStock + item._baseQty;
+
+        await tx.product.update({
+          where: { id: item._productRecord.id },
+          data: {
+            quantity: { increment: item._baseQty },
+            purchasePrice: item._unitCostPerBase,
+          },
+        });
+
+        if (item._packRecord) {
+          await tx.productPack.update({
+            where: { id: item._packRecord.id },
+            data: { stock: { increment: item._packCount } },
+          });
         }
-      });
 
-      const previousStock = Number(productRecord.quantity) || 0;
-      const newStock = previousStock + baseQty;
-
-      // Product.quantity সবসময় base unit-এ — atomic increment
-      await tx.product.update({
-        where: { id: targetProductId },
-        data: {
-          quantity: { increment: baseQty },
-          purchasePrice: unitCostPerBase, // প্রোডাক্টের "latest cost" ও base-unit ভিত্তিক রাখা হলো
-        },
-      });
-
-      // ✅ Pack প্রোডাক্ট হলে ProductPack.stock (প্যাক-সংখ্যা) ও restock করা — আগে এটা
-      // কখনো আপডেট হতো না, ফলে সময়ের সাথে pack-stock ফুরিয়ে গিয়ে sale-এর সময় ভুলভাবে
-      // "পর্যাপ্ত স্টক নেই" error দিত, যদিও base-unit স্টক আসলে যথেষ্ট ছিল।
-      if (packRecord) {
-        await tx.productPack.update({
-          where: { id: packRecord.id },
-          data: { stock: { increment: packCount } },
+        await tx.stockLog.create({
+          data: {
+            productId: item._productRecord.id,
+            userId: Number(createdBy),
+            changeType: "PURCHASE",
+            quantityChanged: item._baseQty,
+            previousStock: previousStock,
+            newStock: newStock,
+            note: `Purchase Invoice: ${invoiceNo}${item._packRecord ? ` (Pack: ${item._packRecord.packName} x${item._packCount})` : ''}`,
+          },
         });
       }
-
-      await tx.stockLog.create({
-        data: {
-          productId: targetProductId,
-          userId: Number(createdBy),
-          changeType: "PURCHASE",
-          quantityChanged: baseQty,
-          previousStock: previousStock,
-          newStock: newStock,
-          note: `Purchase Invoice: ${invoiceNo}${packRecord ? ` (Pack: ${packRecord.packName} x${packCount})` : ''}`,
-        },
-      });
 
       return purchase;
     }, {

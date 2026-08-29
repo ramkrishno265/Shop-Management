@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export default function InventoryManagement() {
   // activeTab অপশনগুলো: "purchase_list", "purchase_add", "supplier_list", "supplier_add"
@@ -52,19 +53,25 @@ export default function InventoryManagement() {
   const [supNote, setSupNote] = useState("");
   const [isSavingSupplier, setIsSavingSupplier] = useState(false);
 
-  const isPackProduct = selectedProduct?.inventoryType === 'pack';
+  const isPackProduct = selectedProduct?.inventoryType === "pack";
   const selectedPack = isPackProduct
-    ? (selectedProduct?.packs || []).find((p) => String(p.id) === String(selectedPackId))
+    ? (selectedProduct?.packs || []).find(
+        (p) => String(p.id) === String(selectedPackId),
+      )
     : null;
 
   // স্টেজিং আইটেমের হিসাব (এখনো cart-এ যোগ হয়নি এমন প্রোডাক্টের জন্য)
   const stagingTotal = Number(quantity) * Number(unitPrice) || 0;
-  const stagingBaseUnitsToAdd = isPackProduct && selectedPack
-    ? (Number(quantity) || 0) * (Number(selectedPack.multiplier) || 1)
-    : Number(quantity) || 0;
+  const stagingBaseUnitsToAdd =
+    isPackProduct && selectedPack
+      ? (Number(quantity) || 0) * (Number(selectedPack.multiplier) || 1)
+      : Number(quantity) || 0;
 
   // ✅ নতুন: পুরো cart-এর গ্র্যান্ড টোটাল (আগে এটা single item এর উপর নির্ভর করত)
-  const totalAmount = cartItems.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
+  const totalAmount = cartItems.reduce(
+    (sum, item) => sum + (Number(item.totalAmount) || 0),
+    0,
+  );
   const dueAmount = Math.max(0, totalAmount - (Number(paidAmount) || 0));
 
   useEffect(() => {
@@ -83,7 +90,7 @@ export default function InventoryManagement() {
     if (products.length === 0) return; // প্রোডাক্ট লিস্ট আগে লোড হওয়া দরকার
 
     const found = products.find(
-      (p) => String(p.id) === String(location.state.productId)
+      (p) => String(p.id) === String(location.state.productId),
     );
 
     if (found) {
@@ -105,10 +112,16 @@ export default function InventoryManagement() {
     try {
       const token = localStorage.getItem("token") || "";
       const response = await fetch(`${API_BASE_URL}/products`, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       const result = await response.json();
-      setProducts(result.success && Array.isArray(result.data) ? result.data : (Array.isArray(result) ? result : []));
+      setProducts(
+        result.success && Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result)
+            ? result
+            : [],
+      );
     } catch (error) {
       console.error("Error fetching products:", error);
     }
@@ -117,14 +130,22 @@ export default function InventoryManagement() {
   const fetchPurchases = async () => {
     try {
       const token = localStorage.getItem("token") || "";
-      const currentShopId = localStorage.getItem('shopId');
-      const url = currentShopId ? `${API_BASE_URL}/purchases?shopId=${currentShopId}` : `${API_BASE_URL}/purchases`;
+      const currentShopId = localStorage.getItem("shopId");
+      const url = currentShopId
+        ? `${API_BASE_URL}/purchases?shopId=${currentShopId}`
+        : `${API_BASE_URL}/purchases`;
 
       const response = await fetch(url, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      setPurchases(data.success && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []));
+      setPurchases(
+        data.success && Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data)
+            ? data
+            : [],
+      );
     } catch (error) {
       console.error("Error fetching purchases:", error);
     }
@@ -133,14 +154,22 @@ export default function InventoryManagement() {
   const fetchSuppliers = async () => {
     try {
       const token = localStorage.getItem("token") || "";
-      const currentShopId = localStorage.getItem('shopId');
-      const url = currentShopId ? `${API_BASE_URL}/suppliers?shopId=${currentShopId}` : `${API_BASE_URL}/suppliers`;
+      const currentShopId = localStorage.getItem("shopId");
+      const url = currentShopId
+        ? `${API_BASE_URL}/suppliers?shopId=${currentShopId}`
+        : `${API_BASE_URL}/suppliers`;
 
       const response = await fetch(url, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       const result = await response.json();
-      setSuppliers(result.success && Array.isArray(result.data) ? result.data : (Array.isArray(result) ? result : []));
+      setSuppliers(
+        result.success && Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result)
+            ? result
+            : [],
+      );
     } catch (error) {
       console.error("Error fetching suppliers:", error);
     }
@@ -150,12 +179,14 @@ export default function InventoryManagement() {
     const selectedId = e.target.value;
     setSupplierId(selectedId);
     const foundSupplier = suppliers.find((sup) => sup.id == selectedId);
-    setSupplierNumber(foundSupplier ? (foundSupplier.phone || foundSupplier.number || '') : '');
+    setSupplierNumber(
+      foundSupplier ? foundSupplier.phone || foundSupplier.number || "" : "",
+    );
   };
 
   // প্রোডাক্ট সিলেক্ট করার সময় পুরো রেকর্ড সেভ করা এবং pack selection রিসেট করা
   const handleSelectProduct = (p) => {
-    const pName = typeof p === 'string' ? p : (p.name || p.product_name || '');
+    const pName = typeof p === "string" ? p : p.name || p.product_name || "";
     setProduct(pName);
     setSelectedProductId(p.id || "");
     setSelectedProduct(p);
@@ -167,7 +198,9 @@ export default function InventoryManagement() {
   const handleSelectPack = (e) => {
     const packId = e.target.value;
     setSelectedPackId(packId);
-    const pack = (selectedProduct?.packs || []).find((p) => String(p.id) === String(packId));
+    const pack = (selectedProduct?.packs || []).find(
+      (p) => String(p.id) === String(packId),
+    );
     if (pack) {
       setUnitPrice(pack.purchasePrice || "");
     }
@@ -180,7 +213,9 @@ export default function InventoryManagement() {
       return;
     }
     if (isPackProduct && !selectedPackId) {
-      alert("এটি একটি Pack প্রোডাক্ট। কোন প্যাক দিয়ে কেনা হয়েছে তা নির্বাচন করুন।");
+      alert(
+        "এটি একটি Pack প্রোডাক্ট। কোন প্যাক দিয়ে কেনা হয়েছে তা নির্বাচন করুন।",
+      );
       return;
     }
     if (!quantity || Number(quantity) <= 0) {
@@ -195,17 +230,18 @@ export default function InventoryManagement() {
     // একই প্রোডাক্ট (একই পাক-সহ) আগে থেকেই cart-এ থাকলে quantity যোগ করে দেওয়া,
     // নতুন করে ডুপ্লিকেট row বানানোর বদলে
     const existingIndex = cartItems.findIndex(
-      (item) => String(item.productId) === String(selectedProductId) &&
-        String(item.packId || "") === String(selectedPackId || "")
+      (item) =>
+        String(item.productId) === String(selectedProductId) &&
+        String(item.packId || "") === String(selectedPackId || ""),
     );
 
     const newItem = {
-      key: `${selectedProductId}-${selectedPackId || 'std'}-${Date.now()}`,
+      key: `${selectedProductId}-${selectedPackId || "std"}-${Date.now()}`,
       productId: selectedProductId,
       productName: product,
       packId: isPackProduct ? selectedPackId : undefined,
       packName: selectedPack?.packName,
-      baseUnit: selectedProduct?.baseUnit || 'Pcs',
+      baseUnit: selectedProduct?.baseUnit || "Pcs",
       quantity: Number(quantity),
       unitPrice: Number(unitPrice),
       totalAmount: stagingTotal,
@@ -222,9 +258,10 @@ export default function InventoryManagement() {
           quantity: mergedQty,
           unitPrice: newItem.unitPrice, // সর্বশেষ দেওয়া দামটা রাখা হচ্ছে
           totalAmount: mergedQty * newItem.unitPrice,
-          baseUnitsToAdd: isPackProduct && selectedPack
-            ? mergedQty * (Number(selectedPack.multiplier) || 1)
-            : mergedQty,
+          baseUnitsToAdd:
+            isPackProduct && selectedPack
+              ? mergedQty * (Number(selectedPack.multiplier) || 1)
+              : mergedQty,
         };
         return updated;
       });
@@ -251,10 +288,13 @@ export default function InventoryManagement() {
 
     if (isSavingPurchase) return;
 
-    let currentShopId = localStorage.getItem('shopId') || localStorage.getItem('shop_id');
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+    // ✅ const এর বদলে let ব্যবহার করা হয়েছে
+    let currentShopId = user?.shopId || user?.shop_id;
 
     if (!currentShopId) {
-      const storedUser = localStorage.getItem('user');
+      const storedUser = localStorage.getItem("user");
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
@@ -280,11 +320,9 @@ export default function InventoryManagement() {
       return;
     }
 
-    // ✅ যদি ইউজার একটা প্রোডাক্ট সিলেক্ট/fill করে রেখে "Add" চাপতে ভুলে যায়,
-    // সেটা silently বাদ পড়ে যাওয়ার বদলে জিজ্ঞেস করা হচ্ছে
     if (selectedProductId && quantity && unitPrice) {
       const confirmAdd = window.confirm(
-        "একটি প্রোডাক্ট লিস্টে যোগ করা হয়নি। সেভ করার আগে এটা কি লিস্টে যোগ করতে চান?"
+        "একটি প্রোডাক্ট লিস্টে যোগ করা হয়নি। সেভ করার আগে এটা কি লিস্টে যোগ করতে চান?",
       );
       if (confirmAdd) {
         alert('অনুগ্রহ করে আগে "Add to List" বাটনে চাপুন, তারপর Save করুন।');
@@ -302,10 +340,6 @@ export default function InventoryManagement() {
       supplier_id: supplierId,
       date,
       payment_status: paymentStatus,
-      // ✅ নতুন: single product/productId/quantity/unit_price এর বদলে
-      // পুরো items array পাঠানো হচ্ছে — ব্যাকএন্ডকে এখন প্রতিটা item এর জন্য
-      // আলাদা purchaseItems row বানাতে এবং stock আপডেট করতে হবে (pack হলে
-      // multiplier দিয়ে base-unit এ কনভার্ট করে)।
       items: cartItems.map((item) => ({
         productId: item.productId,
         product: item.productName,
@@ -322,12 +356,15 @@ export default function InventoryManagement() {
 
     setIsSavingPurchase(true);
     try {
-      const url = editingPurchaseId ? `${API_BASE_URL}/purchases/${editingPurchaseId}` : `${API_BASE_URL}/purchases`;
+      const url = editingPurchaseId
+        ? `${API_BASE_URL}/purchases/${editingPurchaseId}`
+        : `${API_BASE_URL}/purchases`;
+
       const response = await fetch(url, {
         method: editingPurchaseId ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(purchaseData),
       });
@@ -335,17 +372,25 @@ export default function InventoryManagement() {
       const result = await response.json().catch(() => ({}));
 
       if (response.ok) {
-        alert(editingPurchaseId ? "Purchase updated successfully!" : "Purchase saved successfully!");
+        alert(
+          editingPurchaseId
+            ? "Purchase updated successfully!"
+            : "Purchase saved successfully!",
+        );
         fetchPurchases();
-        fetchProducts(); // স্টক আপডেট রিফ্লেক্ট করার জন্য
+        fetchProducts();
         setActiveTab("purchase_list");
         resetPurchaseForm();
       } else {
-        alert(`Failed: ${result.message || result.error || `Server error (status ${response.status})`}`);
+        alert(
+          `Failed: ${result.message || result.error || `Server error (status ${response.status})`}`,
+        );
       }
     } catch (error) {
       console.error("Error saving purchase:", error);
-      alert(`দুঃখিত, পারচেজ সেভ করা যায়নি। ইন্টারনেট কানেকশন চেক করে আবার চেষ্টা করুন।\n(${error.message})`);
+      alert(
+        `দুঃখিত, পারচেজ সেভ করা যায়নি। ইন্টারনেট কানেকশন চেক করে আবার চেষ্টা করুন।\n(${error.message})`,
+      );
     } finally {
       setIsSavingPurchase(false);
     }
@@ -357,10 +402,11 @@ export default function InventoryManagement() {
 
     if (isSavingSupplier) return;
 
-    let currentShopId = localStorage.getItem('shopId') || localStorage.getItem('shop_id');
+    let currentShopId =
+      localStorage.getItem("shopId") || localStorage.getItem("shop_id");
 
     if (!currentShopId) {
-      const storedUser = localStorage.getItem('user');
+      const storedUser = localStorage.getItem("user");
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
@@ -399,7 +445,7 @@ export default function InventoryManagement() {
         method: editingSupplierId ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(supplierData),
       });
@@ -407,16 +453,24 @@ export default function InventoryManagement() {
       const result = await response.json().catch(() => ({}));
 
       if (response.ok) {
-        alert(editingSupplierId ? "Supplier updated successfully!" : "Supplier added successfully!");
+        alert(
+          editingSupplierId
+            ? "Supplier updated successfully!"
+            : "Supplier added successfully!",
+        );
         fetchSuppliers();
         setActiveTab("supplier_list");
         resetSupplierForm();
       } else {
-        alert(`Failed: ${result.message || result.error || `Server error (status ${response.status})`}`);
+        alert(
+          `Failed: ${result.message || result.error || `Server error (status ${response.status})`}`,
+        );
       }
     } catch (error) {
       console.error("Error saving supplier:", error);
-      alert(`দুঃখিত, সাপ্লায়ার সেভ করা যায়নি। ইন্টারনেট কানেকশন চেক করে আবার চেষ্টা করুন।\n(${error.message})`);
+      alert(
+        `দুঃখিত, সাপ্লায়ার সেভ করা যায়নি। ইন্টারনেট কানেকশন চেক করে আবার চেষ্টা করুন।\n(${error.message})`,
+      );
     } finally {
       setIsSavingSupplier(false);
     }
@@ -430,34 +484,43 @@ export default function InventoryManagement() {
     const sId = item.supplier_id || item.supplierId || "";
     setSupplierId(sId);
     const foundSupplier = suppliers.find((sup) => sup.id == sId);
-    setSupplierNumber(foundSupplier ? (foundSupplier.phone || foundSupplier.number || '') : '');
+    setSupplierNumber(
+      foundSupplier ? foundSupplier.phone || foundSupplier.number || "" : "",
+    );
     setPaidAmount(item.paidAmount || item.paid_amount || "");
     setDate(item.date || "");
     setPaymentStatus(item.paymentStatus || item.payment_status || "Paid");
     setNote(item.note || "");
 
-    const items = Array.isArray(item.purchaseItems) && item.purchaseItems.length > 0
-      ? item.purchaseItems
-      : (item.productId || item.product ? [item] : []); // পুরনো single-item রেকর্ডের জন্য fallback
+    const items =
+      Array.isArray(item.purchaseItems) && item.purchaseItems.length > 0
+        ? item.purchaseItems
+        : item.productId || item.product
+          ? [item]
+          : []; // পুরনো single-item রেকর্ডের জন্য fallback
 
     const restoredCartItems = items.map((pi, idx) => {
       const linkedProductId = pi.productId || pi.product_id || "";
-      const foundProduct = products.find((p) => String(p.id) === String(linkedProductId));
+      const foundProduct = products.find(
+        (p) => String(p.id) === String(linkedProductId),
+      );
       const packId = pi.packId || pi.pack_id || pi.pack?.id || "";
-      const pack = (foundProduct?.packs || []).find((p) => String(p.id) === String(packId));
+      const pack = (foundProduct?.packs || []).find(
+        (p) => String(p.id) === String(packId),
+      );
       const qty = Number(pi.quantity) || 0;
       const price = Number(pi.unitPrice || pi.unit_price) || 0;
 
       return {
-        key: `${linkedProductId}-${packId || 'std'}-${idx}`,
+        key: `${linkedProductId}-${packId || "std"}-${idx}`,
         productId: linkedProductId,
-        productName: pi.product || foundProduct?.name || '',
+        productName: pi.product || foundProduct?.name || "",
         packId: packId || undefined,
         packName: pack?.packName || pi.pack?.packName,
-        baseUnit: foundProduct?.baseUnit || 'Pcs',
+        baseUnit: foundProduct?.baseUnit || "Pcs",
         quantity: qty,
         unitPrice: price,
-        totalAmount: pi.totalAmount || pi.total_amount || (qty * price),
+        totalAmount: pi.totalAmount || pi.total_amount || qty * price,
         baseUnitsToAdd: pack ? qty * (Number(pack.multiplier) || 1) : qty,
       };
     });
@@ -485,12 +548,13 @@ export default function InventoryManagement() {
   };
 
   const handleDeletePurchase = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this purchase?")) return;
+    if (!window.confirm("Are you sure you want to delete this purchase?"))
+      return;
     try {
       const token = localStorage.getItem("token") || "";
       const response = await fetch(`${API_BASE_URL}/purchases/${id}`, {
         method: "DELETE",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       const result = await response.json().catch(() => ({}));
       if (response.ok) {
@@ -506,12 +570,13 @@ export default function InventoryManagement() {
   };
 
   const handleDeleteSupplier = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this supplier?")) return;
+    if (!window.confirm("Are you sure you want to delete this supplier?"))
+      return;
     try {
       const token = localStorage.getItem("token") || "";
       const response = await fetch(`${API_BASE_URL}/suppliers/${id}`, {
         method: "DELETE",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
         alert("Supplier deleted successfully!");
@@ -552,30 +617,54 @@ export default function InventoryManagement() {
       {/* Standard Header Navigation Tabs */}
       <div className="flex flex-wrap items-center gap-2 mb-8 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 w-fit">
         <button
-          onClick={() => { setActiveTab("purchase_list"); resetPurchaseForm(); }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "purchase_list" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-gray-600 hover:bg-gray-100/80"
-            }`}
+          onClick={() => {
+            setActiveTab("purchase_list");
+            resetPurchaseForm();
+          }}
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
+            activeTab === "purchase_list"
+              ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+              : "text-gray-600 hover:bg-gray-100/80"
+          }`}
         >
           📋 Purchase List
         </button>
         <button
-          onClick={() => { setActiveTab("purchase_add"); resetPurchaseForm(); }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "purchase_add" ? "bg-blue-600 text-white shadow-md shadow-blue-500/20" : "text-gray-600 hover:bg-gray-100/80"
-            }`}
+          onClick={() => {
+            setActiveTab("purchase_add");
+            resetPurchaseForm();
+          }}
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
+            activeTab === "purchase_add"
+              ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+              : "text-gray-600 hover:bg-gray-100/80"
+          }`}
         >
           {editingPurchaseId ? "✏️ Edit Purchase" : "➕ Add Purchase"}
         </button>
         <button
-          onClick={() => { setActiveTab("supplier_list"); resetSupplierForm(); }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "supplier_list" ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20" : "text-gray-600 hover:bg-gray-100/80"
-            }`}
+          onClick={() => {
+            setActiveTab("supplier_list");
+            resetSupplierForm();
+          }}
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
+            activeTab === "supplier_list"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+              : "text-gray-600 hover:bg-gray-100/80"
+          }`}
         >
           🏢 Supplier List
         </button>
         <button
-          onClick={() => { setActiveTab("supplier_add"); resetSupplierForm(); }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "supplier_add" ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20" : "text-gray-600 hover:bg-gray-100/80"
-            }`}
+          onClick={() => {
+            setActiveTab("supplier_add");
+            resetSupplierForm();
+          }}
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
+            activeTab === "supplier_add"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+              : "text-gray-600 hover:bg-gray-100/80"
+          }`}
         >
           {editingSupplierId ? "✏️ Edit Supplier" : "➕ Add Supplier"}
         </button>
@@ -586,11 +675,18 @@ export default function InventoryManagement() {
         <div className="bg-white shadow-xl shadow-gray-100 border border-gray-100 rounded-3xl p-6 md:p-8">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">Purchase Records</h3>
-              <p className="text-xs text-gray-400 mt-1">Manage and view all your stock purchases.</p>
+              <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">
+                Purchase Records
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">
+                Manage and view all your stock purchases.
+              </p>
             </div>
             <button
-              onClick={() => { resetPurchaseForm(); setActiveTab("purchase_add"); }}
+              onClick={() => {
+                resetPurchaseForm();
+                setActiveTab("purchase_add");
+              }}
               className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md shadow-blue-500/20"
             >
               + New Purchase
@@ -611,21 +707,37 @@ export default function InventoryManagement() {
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
                 {purchases.length === 0 ? (
-                  <tr><td colSpan="6" className="text-center py-10 text-gray-400 font-medium">No purchase records found.</td></tr>
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="text-center py-10 text-gray-400 font-medium"
+                    >
+                      No purchase records found.
+                    </td>
+                  </tr>
                 ) : (
                   purchases.map((item) => {
                     // ✅ নতুন: multi-item purchase হলে সব প্রোডাক্ট নাম দেখানো,
                     // পুরনো single-item রেকর্ডের জন্য fallback রাখা হয়েছে
-                    const items = Array.isArray(item.purchaseItems) && item.purchaseItems.length > 0
-                      ? item.purchaseItems
-                      : (item.product ? [item] : []);
+                    const items =
+                      Array.isArray(item.purchaseItems) &&
+                      item.purchaseItems.length > 0
+                        ? item.purchaseItems
+                        : item.product
+                          ? [item]
+                          : [];
 
                     return (
-                      <tr key={item.id} className="hover:bg-gray-50/60 transition">
-                        <td className="p-4 text-gray-600 font-medium">{item.date}</td>
+                      <tr
+                        key={item.id}
+                        className="hover:bg-gray-50/60 transition"
+                      >
+                        <td className="p-4 text-gray-600 font-medium">
+                          {item.date}
+                        </td>
                         <td className="p-4 font-semibold text-gray-800 max-w-xs">
                           {items.length === 0 ? (
-                            '—'
+                            "—"
                           ) : items.length === 1 ? (
                             <span>
                               {items[0].product}
@@ -636,22 +748,47 @@ export default function InventoryManagement() {
                               )}
                             </span>
                           ) : (
-                            <span title={items.map((i) => i.product).join(', ')}>
-                              {items[0].product} <span className="text-gray-400 font-normal">+{items.length - 1} more</span>
+                            <span
+                              title={items.map((i) => i.product).join(", ")}
+                            >
+                              {items[0].product}{" "}
+                              <span className="text-gray-400 font-normal">
+                                +{items.length - 1} more
+                              </span>
                             </span>
                           )}
                         </td>
-                        <td className="p-4 text-gray-600">{items.length || '-'}</td>
-                        <td className="p-4 font-bold text-gray-900 font-mono">৳{item.total_amount || item.totalAmount}</td>
+                        <td className="p-4 text-gray-600">
+                          {items.length || "-"}
+                        </td>
+                        <td className="p-4 font-bold text-gray-900 font-mono">
+                          ৳{item.total_amount || item.totalAmount}
+                        </td>
                         <td className="p-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${(item.payment_status || item.paymentStatus) === 'Paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'
-                            }`}>
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              (item.payment_status || item.paymentStatus) ===
+                              "Paid"
+                                ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                : "bg-amber-50 text-amber-600 border border-amber-100"
+                            }`}
+                          >
                             {item.payment_status || item.paymentStatus}
                           </span>
                         </td>
                         <td className="p-4 text-right space-x-2">
-                          <button onClick={() => handleEditPurchase(item)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition">Edit</button>
-                          <button onClick={() => handleDeletePurchase(item.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition">Delete</button>
+                          <button
+                            onClick={() => handleEditPurchase(item)}
+                            className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeletePurchase(item.id)}
+                            className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     );
@@ -669,9 +806,13 @@ export default function InventoryManagement() {
           <div className="border-b border-gray-100 pb-5 mb-8 flex justify-between items-center">
             <div>
               <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">
-                {editingPurchaseId ? "✏️ Edit Purchase Record" : "🛒 Add New Purchase / Stock In"}
+                {editingPurchaseId
+                  ? "✏️ Edit Purchase Record"
+                  : "🛒 Add New Purchase / Stock In"}
               </h3>
-              <p className="text-xs text-gray-400 mt-1">এক সাপ্লায়ার থেকে একাধিক প্রোডাক্ট একসাথে যোগ করতে পারবেন।</p>
+              <p className="text-xs text-gray-400 mt-1">
+                এক সাপ্লায়ার থেকে একাধিক প্রোডাক্ট একসাথে যোগ করতে পারবেন।
+              </p>
             </div>
             <span className="px-3.5 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full border border-blue-100">
               {editingPurchaseId ? "Mode: Update" : "Mode: Create"}
@@ -692,7 +833,9 @@ export default function InventoryManagement() {
                 >
                   <option value="">Select Supplier</option>
                   {suppliers.map((sup) => (
-                    <option key={sup.id} value={sup.id}>{sup.name}</option>
+                    <option key={sup.id} value={sup.id}>
+                      {sup.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -728,10 +871,14 @@ export default function InventoryManagement() {
                 টেবিলে যোগ হবে, একাধিকবার রিপিট করে একই purchase-এ অনেক প্রোডাক্ট
                 যোগ করা যাবে */}
             <div className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">📦 Add Product</h4>
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                📦 Add Product
+              </h4>
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                 <div className="md:col-span-4 relative">
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Select Product</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Select Product
+                  </label>
                   <input
                     type="text"
                     value={product}
@@ -750,11 +897,19 @@ export default function InventoryManagement() {
                     <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl divide-y divide-gray-100">
                       {products
                         .filter((p) => {
-                          const pName = typeof p === 'string' ? p : (p.name || p.product_name || '');
-                          return pName.toLowerCase().includes(product.toLowerCase());
+                          const pName =
+                            typeof p === "string"
+                              ? p
+                              : p.name || p.product_name || "";
+                          return pName
+                            .toLowerCase()
+                            .includes(product.toLowerCase());
                         })
                         .map((p, index) => {
-                          const pName = typeof p === 'string' ? p : (p.name || p.product_name || '');
+                          const pName =
+                            typeof p === "string"
+                              ? p
+                              : p.name || p.product_name || "";
                           return (
                             <li
                               key={p.id || index}
@@ -762,8 +917,10 @@ export default function InventoryManagement() {
                               className="p-3 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer font-medium flex items-center justify-between"
                             >
                               <span>{pName}</span>
-                              {p.inventoryType === 'pack' && (
-                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">Pack</span>
+                              {p.inventoryType === "pack" && (
+                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                                  Pack
+                                </span>
                               )}
                             </li>
                           );
@@ -774,7 +931,9 @@ export default function InventoryManagement() {
 
                 {isPackProduct && (
                   <div className="md:col-span-3">
-                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Pack Type <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                      Pack Type <span className="text-red-500">*</span>
+                    </label>
                     <select
                       value={selectedPackId}
                       onChange={handleSelectPack}
@@ -794,14 +953,26 @@ export default function InventoryManagement() {
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                     {isPackProduct ? "No. of Packs" : "Quantity"}
                   </label>
-                  <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="0" className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium" />
+                  <input
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    placeholder="0"
+                    className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium"
+                  />
                 </div>
 
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                     {isPackProduct ? "Price / Pack (৳)" : "Unit Price (৳)"}
                   </label>
-                  <input type="number" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} placeholder="0.00" className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium" />
+                  <input
+                    type="number"
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium"
+                  />
                 </div>
 
                 <div className="md:col-span-1">
@@ -817,8 +988,19 @@ export default function InventoryManagement() {
                 {isPackProduct && selectedPack && (
                   <div className="md:col-span-12">
                     <p className="text-xs text-gray-500 bg-white border border-gray-200 rounded-xl p-3">
-                      স্টকে যোগ হবে: <span className="font-bold text-gray-800">{stagingBaseUnitsToAdd} {selectedProduct?.baseUnit || 'Pcs'}</span>
-                      {' '}(প্রতি {selectedProduct?.baseUnit || 'unit'}-এর ক্রয়মূল্য ≈ ৳{selectedPack.multiplier > 0 ? (Number(unitPrice) / Number(selectedPack.multiplier)).toFixed(2) : '0.00'})
+                      স্টকে যোগ হবে:{" "}
+                      <span className="font-bold text-gray-800">
+                        {stagingBaseUnitsToAdd}{" "}
+                        {selectedProduct?.baseUnit || "Pcs"}
+                      </span>{" "}
+                      (প্রতি {selectedProduct?.baseUnit || "unit"}-এর ক্রয়মূল্য
+                      ≈ ৳
+                      {selectedPack.multiplier > 0
+                        ? (
+                            Number(unitPrice) / Number(selectedPack.multiplier)
+                          ).toFixed(2)
+                        : "0.00"}
+                      )
                     </p>
                   </div>
                 )}
@@ -828,7 +1010,9 @@ export default function InventoryManagement() {
             {/* ✅ নতুন: এই purchase-এ এখন পর্যন্ত যোগ করা প্রোডাক্টের লিস্ট */}
             <div className="border border-gray-100 rounded-2xl overflow-hidden">
               <div className="bg-gray-50/70 px-5 py-3 border-b border-gray-100">
-                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">🧾 Items in this Purchase ({cartItems.length})</h4>
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  🧾 Items in this Purchase ({cartItems.length})
+                </h4>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -844,8 +1028,12 @@ export default function InventoryManagement() {
                   <tbody className="divide-y divide-gray-50 text-sm">
                     {cartItems.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="p-5 text-center text-gray-400">
-                          এখনো কোনো প্রোডাক্ট যোগ করা হয়নি — উপরে থেকে প্রোডাক্ট নির্বাচন করে "Add" চাপুন।
+                        <td
+                          colSpan="5"
+                          className="p-5 text-center text-gray-400"
+                        >
+                          এখনো কোনো প্রোডাক্ট যোগ করা হয়নি — উপরে থেকে
+                          প্রোডাক্ট নির্বাচন করে "Add" চাপুন।
                         </td>
                       </tr>
                     ) : (
@@ -860,8 +1048,12 @@ export default function InventoryManagement() {
                             )}
                           </td>
                           <td className="p-3 text-gray-600">{item.quantity}</td>
-                          <td className="p-3 text-gray-600 font-mono">৳{item.unitPrice}</td>
-                          <td className="p-3 font-bold text-gray-900 font-mono">৳{item.totalAmount.toFixed(2)}</td>
+                          <td className="p-3 text-gray-600 font-mono">
+                            ৳{item.unitPrice}
+                          </td>
+                          <td className="p-3 font-bold text-gray-900 font-mono">
+                            ৳{item.totalAmount.toFixed(2)}
+                          </td>
                           <td className="p-3 text-right">
                             <button
                               type="button"
@@ -878,8 +1070,18 @@ export default function InventoryManagement() {
                   {cartItems.length > 0 && (
                     <tfoot>
                       <tr className="bg-blue-50/50 border-t border-blue-100">
-                        <td colSpan="3" className="p-3 text-right font-bold text-gray-600 text-xs uppercase">Grand Total</td>
-                        <td colSpan="2" className="p-3 font-extrabold text-blue-700 font-mono">৳{totalAmount.toFixed(2)}</td>
+                        <td
+                          colSpan="3"
+                          className="p-3 text-right font-bold text-gray-600 text-xs uppercase"
+                        >
+                          Grand Total
+                        </td>
+                        <td
+                          colSpan="2"
+                          className="p-3 font-extrabold text-blue-700 font-mono"
+                        >
+                          ৳{totalAmount.toFixed(2)}
+                        </td>
                       </tr>
                     </tfoot>
                   )}
@@ -888,40 +1090,90 @@ export default function InventoryManagement() {
             </div>
 
             <div className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">💳 Payment & Due Details</h4>
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                💳 Payment & Due Details
+              </h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Payment Status <span className="text-red-500">*</span></label>
-                  <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 font-semibold">
-                    <option value="Paid" className="text-emerald-600">Paid</option>
-                    <option value="Due" className="text-red-600">Due</option>
-                    <option value="Partial" className="text-amber-600">Partial</option>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Payment Status <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={paymentStatus}
+                    onChange={(e) => setPaymentStatus(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 font-semibold"
+                  >
+                    <option value="Paid" className="text-emerald-600">
+                      Paid
+                    </option>
+                    <option value="Due" className="text-red-600">
+                      Due
+                    </option>
+                    <option value="Partial" className="text-amber-600">
+                      Partial
+                    </option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Paid Amount (৳)</label>
-                  <input type="number" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="0.00" className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 font-mono font-medium" />
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Paid Amount (৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 font-mono font-medium"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Due Amount (৳)</label>
-                  <input type="text" value={`৳ ${dueAmount.toFixed(2)}`} readOnly className="w-full border border-red-200 rounded-xl p-3 text-sm bg-red-50/50 text-red-700 font-bold font-mono" />
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Due Amount (৳)
+                  </label>
+                  <input
+                    type="text"
+                    value={`৳ ${dueAmount.toFixed(2)}`}
+                    readOnly
+                    className="w-full border border-red-200 rounded-xl p-3 text-sm bg-red-50/50 text-red-700 font-bold font-mono"
+                  />
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Note / Comments</label>
-              <textarea rows="2" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add extra notes..." className="w-full border border-gray-200 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 resize-none font-medium"></textarea>
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                Note / Comments
+              </label>
+              <textarea
+                rows="2"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Add extra notes..."
+                className="w-full border border-gray-200 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 resize-none font-medium"
+              ></textarea>
             </div>
 
             <div className="flex justify-end gap-3 border-t border-gray-100 pt-6">
-              <button type="button" onClick={() => { resetPurchaseForm(); setActiveTab("purchase_list"); }} className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-100 transition text-xs font-bold">Cancel</button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetPurchaseForm();
+                  setActiveTab("purchase_list");
+                }}
+                className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-100 transition text-xs font-bold"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
                 disabled={isSavingPurchase}
                 className={`px-6 py-2.5 rounded-xl shadow-md transition text-xs font-bold text-white ${isSavingPurchase ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
               >
-                {isSavingPurchase ? "⏳ Saving..." : (editingPurchaseId ? "Update Purchase" : "Save Purchase")}
+                {isSavingPurchase
+                  ? "⏳ Saving..."
+                  : editingPurchaseId
+                    ? "Update Purchase"
+                    : "Save Purchase"}
               </button>
             </div>
           </form>
@@ -933,11 +1185,18 @@ export default function InventoryManagement() {
         <div className="bg-white shadow-xl shadow-gray-100 border border-gray-100 rounded-3xl p-6 md:p-8">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">Supplier Directory</h3>
-              <p className="text-xs text-gray-400 mt-1">Manage all your product suppliers and vendors.</p>
+              <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">
+                Supplier Directory
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">
+                Manage all your product suppliers and vendors.
+              </p>
             </div>
             <button
-              onClick={() => { resetSupplierForm(); setActiveTab("supplier_add"); }}
+              onClick={() => {
+                resetSupplierForm();
+                setActiveTab("supplier_add");
+              }}
               className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md shadow-indigo-500/20"
             >
               + Add Supplier
@@ -957,17 +1216,42 @@ export default function InventoryManagement() {
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
                 {suppliers.length === 0 ? (
-                  <tr><td colSpan="5" className="text-center py-10 text-gray-400 font-medium">No suppliers found.</td></tr>
+                  <tr>
+                    <td
+                      colSpan="5"
+                      className="text-center py-10 text-gray-400 font-medium"
+                    >
+                      No suppliers found.
+                    </td>
+                  </tr>
                 ) : (
                   suppliers.map((sup) => (
                     <tr key={sup.id} className="hover:bg-gray-50/60 transition">
-                      <td className="p-4 font-semibold text-gray-800">{sup.name}</td>
-                      <td className="p-4 text-gray-600 font-mono">{sup.phone || sup.phone_number || sup.number || 'N/A'}</td>
-                      <td className="p-4 text-gray-600">{sup.address || 'N/A'}</td>
-                      <td className="p-4 text-gray-500 text-xs">{sup.note || '-'}</td>
+                      <td className="p-4 font-semibold text-gray-800">
+                        {sup.name}
+                      </td>
+                      <td className="p-4 text-gray-600 font-mono">
+                        {sup.phone || sup.phone_number || sup.number || "N/A"}
+                      </td>
+                      <td className="p-4 text-gray-600">
+                        {sup.address || "N/A"}
+                      </td>
+                      <td className="p-4 text-gray-500 text-xs">
+                        {sup.note || "-"}
+                      </td>
                       <td className="p-4 text-right space-x-2">
-                        <button onClick={() => handleEditSupplier(sup)} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition">Edit</button>
-                        <button onClick={() => handleDeleteSupplier(sup.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition">Delete</button>
+                        <button
+                          onClick={() => handleEditSupplier(sup)}
+                          className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSupplier(sup.id)}
+                          className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -984,9 +1268,13 @@ export default function InventoryManagement() {
           <div className="border-b border-gray-100 pb-5 mb-8 flex justify-between items-center">
             <div>
               <h3 className="text-xl font-extrabold text-gray-800 tracking-tight">
-                {editingSupplierId ? "✏️ Edit Supplier Details" : "🏢 Add New Supplier"}
+                {editingSupplierId
+                  ? "✏️ Edit Supplier Details"
+                  : "🏢 Add New Supplier"}
               </h3>
-              <p className="text-xs text-gray-400 mt-1">Register a new vendor or supplier to your network.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Register a new vendor or supplier to your network.
+              </p>
             </div>
             <span className="px-3.5 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-full border border-indigo-100">
               {editingSupplierId ? "Mode: Update" : "Mode: Create"}
@@ -995,7 +1283,9 @@ export default function InventoryManagement() {
 
           <form onSubmit={handleSaveSupplier} className="space-y-5">
             <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Supplier Name <span className="text-red-500">*</span></label>
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                Supplier Name <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 value={supName}
@@ -1007,7 +1297,9 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Phone Number <span className="text-red-500">*</span></label>
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                Phone Number <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 value={supPhone}
@@ -1019,7 +1311,9 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Address</label>
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                Address
+              </label>
               <input
                 type="text"
                 value={supAddress}
@@ -1030,7 +1324,9 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Note / Description</label>
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                Note / Description
+              </label>
               <textarea
                 rows="3"
                 value={supNote}
@@ -1041,13 +1337,26 @@ export default function InventoryManagement() {
             </div>
 
             <div className="flex justify-end gap-3 border-t border-gray-100 pt-6">
-              <button type="button" onClick={() => { resetSupplierForm(); setActiveTab("supplier_list"); }} className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-100 transition text-xs font-bold">Cancel</button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetSupplierForm();
+                  setActiveTab("supplier_list");
+                }}
+                className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-100 transition text-xs font-bold"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
                 disabled={isSavingSupplier}
                 className={`px-6 py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition text-xs font-bold text-white ${isSavingSupplier ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}
               >
-                {isSavingSupplier ? "⏳ Saving..." : (editingSupplierId ? "Update Supplier" : "Save Supplier")}
+                {isSavingSupplier
+                  ? "⏳ Saving..."
+                  : editingSupplierId
+                    ? "Update Supplier"
+                    : "Save Supplier"}
               </button>
             </div>
           </form>
