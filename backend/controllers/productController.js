@@ -52,14 +52,6 @@ export const getProducts = async (req, res) => {
       include: {
         category: true,
         packs: true,
-        inventoryLayers: {
-          where: { 
-            remainingQty: { gt: 0 },
-            shopId: shopId // 👈 এখানে অবশ্যই shopId ফিল্টার দিতে হবে
-          },
-          orderBy: { createdAt: "asc" }, // সবচেয়ে পুরোনো লেয়ার আগে
-          take: 1, // ওই নির্দিষ্ট শপের বর্তমান লেয়ারটি নেবে
-        },
       },
       orderBy: { createdAt: "desc" },
     });
