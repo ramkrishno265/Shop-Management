@@ -22,7 +22,10 @@ const BulkImportPage = () => {
             reader.onload = (evt) => {
                 try {
                     const bstr = evt.target.result;
-                    const workbook = XLSX.read(bstr, { type: 'binary' });
+                    // ✅ cellDates: true — এক্সেলের ডেট সেলগুলো (যেমন expiryDate কলাম) সঠিক JS Date
+                    // অবজেক্ট হিসেবে পার্স হবে, raw Excel serial number (যেমন 46112) হিসেবে না।
+                    // এটা ছাড়া ভুল/অবাস্তব তারিখ ব্যাকএন্ডে চলে যেত।
+                    const workbook = XLSX.read(bstr, { type: 'binary', cellDates: true });
                     const wsname = workbook.SheetNames[0];
                     const ws = workbook.Sheets[wsname];
                     const data = XLSX.utils.sheet_to_json(ws);
@@ -121,7 +124,7 @@ const BulkImportPage = () => {
                                 <p className="text-sm text-gray-500">Use our pre-defined format for quick upload.</p>
                             </div>
                         </div>
-                        
+
                         <a
                             href="/product-template.xlsx"
                             download
@@ -189,14 +192,17 @@ const BulkImportPage = () => {
                     </div>
                 </div>
 
-                {/* Validation Errors Example (Visible only if errors exist) */}
+                {/* Validation Errors (Visible only if errors exist) */}
                 {errorDetails.length > 0 && (
                     <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3 text-red-700">
                         <AlertCircle className="w-5 h-5 flex-shrink-0" />
                         <div>
                             <p className="font-semibold">Validation Errors found:</p>
+                            {/* ✅ errorDetails নিজেই একটা string array (উপরে setErrorDetails(...) দ্রষ্টব্য) —
+                                আগে ভুল করে errorDetails.errorDetails?.map() লেখা ছিল, যেটা সবসময়
+                                undefined হয়ে তালিকা খালি দেখাতো। এখন সরাসরি errorDetails.map() */}
                             <ul className="text-sm list-disc pl-5 mt-1">
-                                {errorDetails.errorDetails?.map((err, index) => (
+                                {errorDetails.map((err, index) => (
                                     <li key={index}>{err}</li>
                                 ))}
                             </ul>

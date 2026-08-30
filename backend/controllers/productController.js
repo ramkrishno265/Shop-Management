@@ -549,32 +549,32 @@ export const parseProductWithAI = async (req, res) => {
 export const bulkImportProducts = async (req, res) => {
   try {
     const { products, requestShopId } = req.body;
-
+ 
     // ১. শপ এক্সেস ভ্যালিডেশন
     const finalShopId = validateShopAccess(req.user, requestShopId);
     if (!finalShopId) {
       return res.status(403).json({ message: "Access denied or Invalid Shop ID." });
     }
-
+ 
     if (!products || !Array.isArray(products) || products.length === 0) {
       return res.status(400).json({ message: "Invalid data format or empty products list." });
     }
-
+ 
     let successCount = 0;
     let failedProducts = [];
-
+ 
     for (const item of products) {
       try {
         if (!item.name) {
           failedProducts.push({ item, reason: "Product name is missing." });
           continue;
         }
-
+ 
         const productName = String(item.name).trim();
         const inventoryType = item.inventoryType === 'pack' ? 'pack' : 'standard';
         const baseUnit = item.baseUnit ? String(item.baseUnit).trim() : 'Pcs';
         const brandValue = item.brand && String(item.brand).trim() !== "" ? String(item.brand).trim() : null;
-
+ 
         // ডুপ্লিকেট নাম চেক (একই শপে একই নামের product থাকলে আটকে দেবে)
         const existingProduct = await prisma.product.findFirst({
           where: {
@@ -582,17 +582,17 @@ export const bulkImportProducts = async (req, res) => {
             shopId: finalShopId
           }
         });
-
+ 
         if (existingProduct) {
           failedProducts.push({ item: item.name, reason: "Product with this name already exists in this shop." });
           continue;
         }
-
+ 
         // ২. ক্যাটাগরি হ্যান্ডলিং
         let categoryId = null;
         if (item.category) {
           const categoryName = typeof item.category === 'string' ? item.category.trim() : (item.category.name || '').trim();
-
+ 
           if (categoryName) {
             let dbCategory = await prisma.category.findFirst({
               where: {
@@ -600,7 +600,7 @@ export const bulkImportProducts = async (req, res) => {
                 shopId: finalShopId
               }
             });
-
+ 
             if (!dbCategory) {
               dbCategory = await prisma.category.create({
                 data: {
@@ -612,25 +612,25 @@ export const bulkImportProducts = async (req, res) => {
             categoryId = dbCategory.id;
           }
         }
-
+ 
         // ৩. SKU হ্যান্ডলিং — SKU দেওয়া না থাকলে auto-generate, দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
         let skuValue = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
           ? String(item.sku).trim()
           : null;
-
+ 
         if (!skuValue) {
           skuValue = `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
         } else {
           const existingSku = await prisma.product.findFirst({
             where: { sku: skuValue, shopId: finalShopId }
           });
-
+ 
           if (existingSku) {
             failedProducts.push({ item: item.name, reason: `Product with SKU "${skuValue}" already exists.` });
             continue;
           }
         }
-
+ 
         // বারকোড হ্যান্ডলিং — বারকোড দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
         let barcodeValue = null;
         if (item.barcode !== undefined && item.barcode !== null && String(item.barcode).trim() !== "") {
@@ -638,19 +638,19 @@ export const bulkImportProducts = async (req, res) => {
           const existingBarcode = await prisma.product.findFirst({
             where: { barcode: rawBarcode, shopId: finalShopId }
           });
-
+ 
           if (existingBarcode) {
             failedProducts.push({ item: item.name, reason: `Product with barcode "${rawBarcode}" already exists.` });
             continue;
           }
           barcodeValue = rawBarcode;
         }
-
+ 
         let quantity = 0;
         let purchasePrice = parseFloat(item.purchasePrice) || 0;
         let sellingPrice = parseFloat(item.sellingPrice) || 0;
         let parsedPacks = [];
-
+ 
         // প্যাক হ্যান্ডলিং
         if (inventoryType === 'pack' && item.packs && Array.isArray(item.packs)) {
           parsedPacks = item.packs;
@@ -659,7 +659,7 @@ export const bulkImportProducts = async (req, res) => {
             const multiplier = parseFloat(p.multiplier) || 1;
             return sum + (packStock * multiplier);
           }, 0);
-
+ 
           if (parsedPacks.length > 0) {
             purchasePrice = parseFloat(parsedPacks[0].purchasePrice) || purchasePrice;
             sellingPrice = parseFloat(parsedPacks[0].sellingPrice) || sellingPrice;
@@ -667,7 +667,7 @@ export const bulkImportProducts = async (req, res) => {
         } else {
           quantity = parseFloat(item.quantity) || 0;
         }
-
+ 
         // ৪. ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক সেভ করা
         await prisma.$transaction(async (tx) => {
           const newProduct = await tx.product.create({
@@ -681,7 +681,9 @@ export const bulkImportProducts = async (req, res) => {
               quantity: quantity,
               purchasePrice: purchasePrice,
               sellingPrice: sellingPrice,
-              expireDate: parseExpiryDate(item.expireDate) ?? null, // 👈 আগে bulk import-এ এই ফিল্ড সেট-ই হতো না
+              // 👈 তোমার Excel/CSV টেমপ্লেটের কলাম নাম "expiryDate" (bulk import),
+              // কিন্তু single-add ফর্ম পাঠায় "expireDate" — দুটোই fallback হিসেবে চেক করা হচ্ছে
+              expireDate: parseExpiryDate(item.expireDate ?? item.expiryDate) ?? null,
               lowStockLimit: item.lowStockLimit ? parseFloat(item.lowStockLimit) : 5,
               categoryId: categoryId,
               shopId: finalShopId,
@@ -690,7 +692,7 @@ export const bulkImportProducts = async (req, res) => {
               customFields: item.customFields || {}
             }
           });
-
+ 
           if (inventoryType === 'pack' && parsedPacks.length > 0) {
             const packDataToInsert = parsedPacks.map(pack => ({
               productId: newProduct.id,
@@ -700,20 +702,20 @@ export const bulkImportProducts = async (req, res) => {
               purchasePrice: parseFloat(pack.purchasePrice) || 0,
               sellingPrice: parseFloat(pack.sellingPrice) || 0,
             }));
-
+ 
             await tx.productPack.createMany({
               data: packDataToInsert,
             });
           }
         });
-
+ 
         successCount++;
       } catch (err) {
         const friendlyMessage = getFriendlyErrorMessage(err);
         failedProducts.push({ item: item.name, reason: friendlyMessage || err.message });
       }
     }
-
+ 
     return res.status(200).json({
       message: "Bulk import process completed.",
       totalAttempted: products.length,
@@ -721,7 +723,7 @@ export const bulkImportProducts = async (req, res) => {
       failedCount: failedProducts.length,
       failedProducts
     });
-
+ 
   } catch (error) {
     console.error("Bulk Import Error:", error);
     return res.status(500).json({ message: "Error during bulk import", error: error.message });
