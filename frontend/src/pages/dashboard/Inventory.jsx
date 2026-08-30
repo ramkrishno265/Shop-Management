@@ -20,6 +20,7 @@ const InventoryPage = () => {
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [selectedBrand, setSelectedBrand] = useState("All Brands");
   const [currentPage, setCurrentPage] = useState(1);
 
   // পপআপের জন্য স্টেট
@@ -42,7 +43,9 @@ const InventoryPage = () => {
 
         if (response.ok) {
           // ডেটা অ্যারে সরাসরি হোক বা অবজেক্টের ভেতর থেকে আসুক, নিরাপদে সেট করা
-          const productList = Array.isArray(data) ? data : (data.products || data.data || []);
+          const productList = Array.isArray(data)
+            ? data
+            : data.products || data.data || [];
           setProducts(productList);
         } else {
           console.error("Failed to fetch products:", data.message);
@@ -57,10 +60,10 @@ const InventoryPage = () => {
     fetchProducts();
   }, [API_URL, token]);
 
-  // --- Search/Category পরিবর্তন হলে page 1-এ ফিরে যাবে ---
+  // --- Search/Category/Brand পরিবর্তন হলে page 1-এ ফিরে যাবে ---
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, selectedBrand]);
 
   // --- Delete Product Handler ---
   const handleDelete = async (id) => {
@@ -104,22 +107,43 @@ const InventoryPage = () => {
     ),
   ).sort();
 
-  // --- Search + Category ফিল্টার করা লিস্ট ---
+  // --- Products থেকে ইউনিক ব্র্যান্ড লিস্ট বের করা (ড্রপডাউনের জন্য) ---
+  const brandOptions = Array.from(
+    new Set(
+      products
+        .map((p) => p.brand?.name || p.brand)
+        .filter((b) => b && b.trim() !== ""),
+    ),
+  ).sort();
+
+  // --- Search + Category + Brand ফিল্টার করা লিস্ট ---
   const filteredProducts = products.filter((p) => {
     const term = searchTerm.trim().toLowerCase();
-    const productCategory = (p.category?.name || p.category || "").toLowerCase();
+    const productCategory = (
+      p.category?.name ||
+      p.category ||
+      ""
+    ).toLowerCase();
+
+    // ব্র্যান্ড নেম চেক করার জন্য ফিল্ডটি নেওয়া হলো (obj বা string উভয় ফরম্যাটের জন্য নিরাপদ)
+    const productBrand = (p.brand?.name || p.brand || "").toLowerCase();
 
     const matchesSearch =
       term === "" ||
       p.name.toLowerCase().includes(term) ||
       (p.sku && p.sku.toLowerCase().includes(term)) ||
-      productCategory.includes(term);
+      productCategory.includes(term) ||
+      productBrand.includes(term); // ব্রান্ড নেম দিয়ে সার্চ করার শর্ত
 
     const matchesCategory =
       selectedCategory === "All Categories" ||
       (p.category?.name || p.category) === selectedCategory;
 
-    return matchesSearch && matchesCategory;
+    const matchesBrand =
+      selectedBrand === "All Brands" ||
+      (p.brand?.name || p.brand) === selectedBrand;
+
+    return matchesSearch && matchesCategory && matchesBrand;
   });
 
   // --- Pagination Calculation ---
@@ -244,11 +268,12 @@ const InventoryPage = () => {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by product name or SKU..."
+              placeholder="Search by product name, SKU or brand..."
               className="w-full pl-11 pr-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium text-slate-800"
             />
           </div>
 
+          {/* Category Filter Dropdown */}
           <div className="w-full md:w-48">
             <select
               value={selectedCategory}
@@ -259,6 +284,22 @@ const InventoryPage = () => {
               {categoryOptions.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Brand Filter Dropdown */}
+          <div className="w-full md:w-48">
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              className="w-full px-3 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:outline-none font-medium text-slate-700"
+            >
+              <option value="All Brands">All Brands</option>
+              {brandOptions.map((brand) => (
+                <option key={brand} value={brand}>
+                  {brand}
                 </option>
               ))}
             </select>
@@ -286,7 +327,7 @@ const InventoryPage = () => {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="8"
+                      colSpan="9"
                       className="text-center py-10 text-slate-400 font-medium"
                     >
                       <div className="flex justify-center items-center gap-2">
@@ -315,12 +356,10 @@ const InventoryPage = () => {
                           {product.sku}
                         </td>
                         <td className="p-4 text-slate-600">
-                          {product.category?.name ||
-                            product.category ||
-                            "N/A"}
+                          {product.category?.name || product.category || "N/A"}
                         </td>
                         <td className="p-4 text-slate-600">
-                          {product.brand || "N/A"}
+                          {product.brand?.name || product.brand || "N/A"}
                         </td>
                         <td className="p-4 text-slate-600">
                           ৳{product.purchasePrice?.toFixed(2) || "0.00"}
@@ -354,10 +393,11 @@ const InventoryPage = () => {
                         {/* Status Badge */}
                         <td className="p-4">
                           <span
-                            className={`px-2.5 py-1 text-xs font-bold rounded-lg ${product.status === "ACTIVE"
-                              ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
-                              : "bg-rose-50 text-rose-600 border border-rose-200/50"
-                              }`}
+                            className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
+                              product.status === "ACTIVE"
+                                ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
+                                : "bg-rose-50 text-rose-600 border border-rose-200/50"
+                            }`}
                           >
                             {product.status || "ACTIVE"}
                           </span>
@@ -388,7 +428,7 @@ const InventoryPage = () => {
                 ) : (
                   <tr>
                     <td
-                      colSpan="8"
+                      colSpan="9"
                       className="text-center py-10 text-slate-400 font-medium"
                     >
                       কোনো পণ্য পাওয়া যায়নি! ওপরের "+ Add Product" বাটন থেকে
