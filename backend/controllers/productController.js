@@ -41,6 +41,15 @@ const validateShopAccess = (user, requestShopId) => {
   return targetShopId;
 };
 
+// Utility: বিভিন্ন ফরম্যাটের expire_date ইনপুটকে নিরাপদে Date/null এ রূপান্তর করা
+// (যদি invalid date string আসে, সাইলেন্টলি null না করে আগের ভ্যালু ধরে রাখা হয় update-এ)
+const parseExpiryDate = (value) => {
+  if (value === undefined) return undefined; // ফিল্ডটাই পাঠানো হয়নি
+  if (value === null || value === "") return null; // ইউজার ইচ্ছাকৃতভাবে ক্লিয়ার করেছে
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+};
+
 // ১. Get Products
 export const getProducts = async (req, res) => {
   try {
@@ -52,6 +61,7 @@ export const getProducts = async (req, res) => {
       include: {
         category: true,
         packs: true,
+        inventoryLayers: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -81,6 +91,7 @@ export const createProduct = async (req, res) => {
       sku,
       barcode,
       brand,
+      expireDate, // 👈 ফ্রন্টএন্ড ফর্ম এই নামেই পাঠায় (camelCase)
       category,
       inventoryType,
       baseUnit,
@@ -168,6 +179,7 @@ export const createProduct = async (req, res) => {
           baseUnit: unitVal,
           quantity,
           purchasePrice,
+          expireDate: parseExpiryDate(expireDate) ?? null, // 👈 Prisma model field name = expireDate
           sellingPrice,
           lowStockLimit: lowStockLimit ? parseFloat(lowStockLimit) : 5,
           categoryId: dbCategory.id,
@@ -288,7 +300,8 @@ export const updateProduct = async (req, res) => {
       baseUnit,
       packs,
       standardData,
-      customFields
+      customFields,
+      expireDate, // 👈 ফ্রন্টএন্ড ফর্ম এই নামেই পাঠায়; আগে এই ফিল্ডই destructure হতো না
     } = req.body;
 
     const { role, shopId } = req.user;
@@ -348,6 +361,12 @@ export const updateProduct = async (req, res) => {
       }
     }
 
+    // expireDate: ফিল্ডটা রিকোয়েস্টে না থাকলে আগের ভ্যালু বজায় থাকবে,
+    // পাঠানো হলে (এমনকি খালি স্ট্রিং/null হলেও) নতুন ভ্যালু অনুযায়ী আপডেট হবে
+    const finalExpiredate = parseExpiryDate(expireDate) === undefined
+      ? existingProduct.expireDate
+      : parseExpiryDate(expireDate);
+
     const updatedProduct = await prisma.$transaction(async (tx) => {
       let finalQuantity = quantity !== undefined ? parseFloat(quantity) : existingProduct.quantity;
       const currentInventoryType = inventoryType ?? existingProduct.inventoryType;
@@ -401,6 +420,7 @@ export const updateProduct = async (req, res) => {
           quantity: finalQuantity, // 👈 সঠিক ক্যালকুলেটেড স্টক আপডেট হবে
           purchasePrice: finalPurchasePrice,
           sellingPrice: finalSellingPrice,
+          expireDate: finalExpiredate, // 👈 এখন expireDate সঠিকভাবে সেভ/আপডেট হবে
           description: description !== undefined ? description.trim() : existingProduct.description,
           status: status ?? (finalQuantity > 0 ? "ACTIVE" : "INACTIVE"),
           categoryId,
@@ -661,6 +681,7 @@ export const bulkImportProducts = async (req, res) => {
               quantity: quantity,
               purchasePrice: purchasePrice,
               sellingPrice: sellingPrice,
+              expireDate: parseExpiryDate(item.expireDate) ?? null, // 👈 আগে bulk import-এ এই ফিল্ড সেট-ই হতো না
               lowStockLimit: item.lowStockLimit ? parseFloat(item.lowStockLimit) : 5,
               categoryId: categoryId,
               shopId: finalShopId,
@@ -706,4 +727,3 @@ export const bulkImportProducts = async (req, res) => {
     return res.status(500).json({ message: "Error during bulk import", error: error.message });
   }
 };
-

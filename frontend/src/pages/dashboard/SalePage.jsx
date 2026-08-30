@@ -359,8 +359,8 @@ export default function SalePage() {
       console.error("Error saving customer:", err);
       alert(
         err.response?.data?.error ||
-          err.response?.data?.message ||
-          "কাস্টমার সেভ করতে সমস্যা হয়েছে!",
+        err.response?.data?.message ||
+        "কাস্টমার সেভ করতে সমস্যা হয়েছে!",
       );
     } finally {
       setSavingCustomer(false);
@@ -561,17 +561,15 @@ export default function SalePage() {
                         addToCartDirectly(selectedProductForPack, pack, 1);
                       }
                     }}
-                    className={`p-3.5 border rounded-xl transition-all flex justify-between items-center group ${
-                      isOut
-                        ? "bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed"
-                        : "bg-slate-50 hover:bg-slate-900 hover:text-white border-slate-200 cursor-pointer"
-                    }`}
+                    className={`p-3.5 border rounded-xl transition-all flex justify-between items-center group ${isOut
+                      ? "bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed"
+                      : "bg-slate-50 hover:bg-slate-900 hover:text-white border-slate-200 cursor-pointer"
+                      }`}
                   >
                     <div>
                       <p
-                        className={`font-bold text-sm text-slate-800 ${
-                          !isOut && "group-hover:text-white"
-                        }`}
+                        className={`font-bold text-sm text-slate-800 ${!isOut && "group-hover:text-white"
+                          }`}
                       >
                         {packName}
                         {isOut && (
@@ -581,18 +579,16 @@ export default function SalePage() {
                         )}
                       </p>
                       <p
-                        className={`text-xs text-slate-400 mt-0.5 ${
-                          !isOut && "group-hover:text-slate-300"
-                        }`}
+                        className={`text-xs text-slate-400 mt-0.5 ${!isOut && "group-hover:text-slate-300"
+                          }`}
                       >
                         প্রতি প্যাকে: {packMultiplier} ইউনিট &nbsp;|&nbsp; স্টক:{" "}
                         {packStock}
                       </p>
                     </div>
                     <p
-                      className={`font-extrabold text-slate-900 text-base ${
-                        !isOut && "group-hover:text-emerald-400"
-                      }`}
+                      className={`font-extrabold text-slate-900 text-base ${!isOut && "group-hover:text-emerald-400"
+                        }`}
                     >
                       ৳{packPrice}
                     </p>
@@ -969,8 +965,9 @@ export default function SalePage() {
                             })()}
                           </td>
 
+                          {/* প্রাইসে দশমিকের পর ২ ঘর ফিক্স করা হয়েছে */}
                           <td className="py-4 text-center text-slate-600">
-                            ৳{item.price}
+                            ৳{Number(item.price).toFixed(2)}
                           </td>
 
                           <td className="py-4">
@@ -1014,8 +1011,9 @@ export default function SalePage() {
                             </div>
                           </td>
 
+                          {/* টোটালেও দশমিকের পর ২ ঘর ফিক্স করা হয়েছে */}
                           <td className="py-4 text-right font-semibold text-slate-800">
-                            ৳{item.price * item.quantity}
+                            ৳{Number(item.price * item.quantity).toFixed(2)}
                           </td>
 
                           <td className="py-4 text-right">
@@ -1127,7 +1125,7 @@ export default function SalePage() {
               <div className="flex justify-between text-sm text-slate-500">
                 <span>Sub Total:</span>
                 <span className="font-semibold text-slate-700">
-                  ৳{subTotal}
+                  ৳{Number(subTotal || 0).toFixed(2)}
                 </span>
               </div>
 
@@ -1161,7 +1159,7 @@ export default function SalePage() {
                   Total Payable:
                 </span>
                 <span className="text-2xl font-black text-slate-900">
-                  ৳{payableAmount}
+                  ৳{Number(payableAmount || 0).toFixed(2)}
                 </span>
               </div>
             </div>

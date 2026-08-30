@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import jsPDF from 'jspdf';
@@ -14,10 +13,12 @@ export default function DashboardHome() {
     todaySales: 0,
     todayInvoicesCount: 0,
     lowStockCount: 0,
-    totalProductsCount: 0
+    totalProductsCount: 0,
+    expiringCount: 0
   });
   const [recentInvoices, setRecentInvoices] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [expiringProducts, setExpiringProducts] = useState([]);
   const [showDetails, setShowDetails] = useState(false);
 
   const [currentInvoice, setCurrentInvoice] = useState(null);
@@ -66,17 +67,47 @@ export default function DashboardHome() {
           }));
         }
 
+        // ---- Today's sales ----
         const todayStr = new Date().toISOString().split('T')[0];
         const todaySalesList = sales.filter(s => s.createdAt && s.createdAt.startsWith(todayStr));
         const totalTodaySales = todaySalesList.reduce((acc, curr) => acc + (Number(curr.grandTotal) || 0), 0);
 
+        // ---- Low stock ----
         const lowStockList = products.filter(p => (p.quantity !== undefined ? p.quantity : p.stock) <= 5);
+
+        // ---- Expiring soon (next 30 days) ----
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+        const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+        const expiringList = products
+          .map(p => {
+            const rawExpiry = p.expireDate;
+            if (!rawExpiry) return null;
+
+            const expiryDate = new Date(rawExpiry);
+            if (isNaN(expiryDate.getTime())) return null;
+
+            const daysLeft = Math.ceil((expiryDate.setHours(0, 0, 0, 0) - todayDate.getTime()) / MS_PER_DAY);
+
+            return {
+              name: p.name,
+              sku: p.sku || 'N/A',
+              expiryDate: rawExpiry,
+              daysLeft
+            };
+          })
+          .filter(p => p !== null && p.daysLeft >= 0 && p.daysLeft <= 30)
+          .sort((a, b) => a.daysLeft - b.daysLeft);
+
+        setExpiringProducts(expiringList.slice(0, 3));
 
         setStats({
           todaySales: totalTodaySales,
           todayInvoicesCount: todaySalesList.length,
           lowStockCount: lowStockList.length,
-          totalProductsCount: products.length
+          totalProductsCount: products.length,
+          expiringCount: expiringList.length
         });
 
         const formattedInvoices = sales.slice(0, 5).map(s => ({
@@ -435,10 +466,10 @@ export default function DashboardHome() {
   return (
     <div className="p-1 text-slate-900">
       {/* Your global index.css already handles print visibility for
-          #printable-invoice (visibility:hidden on body *, visibility:visible
-          + position:fixed on #printable-invoice). Don't wrap this in
-          print:hidden / display:none — that would hide #printable-invoice
-          too, since a display:none ancestor overrides a visible descendant. */}
+        #printable-invoice (visibility:hidden on body *, visibility:visible
+        + position:fixed on #printable-invoice). Don't wrap this in
+        print:hidden / display:none — that would hide #printable-invoice
+        too, since a display:none ancestor overrides a visible descendant. */}
       <div>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
@@ -546,6 +577,45 @@ export default function DashboardHome() {
                       </div>
                       <span className="text-xs font-bold text-amber-700 bg-amber-100/70 px-2 py-1 rounded-lg">
                         {prod.stock}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs mt-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                  Expiry Alerts
+                  {!loading && stats.expiringCount > 0 && (
+                    <span className="text-[11px] font-bold text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-full">
+                      {stats.expiringCount}
+                    </span>
+                  )}
+                </h2>
+                <button
+                  onClick={() => navigate('/expired_products')}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 shrink-0"
+                >
+                  View All ↗
+                </button>
+              </div>
+              <div className="space-y-3">
+                {loading ? (
+                  <p className="text-xs text-slate-400 text-center py-4">লোডিং হচ্ছে...</p>
+                ) : expiringProducts.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">কোনো পণ্যের মেয়াদ শেষের দিকে নেই! 🌿</p>
+                ) : (
+                  expiringProducts.map((prod, i) => (
+                    <div key={i} className="p-3 bg-rose-50/40 border border-rose-100 rounded-xl flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-800">{prod.name}</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Expires: {prod.expiryDate}</p>
+                      </div>
+                      <span className="text-xs font-bold text-rose-700 bg-rose-100/70 px-2 py-1 rounded-lg">
+                        {prod.daysLeft} days left
                       </span>
                     </div>
                   ))

@@ -20,6 +20,7 @@ import AddCustomer from "./pages/dashboard/AddCustomer.jsx";
 import BulkImportPage from "./pages/dashboard/BulkImportPage.jsx";
 import ShopProfile from "./pages/Setting_Option/ShopProfile.jsx"; // Import the BulkImportPage component
 import ProductFieldSettings from "./pages/Setting_Option/ProductFieldSettings.jsx"; // Import the BulkImportPage component
+import ExpiredProducts from "./pages/dashboard/ExpiryManagement.jsx"; // Import the BulkImportPage component
 
 
 // Protected Route Guard Component
@@ -169,6 +170,16 @@ function App() {
                 <ProtectedRoute>
                   <DashboardLayout>
                     <ProductFieldSettings />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/expired_products"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <ExpiredProducts />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
