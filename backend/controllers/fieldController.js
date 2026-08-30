@@ -100,3 +100,38 @@ export const saveShopFields = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ৩. নির্দিষ্ট কাস্টম ফিল্ড ডিলিট করা (DELETE)
+export const deleteShopField = async (req, res) => {
+  try {
+    const fieldId = req.params.fieldId;
+    
+    // এখানে req.body বাদ দেওয়া হয়েছে কারণ DELETE রিকোয়েস্টে বডি থাকে না
+    const requestShopId = req.params.shopId || req.user?.shopId;
+    const finalShopId = validateShopAccess(req.user, requestShopId);
+
+    if (!finalShopId) {
+      return res.status(403).json({ success: false, message: "Access denied or Invalid Shop ID." });
+    }
+
+    const existingField = await prisma.shopFieldConfig.findFirst({
+      where: {
+        id: Number(fieldId),
+        shopId: finalShopId
+      }
+    });
+
+    if (!existingField) {
+      return res.status(404).json({ success: false, message: "Field not found or unauthorized." });
+    }
+
+    await prisma.shopFieldConfig.delete({
+      where: { id: Number(fieldId) }
+    });
+
+    res.status(200).json({ success: true, message: "Field deleted successfully!" });
+  } catch (error) {
+    console.error("Error deleting field:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

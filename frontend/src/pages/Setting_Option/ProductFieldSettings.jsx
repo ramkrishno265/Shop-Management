@@ -47,6 +47,7 @@ export default function SimpleProductFieldSettings() {
       const data = await res.json();
       if (data.success) {
         const formattedFields = data.data.map((item) => ({
+          id: item.id, // ব্যাকএন্ডের আইডি ডিলিট করার জন্য এখানে রাখা হলো
           fieldName: item.fieldName,
           label: item.fieldLabel,
           type: item.fieldType.toLowerCase(),
@@ -84,6 +85,7 @@ export default function SimpleProductFieldSettings() {
     }
 
     const newItem = {
+      id: null, // নতুন ফিল্ডের জন্য আইডি এখনো ডাটাবেজে তৈরি হয়নি, সেভের পর আইডি আসবে
       fieldName: generatedFieldName,
       label: newLabel.trim(),
       type: newType,
@@ -96,9 +98,30 @@ export default function SimpleProductFieldSettings() {
     setNewType("text");
   };
 
-  // ফিল্ড লোকাল লিস্ট থেকে রিমুভ করা
-  const handleDelete = (fieldName) => {
-    setCustomFields(customFields.filter((item) => item.fieldName !== fieldName));
+  // ফিল্ড সার্ভার ও লোকাল লিস্ট থেকে ডিলিট করা
+  const handleDelete = async (field) => {
+    // যদি ফিল্ডটি ডাটাবেজে সেভ করা থাকে (অর্থাৎ আইডি থাকে), তবে সার্ভারে রিকোয়েস্ট পাঠিয়ে ডিলিট করবে
+    if (field.id) {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_URL}/fields/${field.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert("ডিলিট করতে সমস্যা হয়েছে: " + data.message);
+          return;
+        }
+      } catch (err) {
+        console.error("Error deleting field:", err);
+        alert("সার্ভারে সংযোগ স্থাপন করা যায়নি");
+        return;
+      }
+    }
+
+    // লোকাল স্টেট থেকে ফিল্ডটি রিমুভ করা
+    setCustomFields(customFields.filter((item) => item.fieldName !== field.fieldName));
   };
 
   // ২. সার্ভারে সব ফিল্ড সেভ করা (POST / Upsert API Call)
@@ -131,6 +154,7 @@ export default function SimpleProductFieldSettings() {
       if (data.success) {
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
+        fetchShopFields(); // সেভ করার পর আইডি সহ লেটেস্ট ডেটা রিফ্রেশ করার জন্য
       } else {
         setFormError("সেভ করা যায়নি: " + data.message);
       }
@@ -223,7 +247,7 @@ export default function SimpleProductFieldSettings() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleDelete(field.fieldName)}
+                        onClick={() => handleDelete(field)}
                         aria-label="ফিল্ড ডিলিট করুন"
                         className="flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-[#B6B4A6] hover:text-[#B5442E] hover:bg-[#FBEAE6] transition-colors"
                       >

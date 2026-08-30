@@ -46,6 +46,10 @@ export default function InventoryManagement() {
   // ✅ নতুন: এক purchase-এ যোগ করা সব প্রোডাক্টের লিস্ট
   const [cartItems, setCartItems] = useState([]);
 
+  // ✅ নতুন: Purchase List-এ একাধিক প্রোডাক্ট থাকলে বিস্তারিত দেখানোর পপআপ স্টেট
+  const [selectedPurchaseForDetails, setSelectedPurchaseForDetails] =
+    useState(null);
+
   // Supplier Form States
   const [supName, setSupName] = useState("");
   const [supPhone, setSupPhone] = useState("");
@@ -73,6 +77,51 @@ export default function InventoryManagement() {
     0,
   );
   const dueAmount = Math.max(0, totalAmount - (Number(paidAmount) || 0));
+
+  // ✅ নতুন: Purchase List/Modal-এ প্রোডাক্ট নাম দেখানোর জন্য শক্তিশালী fallback।
+  // API রেসপন্সে ফিল্ড নেম ভিন্ন হতে পারে (product / productName / product.name /
+  // Product.name), অথবা একেবারেই না থাকতে পারে — তখন productId দিয়ে আমাদের লোড করা
+  // products লিস্ট থেকে নাম খুঁজে বের করা হচ্ছে।
+  const getPurchaseItemProductName = (pi) => {
+    if (!pi) return "N/A";
+    if (typeof pi.product === "string" && pi.product.trim() !== "") {
+      return pi.product;
+    }
+    if (pi.productName && pi.productName.trim() !== "") return pi.productName;
+    if (pi.product_name && pi.product_name.trim() !== "")
+      return pi.product_name;
+    if (pi.product?.name) return pi.product.name;
+    if (pi.Product?.name) return pi.Product.name;
+
+    const linkedId = pi.productId || pi.product_id;
+    if (linkedId) {
+      const found = products.find((p) => String(p.id) === String(linkedId));
+      if (found) return found.name || found.product_name || "N/A";
+    }
+    return "N/A";
+  };
+
+  // ✅ নতুন: একইভাবে total amount-এরও ফিল্ড নেম ভিন্ন হতে পারে, বা একেবারেই না
+  // থাকতে পারে — তখন quantity × unitPrice হিসাব করে দেখানো হচ্ছে।
+  const getPurchaseItemTotal = (pi) => {
+    if (!pi) return 0;
+    const direct = pi.totalAmount ?? pi.total_amount;
+    if (direct !== undefined && direct !== null && direct !== "") {
+      return Number(direct);
+    }
+    const qty = Number(pi.quantity) || 0;
+    const price = Number(pi.unitPrice ?? pi.unit_price) || 0;
+    return qty * price;
+  };
+
+  // ✅ নতুন: unit price-এর জন্যও একইভাবে fallback
+  const getPurchaseItemUnitPrice = (pi) => {
+    if (!pi) return 0;
+    const direct = pi.unitPrice ?? pi.unit_price;
+    return direct !== undefined && direct !== null && direct !== ""
+      ? Number(direct)
+      : 0;
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -290,7 +339,7 @@ export default function InventoryManagement() {
 
     const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-    // ✅ const এর বদলে let ব্যবহার করা হয়েছে
+    // ✅ const এর বদলে let ব্যবহার করা হয়েছে
     let currentShopId = user?.shopId || user?.shop_id;
 
     if (!currentShopId) {
@@ -717,7 +766,7 @@ export default function InventoryManagement() {
                   </tr>
                 ) : (
                   purchases.map((item) => {
-                    // ✅ নতুন: multi-item purchase হলে সব প্রোডাক্ট নাম দেখানো,
+                    // ✅ multi-item purchase হলে সব প্রোডাক্ট নাম দেখানো,
                     // পুরনো single-item রেকর্ডের জন্য fallback রাখা হয়েছে
                     const items =
                       Array.isArray(item.purchaseItems) &&
@@ -739,8 +788,9 @@ export default function InventoryManagement() {
                           {items.length === 0 ? (
                             "—"
                           ) : items.length === 1 ? (
+                            // ✅ একটা মাত্র প্রোডাক্ট হলে সরাসরি নাম দেখানো, পপআপ লাগবে না
                             <span>
-                              {items[0].product}
+                              {getPurchaseItemProductName(items[0])}
                               {items[0].pack?.packName && (
                                 <span className="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full align-middle">
                                   {items[0].pack.packName}
@@ -748,14 +798,20 @@ export default function InventoryManagement() {
                               )}
                             </span>
                           ) : (
-                            <span
-                              title={items.map((i) => i.product).join(", ")}
+                            // ✅ একাধিক প্রোডাক্ট হলে নামে ক্লিক করলে পপআপে সব দেখাবে
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedPurchaseForDetails(item)
+                              }
+                              className="text-blue-600 hover:text-blue-800 hover:underline font-semibold text-left cursor-pointer"
+                              title="সব প্রোডাক্টের বিস্তারিত দেখতে ক্লিক করুন"
                             >
-                              {items[0].product}{" "}
+                              {getPurchaseItemProductName(items[0])}{" "}
                               <span className="text-gray-400 font-normal">
                                 +{items.length - 1} more
                               </span>
-                            </span>
+                            </button>
                           )}
                         </td>
                         <td className="p-4 text-gray-600">
@@ -867,7 +923,7 @@ export default function InventoryManagement() {
               </div>
             </div>
 
-            {/* ✅ নতুন: প্রোডাক্ট যোগ করার স্টেজিং সেকশন — "Add to List" চাপলে নিচের
+            {/* ✅ প্রোডাক্ট যোগ করার স্টেজিং সেকশন — "Add to List" চাপলে নিচের
                 টেবিলে যোগ হবে, একাধিকবার রিপিট করে একই purchase-এ অনেক প্রোডাক্ট
                 যোগ করা যাবে */}
             <div className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50">
@@ -1007,7 +1063,7 @@ export default function InventoryManagement() {
               </div>
             </div>
 
-            {/* ✅ নতুন: এই purchase-এ এখন পর্যন্ত যোগ করা প্রোডাক্টের লিস্ট */}
+            {/* ✅ এই purchase-এ এখন পর্যন্ত যোগ করা প্রোডাক্টের লিস্ট */}
             <div className="border border-gray-100 rounded-2xl overflow-hidden">
               <div className="bg-gray-50/70 px-5 py-3 border-b border-gray-100">
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -1360,6 +1416,85 @@ export default function InventoryManagement() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ✅ Purchase Items Details Modal (একাধিক প্রোডাক্ট হলে পপআপে সব দেখাবে) */}
+      {selectedPurchaseForDetails && (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg">
+                  Purchase Details
+                </h3>
+                <p className="text-xs text-gray-400">
+                  {selectedPurchaseForDetails.date} —{" "}
+                  {(selectedPurchaseForDetails.purchaseItems || []).length}{" "}
+                  items
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPurchaseForDetails(null)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center font-bold transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Items List inside Popup */}
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              {(selectedPurchaseForDetails.purchaseItems || []).map(
+                (pi, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 flex justify-between items-center"
+                  >
+                    <div>
+                      <h4 className="font-bold text-gray-800 text-sm">
+                        {pi.product}
+                        {pi.pack?.packName && (
+                          <span className="ml-2 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full align-middle">
+                            {pi.name} (× {pi.pack.multiplier})
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {pi.quantity} × ৳{pi.unitPrice || pi.unit_price}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-extrabold text-blue-600 text-sm">
+                        ৳{pi.totalAmount || pi.total_amount}
+                      </span>
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="mt-6 pt-3 border-t border-gray-100 flex justify-between items-center">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Grand Total
+              </span>
+              <span className="text-lg font-extrabold text-gray-900 font-mono">
+                ৳
+                {selectedPurchaseForDetails.total_amount ||
+                  selectedPurchaseForDetails.totalAmount}
+              </span>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setSelectedPurchaseForDetails(null)}
+                className="px-5 py-2.5 bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
