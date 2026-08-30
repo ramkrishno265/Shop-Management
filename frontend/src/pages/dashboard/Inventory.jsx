@@ -274,6 +274,7 @@ const InventoryPage = () => {
                   <th className="p-4">Product Info</th>
                   <th className="p-4">SKU</th>
                   <th className="p-4">Category</th>
+                  <th className="p-4">Brand</th>
                   <th className="p-4">Purchase Price</th>
                   <th className="p-4">Selling Price</th>
                   <th className="p-4">Stock Quantity</th>
@@ -317,6 +318,9 @@ const InventoryPage = () => {
                           {product.category?.name ||
                             product.category ||
                             "N/A"}
+                        </td>
+                        <td className="p-4 text-slate-600">
+                          {product.brand || "N/A"}
                         </td>
                         <td className="p-4 text-slate-600">
                           ৳{product.purchasePrice?.toFixed(2) || "0.00"}

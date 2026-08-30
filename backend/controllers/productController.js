@@ -543,7 +543,6 @@ export const bulkImportProducts = async (req, res) => {
     let successCount = 0;
     let failedProducts = [];
 
-    // প্রতিটা প্রোডাক্ট লুপ চালিয়ে প্রসেস করা
     for (const item of products) {
       try {
         if (!item.name) {
@@ -556,7 +555,20 @@ export const bulkImportProducts = async (req, res) => {
         const baseUnit = item.baseUnit ? String(item.baseUnit).trim() : 'Pcs';
         const brandValue = item.brand && String(item.brand).trim() !== "" ? String(item.brand).trim() : null;
 
-        // ২. ক্যাটাগরি হ্যান্ডলিং (নাম দিয়ে খুঁজে বা তৈরি করে নেওয়া)
+        // ডুপ্লিকেট নাম চেক (একই শপে একই নামের product থাকলে আটকে দেবে)
+        const existingProduct = await prisma.product.findFirst({
+          where: {
+            name: { equals: productName, mode: 'insensitive' },
+            shopId: finalShopId
+          }
+        });
+
+        if (existingProduct) {
+          failedProducts.push({ item: item.name, reason: "Product with this name already exists in this shop." });
+          continue;
+        }
+
+        // ২. ক্যাটাগরি হ্যান্ডলিং
         let categoryId = null;
         if (item.category) {
           const categoryName = typeof item.category === 'string' ? item.category.trim() : (item.category.name || '').trim();
@@ -581,25 +593,25 @@ export const bulkImportProducts = async (req, res) => {
           }
         }
 
-        // ৩. SKU এবং Barcode ইউনিক চেক ও ডুপ্লিকেট এড়ানোর লজিক
-        let baseSku = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
+        // ৩. SKU হ্যান্ডলিং — SKU দেওয়া না থাকলে auto-generate, দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
+        let skuValue = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
           ? String(item.sku).trim()
-          : `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+          : null;
 
-        let skuValue = baseSku;
-        let counter = 1;
-        
-        // ডাটাবেজে SKU অলরেডি থাকলে ইউনিক করার জন্য লুপ চালানো
-        while (true) {
+        if (!skuValue) {
+          skuValue = `SKU-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+        } else {
           const existingSku = await prisma.product.findFirst({
             where: { sku: skuValue, shopId: finalShopId }
           });
-          if (!existingSku) break;
-          skuValue = `${baseSku}-${counter}`;
-          counter++;
+
+          if (existingSku) {
+            failedProducts.push({ item: item.name, reason: `Product with SKU "${skuValue}" already exists.` });
+            continue;
+          }
         }
 
-        // বারকোড হ্যান্ডলিং (ফাঁকা হলে null এবং ডুপ্লিকেট হলে ইউনিক করা)
+        // বারকোড হ্যান্ডলিং — বারকোড দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
         let barcodeValue = null;
         if (item.barcode !== undefined && item.barcode !== null && String(item.barcode).trim() !== "") {
           const rawBarcode = String(item.barcode).trim();
@@ -607,11 +619,11 @@ export const bulkImportProducts = async (req, res) => {
             where: { barcode: rawBarcode, shopId: finalShopId }
           });
 
-          if (!existingBarcode) {
-            barcodeValue = rawBarcode;
-          } else {
-            barcodeValue = `${rawBarcode}-${Math.floor(Math.random() * 1000)}`;
+          if (existingBarcode) {
+            failedProducts.push({ item: item.name, reason: `Product with barcode "${rawBarcode}" already exists.` });
+            continue;
           }
+          barcodeValue = rawBarcode;
         }
 
         let quantity = 0;
@@ -658,7 +670,6 @@ export const bulkImportProducts = async (req, res) => {
             }
           });
 
-          // যদি প্যাক প্রোডাক্ট হয়, তবে `product_packs` টেবিলে ডাটা ইনসার্ট করা
           if (inventoryType === 'pack' && parsedPacks.length > 0) {
             const packDataToInsert = parsedPacks.map(pack => ({
               productId: newProduct.id,

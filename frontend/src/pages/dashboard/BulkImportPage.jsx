@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Upload, FileDown, AlertCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -8,6 +8,7 @@ const BulkImportPage = () => {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [errorDetails, setErrorDetails] = useState([]);
+    const isSubmittingRef = useRef(false); // ডাবল-ক্লিক আটকানোর জন্য
 
     // ফাইল হ্যান্ডেল করা এবং XLSX দিয়ে পার্স করা
     const handleFileChange = (e) => {
@@ -36,11 +37,15 @@ const BulkImportPage = () => {
 
     // ব্যাকএন্ডে ডেটা পাঠানো (Vite API URL, টোকেন এবং ডাইনামিক শপ আইডি সহ)
     const handleStartImport = async () => {
+        // যদি আগে থেকেই একটা সাবমিট চলমান থাকে, দ্বিতীয়টা আটকে দাও
+        if (isSubmittingRef.current) return;
+
         if (parsedData.length === 0) {
             alert("Please upload a valid Excel or CSV file first!");
             return;
         }
 
+        isSubmittingRef.current = true; // সাথে সাথে লক করা হলো (synchronous)
         setLoading(true);
         setMessage('');
         setErrorDetails([]);
@@ -89,6 +94,7 @@ const BulkImportPage = () => {
             setMessage("Failed to connect to server. Make sure backend is running.");
         } finally {
             setLoading(false);
+            isSubmittingRef.current = false; // লক খুলে দেওয়া হলো
         }
     };
 
@@ -115,6 +121,7 @@ const BulkImportPage = () => {
                                 <p className="text-sm text-gray-500">Use our pre-defined format for quick upload.</p>
                             </div>
                         </div>
+                        
                         <a
                             href="/product-template.xlsx"
                             download
@@ -189,7 +196,7 @@ const BulkImportPage = () => {
                         <div>
                             <p className="font-semibold">Validation Errors found:</p>
                             <ul className="text-sm list-disc pl-5 mt-1">
-                                {errorDetails.map((err, index) => (
+                                {errorDetails.errorDetails?.map((err, index) => (
                                     <li key={index}>{err}</li>
                                 ))}
                             </ul>
