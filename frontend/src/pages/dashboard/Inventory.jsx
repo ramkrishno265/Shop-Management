@@ -26,6 +26,10 @@ const InventoryPage = () => {
   // পপআপের জন্য স্টেট
   const [selectedProductPacks, setSelectedProductPacks] = useState(null);
 
+  // --- Bulk Delete স্টেট ---
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const token = localStorage.getItem("token");
 
@@ -65,7 +69,7 @@ const InventoryPage = () => {
     setCurrentPage(1);
   }, [searchTerm, selectedCategory, selectedBrand]);
 
-  // --- Delete Product Handler ---
+  // --- Delete Product Handler (Single) ---
   const handleDelete = async (id) => {
     if (!window.confirm("আপনি কি নিশ্চিত এই পণ্যটি মুছে ফেলতে চান?")) return;
     try {
@@ -75,11 +79,91 @@ const InventoryPage = () => {
       });
       if (response.ok) {
         setProducts(products.filter((p) => p.id !== id));
+        setSelectedIds((prev) => prev.filter((x) => x !== id));
       } else {
         alert("পণ্য ডিলিট করতে সমস্যা হয়েছে।");
       }
     } catch (error) {
       console.error("Error deleting product:", error);
+    }
+  };
+
+  // --- Select One / Select All Toggle ---
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const currentPageIds = paginatedProducts.map((p) => p.id);
+    const allSelected = currentPageIds.every((id) =>
+      selectedIds.includes(id),
+    );
+    if (allSelected) {
+      setSelectedIds((prev) =>
+        prev.filter((id) => !currentPageIds.includes(id)),
+      );
+    } else {
+      setSelectedIds((prev) =>
+        Array.from(new Set([...prev, ...currentPageIds])),
+      );
+    }
+  };
+
+  // --- Bulk Delete Handler ---
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (
+      !window.confirm(
+        `আপনি কি নিশ্চিত ${selectedIds.length} টি পণ্য মুছে ফেলতে চান?`,
+      )
+    )
+      return;
+
+    setBulkDeleting(true);
+    try {
+      // Backend-এ bulk delete endpoint থাকলে এটি ব্যবহার হবে
+      const response = await fetch(`${API_URL}/products/bulk-delete`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+
+      if (response.ok) {
+        setProducts((prev) =>
+          prev.filter((p) => !selectedIds.includes(p.id)),
+        );
+        setSelectedIds([]);
+      } else {
+        alert("কিছু পণ্য ডিলিট করতে সমস্যা হয়েছে।");
+      }
+    } catch (error) {
+      console.error("Error bulk deleting products:", error);
+      alert("সার্ভার এরর হয়েছে। একে একে ডিলিট করার চেষ্টা করা হচ্ছে...");
+
+      // Fallback: bulk endpoint না থাকলে একে একে ডিলিট
+      try {
+        await Promise.all(
+          selectedIds.map((id) =>
+            fetch(`${API_URL}/products/${id}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+          ),
+        );
+        setProducts((prev) =>
+          prev.filter((p) => !selectedIds.includes(p.id)),
+        );
+        setSelectedIds([]);
+      } catch (fallbackError) {
+        console.error("Fallback bulk delete failed:", fallbackError);
+      }
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -156,6 +240,10 @@ const InventoryPage = () => {
     currentPage * ITEMS_PER_PAGE,
   );
 
+  const isAllCurrentPageSelected =
+    paginatedProducts.length > 0 &&
+    paginatedProducts.every((p) => selectedIds.includes(p.id));
+
   return (
     <div className="min-h-screen bg-slate-50/70 p-4  font-sans">
       <div className=" mx-auto space-y-6">
@@ -168,8 +256,25 @@ const InventoryPage = () => {
             </p>
           </div>
 
-          {/* Add Product Button */}
+          {/* Action Buttons */}
           <div className="flex items-center gap-3">
+            {/* Bulk Delete বাটন - শুধুমাত্র কিছু সিলেক্ট থাকলে দেখাবে */}
+            {selectedIds.length > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-rose-600/10 flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bulkDeleting ? (
+                  <FiLoader className="animate-spin" size={18} />
+                ) : (
+                  <FiTrash2 size={18} />
+                )}
+                {bulkDeleting
+                  ? "Deleting..."
+                  : `Delete Selected (${selectedIds.length})`}
+              </button>
+            )}
             <button
               onClick={() => navigate("/bulk_import")}
               className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-900/10 flex items-center justify-center gap-2 transition cursor-pointer"
@@ -309,9 +414,17 @@ const InventoryPage = () => {
         {/* Product Table */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[850px]">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-slate-50/80 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                  <th className="p-4 w-10">
+                    <input
+                      type="checkbox"
+                      checked={isAllCurrentPageSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded cursor-pointer accent-slate-900"
+                    />
+                  </th>
                   <th className="p-4">Product Info</th>
                   <th className="p-4">SKU</th>
                   <th className="p-4">Category</th>
@@ -327,7 +440,7 @@ const InventoryPage = () => {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="9"
+                      colSpan="10"
                       className="text-center py-10 text-slate-400 font-medium"
                     >
                       <div className="flex justify-center items-center gap-2">
@@ -343,12 +456,23 @@ const InventoryPage = () => {
                       product.inventoryType === "pack" &&
                       product.packs &&
                       product.packs.length > 0;
+                    const isChecked = selectedIds.includes(product.id);
 
                     return (
                       <tr
                         key={product.id}
-                        className="hover:bg-slate-50/50 transition"
+                        className={`hover:bg-slate-50/50 transition ${
+                          isChecked ? "bg-slate-50" : ""
+                        }`}
                       >
+                        <td className="p-4">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleSelectOne(product.id)}
+                            className="w-4 h-4 rounded cursor-pointer accent-slate-900"
+                          />
+                        </td>
                         <td className="p-4 font-bold text-slate-800">
                           {product.name}
                         </td>
@@ -428,7 +552,7 @@ const InventoryPage = () => {
                 ) : (
                   <tr>
                     <td
-                      colSpan="9"
+                      colSpan="10"
                       className="text-center py-10 text-slate-400 font-medium"
                     >
                       কোনো পণ্য পাওয়া যায়নি! ওপরের "+ Add Product" বাটন থেকে
