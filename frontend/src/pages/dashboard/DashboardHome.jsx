@@ -119,6 +119,7 @@ export default function DashboardHome() {
           subTotal: s.subtotal ?? s.grandTotal ?? 0,
           discount: s.discountAmount ?? s.discount ?? 0,
           totalPayable: s.grandTotal || 0,
+          productName: s.productName || 'N/A',
           paidAmount: s.paidAmount ?? 0,
           dueAmount: s.dueAmount ?? 0,
           changeBack: s.changeAmount ?? s.changeBack ?? 0,
@@ -261,7 +262,7 @@ export default function DashboardHome() {
         const price = item.price ?? item.unitPrice ?? 0;
         const total = item.total ?? (item.quantity * price);
 
-        doc.text(String(item.name || item.productName || 'Product'), 18, y);
+        doc.text(String(item.name || item.productName || item.product?.name || 'Product'), 18, y);
         doc.text(String(item.quantity), 125, y, { align: 'center' });
         doc.text(`Tk ${Number(price).toLocaleString()}`, 155, y, { align: 'right' });
         doc.text(`Tk ${Number(total).toLocaleString()}`, pageWidth - 18, y, { align: 'right' });
@@ -410,7 +411,7 @@ export default function DashboardHome() {
                 const total = item.total ?? (item.quantity * price);
                 return (
                   <tr key={index}>
-                    <td className="py-2.5 px-3 font-medium text-slate-800">{item.name || item.productName || 'Product'}</td>
+                    <td className="py-2.5 px-3 font-medium text-slate-800">{item.name || item.productName || item.product?.name || 'Unnamed Product'}</td>
                     <td className="py-2.5 px-3 text-center text-slate-600">{item.quantity}</td>
                     <td className="py-2.5 px-3 text-right text-slate-600">৳{fmt(price)}</td>
                     <td className="py-2.5 px-3 text-right font-semibold text-slate-800">৳{fmt(total)}</td>
