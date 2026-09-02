@@ -48,6 +48,17 @@ export default function DashboardLayout({ children }) {
     { name: "Profit & Margin", icon: "📈", path: "/profit" },
     { name: "Staff Management", icon: "👥", path: "#" },
     {
+      name: "Returns & Refunds",
+      icon: "⚙️",
+      path: "#",
+      // সাব-মেনু অপশনসমূহ
+      children: [
+        { name: "Sales Return", path: "/sales_return" },
+        { name: "Purchase Return", path: "/purchase_return" },
+        { name: "Printer Setup", path: "/settings/printer" },
+      ]
+    },
+    {
       name: "Settings",
       icon: "⚙️",
       path: "#",

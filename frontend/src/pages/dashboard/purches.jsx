@@ -5,15 +5,11 @@ const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export default function InventoryManagement() {
-  // activeTab অপশনগুলো: "purchase_list", "purchase_add", "supplier_list", "supplier_add"
   const [activeTab, setActiveTab] = useState("purchase_list");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
 
-  // ✅ নতুন: LowStockPage থেকে navigate state হয়ে আসা তথ্য পড়ার জন্য
   const location = useLocation();
-  // navigate state যেন শুধু একবারই প্রসেস হয় (re-render / back navigation এ যেন
-  // বারবার ফর্ম রিসেট না হয়ে যায়)
   const prefillProcessedRef = useRef(false);
 
   // Data States
@@ -25,7 +21,8 @@ export default function InventoryManagement() {
   const [editingPurchaseId, setEditingPurchaseId] = useState(null);
   const [editingSupplierId, setEditingSupplierId] = useState(null);
 
-  // Purchase Form States (supplier/date/payment — পুরো purchase-এর জন্য কমন)
+  // Purchase Form States
+  const [invoiceNo, setInvoiceNo] = useState(""); // ✅ নতুন: Purchase Invoice No
   const [supplierId, setSupplierId] = useState("");
   const [supplierNumber, setSupplierNumber] = useState("");
   const [date, setDate] = useState("");
@@ -33,9 +30,7 @@ export default function InventoryManagement() {
   const [note, setNote] = useState("");
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
 
-  // ✅ নতুন: "স্টেজিং" ফিল্ড — এখানে ইউজার একটা প্রোডাক্ট সিলেক্ট করে quantity/price
-  // দিয়ে "Add to list" চাপে, তারপর সেটা নিচের cartItems লিস্টে যোগ হয়। এভাবে
-  // একই supplier/date এর নিচে একাধিক প্রোডাক্ট একসাথে যোগ করা যাবে।
+  // Staging Product States
   const [product, setProduct] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -43,10 +38,7 @@ export default function InventoryManagement() {
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
 
-  // ✅ নতুন: এক purchase-এ যোগ করা সব প্রোডাক্টের লিস্ট
   const [cartItems, setCartItems] = useState([]);
-
-  // ✅ নতুন: Purchase List-এ একাধিক প্রোডাক্ট থাকলে বিস্তারিত দেখানোর পপআপ স্টেট
   const [selectedPurchaseForDetails, setSelectedPurchaseForDetails] =
     useState(null);
 
@@ -64,24 +56,18 @@ export default function InventoryManagement() {
       )
     : null;
 
-  // স্টেজিং আইটেমের হিসাব (এখনো cart-এ যোগ হয়নি এমন প্রোডাক্টের জন্য)
   const stagingTotal = Number(quantity) * Number(unitPrice) || 0;
   const stagingBaseUnitsToAdd =
     isPackProduct && selectedPack
       ? (Number(quantity) || 0) * (Number(selectedPack.multiplier) || 1)
       : Number(quantity) || 0;
 
-  // ✅ নতুন: পুরো cart-এর গ্র্যান্ড টোটাল (আগে এটা single item এর উপর নির্ভর করত)
   const totalAmount = cartItems.reduce(
     (sum, item) => sum + (Number(item.totalAmount) || 0),
     0,
   );
   const dueAmount = Math.max(0, totalAmount - (Number(paidAmount) || 0));
 
-  // ✅ নতুন: Purchase List/Modal-এ প্রোডাক্ট নাম দেখানোর জন্য শক্তিশালী fallback।
-  // API রেসপন্সে ফিল্ড নেম ভিন্ন হতে পারে (product / productName / product.name /
-  // Product.name), অথবা একেবারেই না থাকতে পারে — তখন productId দিয়ে আমাদের লোড করা
-  // products লিস্ট থেকে নাম খুঁজে বের করা হচ্ছে।
   const getPurchaseItemProductName = (pi) => {
     if (!pi) return "N/A";
     if (typeof pi.product === "string" && pi.product.trim() !== "") {
@@ -101,42 +87,16 @@ export default function InventoryManagement() {
     return "N/A";
   };
 
-  // ✅ নতুন: একইভাবে total amount-এরও ফিল্ড নেম ভিন্ন হতে পারে, বা একেবারেই না
-  // থাকতে পারে — তখন quantity × unitPrice হিসাব করে দেখানো হচ্ছে।
-  const getPurchaseItemTotal = (pi) => {
-    if (!pi) return 0;
-    const direct = pi.totalAmount ?? pi.total_amount;
-    if (direct !== undefined && direct !== null && direct !== "") {
-      return Number(direct);
-    }
-    const qty = Number(pi.quantity) || 0;
-    const price = Number(pi.unitPrice ?? pi.unit_price) || 0;
-    return qty * price;
-  };
-
-  // ✅ নতুন: unit price-এর জন্যও একইভাবে fallback
-  const getPurchaseItemUnitPrice = (pi) => {
-    if (!pi) return 0;
-    const direct = pi.unitPrice ?? pi.unit_price;
-    return direct !== undefined && direct !== null && direct !== ""
-      ? Number(direct)
-      : 0;
-  };
-
   useEffect(() => {
     fetchProducts();
     fetchPurchases();
     fetchSuppliers();
   }, []);
 
-  // ✅ নতুন: LowStockPage থেকে "Restock" বাটনে ক্লিক করলে navigate state এ
-  // productId/productName ইত্যাদি আসে। products fetch হওয়ার পর সেটা মিলিয়ে
-  // স্টেজিং ফিল্ড প্রি-ফিল করে দেওয়া হচ্ছে এবং সরাসরি Add Purchase ট্যাবে
-  // নিয়ে যাওয়া হচ্ছে, যাতে ইউজারকে খালি quantity/price দিয়ে "Add" চাপলেই হয়।
   useEffect(() => {
     if (prefillProcessedRef.current) return;
     if (!location.state?.productId) return;
-    if (products.length === 0) return; // প্রোডাক্ট লিস্ট আগে লোড হওয়া দরকার
+    if (products.length === 0) return;
 
     const found = products.find(
       (p) => String(p.id) === String(location.state.productId),
@@ -145,16 +105,13 @@ export default function InventoryManagement() {
     if (found) {
       handleSelectProduct(found);
     } else {
-      // প্রোডাক্ট লিস্টে না থাকলেও অন্তত নাম/SKU টা দেখিয়ে রাখি
       setProduct(location.state.productName || "");
     }
 
-    // আজকের তারিখ ডিফল্ট হিসেবে বসিয়ে দেওয়া (না থাকলে)
     setDate((prev) => prev || new Date().toISOString().split("T")[0]);
     setActiveTab("purchase_add");
 
     prefillProcessedRef.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, location.state]);
 
   const fetchProducts = async () => {
@@ -233,7 +190,6 @@ export default function InventoryManagement() {
     );
   };
 
-  // প্রোডাক্ট সিলেক্ট করার সময় পুরো রেকর্ড সেভ করা এবং pack selection রিসেট করা
   const handleSelectProduct = (p) => {
     const pName = typeof p === "string" ? p : p.name || p.product_name || "";
     setProduct(pName);
@@ -255,16 +211,13 @@ export default function InventoryManagement() {
     }
   };
 
-  // ✅ নতুন: স্টেজিং প্রোডাক্টকে cartItems লিস্টে যোগ করা
   const handleAddItemToCart = () => {
     if (!selectedProductId) {
       alert("দয়া করে লিস্ট থেকে একটি প্রোডাক্ট নির্বাচন করুন।");
       return;
     }
     if (isPackProduct && !selectedPackId) {
-      alert(
-        "এটি একটি Pack প্রোডাক্ট। কোন প্যাক দিয়ে কেনা হয়েছে তা নির্বাচন করুন।",
-      );
+      alert("এটি একটি Pack প্রোডাক্ট। কোন প্যাক দিয়ে কেনা হয়েছে তা নির্বাচন করুন।");
       return;
     }
     if (!quantity || Number(quantity) <= 0) {
@@ -276,8 +229,6 @@ export default function InventoryManagement() {
       return;
     }
 
-    // একই প্রোডাক্ট (একই পাক-সহ) আগে থেকেই cart-এ থাকলে quantity যোগ করে দেওয়া,
-    // নতুন করে ডুপ্লিকেট row বানানোর বদলে
     const existingIndex = cartItems.findIndex(
       (item) =>
         String(item.productId) === String(selectedProductId) &&
@@ -305,7 +256,7 @@ export default function InventoryManagement() {
         updated[existingIndex] = {
           ...existing,
           quantity: mergedQty,
-          unitPrice: newItem.unitPrice, // সর্বশেষ দেওয়া দামটা রাখা হচ্ছে
+          unitPrice: newItem.unitPrice,
           totalAmount: mergedQty * newItem.unitPrice,
           baseUnitsToAdd:
             isPackProduct && selectedPack
@@ -318,7 +269,6 @@ export default function InventoryManagement() {
       setCartItems((prev) => [...prev, newItem]);
     }
 
-    // স্টেজিং ফিল্ড রিসেট করা যাতে পরের প্রোডাক্ট যোগ করা যায়
     setProduct("");
     setSelectedProductId("");
     setSelectedProduct(null);
@@ -331,15 +281,13 @@ export default function InventoryManagement() {
     setCartItems((prev) => prev.filter((item) => item.key !== key));
   };
 
-  // Save / Update Purchase (এখন একাধিক আইটেম, এক supplier)
+  // Save / Update Purchase
   const handleSavePurchase = async (e) => {
     e.preventDefault();
 
     if (isSavingPurchase) return;
 
     const user = JSON.parse(localStorage.getItem("user") || "{}");
-
-    // ✅ const এর বদলে let ব্যবহার করা হয়েছে
     let currentShopId = user?.shopId || user?.shop_id;
 
     if (!currentShopId) {
@@ -369,16 +317,6 @@ export default function InventoryManagement() {
       return;
     }
 
-    if (selectedProductId && quantity && unitPrice) {
-      const confirmAdd = window.confirm(
-        "একটি প্রোডাক্ট লিস্টে যোগ করা হয়নি। সেভ করার আগে এটা কি লিস্টে যোগ করতে চান?",
-      );
-      if (confirmAdd) {
-        alert('অনুগ্রহ করে আগে "Add to List" বাটনে চাপুন, তারপর Save করুন।');
-        return;
-      }
-    }
-
     if (cartItems.length === 0) {
       alert("অন্তত একটি প্রোডাক্ট লিস্টে যোগ করুন (Add to List)।");
       return;
@@ -386,6 +324,7 @@ export default function InventoryManagement() {
 
     const purchaseData = {
       shopId: currentShopId,
+      invoiceNo: invoiceNo || `PO-${Date.now().toString().slice(-6)}`, // ✅ ইনভয়েস নম্বর যোগ করা হয়েছে
       supplier_id: supplierId,
       date,
       payment_status: paymentStatus,
@@ -525,11 +464,9 @@ export default function InventoryManagement() {
     }
   };
 
-  // ✅ ফিক্স: আগে খালি item.purchaseItems?.[0] দিয়ে প্রথম আইটেম নেওয়া হতো,
-  // ফলে multi-item purchase এডিট করলে বাকি প্রোডাক্টগুলো হারিয়ে যেত।
-  // এখন পুরো purchaseItems array loop করে cartItems এ বসানো হচ্ছে।
   const handleEditPurchase = (item) => {
     setEditingPurchaseId(item.id);
+    setInvoiceNo(item.invoiceNo || item.invoice_no || ""); // ✅ এডিট করার সময় ইনভয়েস লোড
     const sId = item.supplier_id || item.supplierId || "";
     setSupplierId(sId);
     const foundSupplier = suppliers.find((sup) => sup.id == sId);
@@ -546,7 +483,7 @@ export default function InventoryManagement() {
         ? item.purchaseItems
         : item.productId || item.product
           ? [item]
-          : []; // পুরনো single-item রেকর্ডের জন্য fallback
+          : [];
 
     const restoredCartItems = items.map((pi, idx) => {
       const linkedProductId = pi.productId || pi.product_id || "";
@@ -575,8 +512,6 @@ export default function InventoryManagement() {
     });
 
     setCartItems(restoredCartItems);
-
-    // স্টেজিং ফিল্ড ফাঁকা রাখা হচ্ছে (এডিট মোডে নতুন আইটেম যোগ করতে চাইলে ইউজার নতুন করে সিলেক্ট করবে)
     setProduct("");
     setSelectedProductId("");
     setSelectedProduct(null);
@@ -630,6 +565,8 @@ export default function InventoryManagement() {
       if (response.ok) {
         alert("Supplier deleted successfully!");
         fetchSuppliers();
+      } else {
+        alert("Could not delete supplier.");
       }
     } catch (error) {
       console.error("Error deleting supplier:", error);
@@ -638,6 +575,7 @@ export default function InventoryManagement() {
 
   const resetPurchaseForm = () => {
     setEditingPurchaseId(null);
+    setInvoiceNo(""); // ✅ ইনভয়েস স্টেট রিসেট
     setSupplierId("");
     setSupplierNumber("");
     setPaidAmount("");
@@ -662,8 +600,8 @@ export default function InventoryManagement() {
   };
 
   return (
-    <div className=" mx-auto px-4  bg-gray-50/50 min-h-screen">
-      {/* Standard Header Navigation Tabs */}
+    <div className="mx-auto px-4 bg-gray-50/50 min-h-screen">
+      {/* Navigation Tabs */}
       <div className="flex flex-wrap items-center gap-2 mb-8 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 w-fit">
         <button
           onClick={() => {
@@ -747,6 +685,8 @@ export default function InventoryManagement() {
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-100 text-gray-500 text-xs uppercase tracking-wider">
                   <th className="p-4 font-bold">Date</th>
+                  {/* ✅ লাল দাগের জায়গায় Invoice No হেডার */}
+                  <th className="p-4 font-bold">Invoice No</th>
                   <th className="p-4 font-bold">Products</th>
                   <th className="p-4 font-bold">Items</th>
                   <th className="p-4 font-bold">Total</th>
@@ -758,7 +698,7 @@ export default function InventoryManagement() {
                 {purchases.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="6"
+                      colSpan="7"
                       className="text-center py-10 text-gray-400 font-medium"
                     >
                       No purchase records found.
@@ -766,8 +706,6 @@ export default function InventoryManagement() {
                   </tr>
                 ) : (
                   purchases.map((item) => {
-                    // ✅ multi-item purchase হলে সব প্রোডাক্ট নাম দেখানো,
-                    // পুরনো single-item রেকর্ডের জন্য fallback রাখা হয়েছে
                     const items =
                       Array.isArray(item.purchaseItems) &&
                       item.purchaseItems.length > 0
@@ -784,11 +722,14 @@ export default function InventoryManagement() {
                         <td className="p-4 text-gray-600 font-medium">
                           {item.date}
                         </td>
+                        {/* ✅ Invoice No ডেটা সেল */}
+                        <td className="p-4 font-mono font-semibold text-blue-600">
+                          {item.invoiceNo || item.invoice_no || `PO-${item.id}`}
+                        </td>
                         <td className="p-4 font-semibold text-gray-800 max-w-xs">
                           {items.length === 0 ? (
                             "—"
                           ) : items.length === 1 ? (
-                            // ✅ একটা মাত্র প্রোডাক্ট হলে সরাসরি নাম দেখানো, পপআপ লাগবে না
                             <span>
                               {getPurchaseItemProductName(items[0])}
                               {items[0].pack?.packName && (
@@ -798,7 +739,6 @@ export default function InventoryManagement() {
                               )}
                             </span>
                           ) : (
-                            // ✅ একাধিক প্রোডাক্ট হলে নামে ক্লিক করলে পপআপে সব দেখাবে
                             <button
                               type="button"
                               onClick={() =>
@@ -876,7 +816,21 @@ export default function InventoryManagement() {
           </div>
 
           <form onSubmit={handleSavePurchase} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+              {/* ✅ নতুন: Invoice Number Input */}
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                  Invoice No (Bill No)
+                </label>
+                <input
+                  type="text"
+                  value={invoiceNo}
+                  onChange={(e) => setInvoiceNo(e.target.value)}
+                  placeholder="उदा: PO-9942 (ফাঁকা রাখলে অটো হবে)"
+                  className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-mono font-medium"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
                   Supplier Name <span className="text-red-500">*</span>
@@ -923,9 +877,7 @@ export default function InventoryManagement() {
               </div>
             </div>
 
-            {/* ✅ প্রোডাক্ট যোগ করার স্টেজিং সেকশন — "Add to List" চাপলে নিচের
-                টেবিলে যোগ হবে, একাধিকবার রিপিট করে একই purchase-এ অনেক প্রোডাক্ট
-                যোগ করা যাবে */}
+            {/* প্রোডাক্ট স্টেজিং সেকশন */}
             <div className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50">
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                 📦 Add Product
@@ -1063,7 +1015,7 @@ export default function InventoryManagement() {
               </div>
             </div>
 
-            {/* ✅ এই purchase-এ এখন পর্যন্ত যোগ করা প্রোডাক্টের লিস্ট */}
+            {/* Cart Items Table */}
             <div className="border border-gray-100 rounded-2xl overflow-hidden">
               <div className="bg-gray-50/70 px-5 py-3 border-b border-gray-100">
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -1145,6 +1097,7 @@ export default function InventoryManagement() {
               </div>
             </div>
 
+            {/* Payment Details */}
             <div className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50">
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                 💳 Payment & Due Details
@@ -1419,20 +1372,22 @@ export default function InventoryManagement() {
         </div>
       )}
 
-      {/* ✅ Purchase Items Details Modal (একাধিক প্রোডাক্ট হলে পপআপে সব দেখাবে) */}
+      {/* Purchase Details Modal */}
       {selectedPurchaseForDetails && (
         <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
-            {/* Modal Header */}
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
               <div>
                 <h3 className="font-bold text-gray-800 text-lg">
                   Purchase Details
                 </h3>
-                <p className="text-xs text-gray-400">
+                {/* ✅ পপআপের ভিতরে ইনভয়েস নম্বর প্রদর্শন */}
+                <p className="text-xs text-blue-600 font-mono font-bold mt-0.5">
+                  Invoice: {selectedPurchaseForDetails.invoiceNo || selectedPurchaseForDetails.invoice_no || `PO-${selectedPurchaseForDetails.id}`}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
                   {selectedPurchaseForDetails.date} —{" "}
-                  {(selectedPurchaseForDetails.purchaseItems || []).length}{" "}
-                  items
+                  {(selectedPurchaseForDetails.purchaseItems || []).length} items
                 </p>
               </div>
               <button
@@ -1443,7 +1398,6 @@ export default function InventoryManagement() {
               </button>
             </div>
 
-            {/* Items List inside Popup */}
             <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
               {(selectedPurchaseForDetails.purchaseItems || []).map(
                 (pi, idx) => (
@@ -1474,7 +1428,6 @@ export default function InventoryManagement() {
               )}
             </div>
 
-            {/* Modal Footer */}
             <div className="mt-6 pt-3 border-t border-gray-100 flex justify-between items-center">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                 Grand Total

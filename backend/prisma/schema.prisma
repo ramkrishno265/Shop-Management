@@ -14,66 +14,70 @@ enum Role {
 }
 
 model Shop {
-  id        Int      @id @default(autoincrement())
-  name      String
-  tagline   String?  // নতুন: শপের ট্যাগলাইন বা সাবটাইটেল
-  logo      String?
-  phone     String?
-  email     String?
-  address   String?
-  
-  // নতুন: বাংলাদেশ কন্টেক্সটের লিগ্যাল ও ট্যাক্স ফিল্ড
-  tradeLicense String? // ট্রেড লাইসেন্স নম্বর
-  binNumber    String? // ভ্যাট / BIN নম্বর
-  tinNumber    String? // TIN নম্বর
+  id                Int      @id @default(autoincrement())
+  name              String
+  tagline           String?  // শপের ট্যাগলাইন বা সাবটাইটেল
+  logo              String?
+  phone             String?
+  email             String?
+  address           String?
 
-  // নতুন: পেমেন্ট বা মার্চেন্ট অ্যাকাউন্ট
-  bkashMerchant String? // বিকাশ মার্চেন্ট নম্বর
-  nagadPersonal String? // নগদ নম্বর
-  bankDetails   String? // ব্যাংক অ্যাকাউন্ট ডিটেইলস
+  // বাংলাদেশ কন্টেক্সটের লিগ্যাল ও ট্যাক্স ফিল্ড
+  tradeLicense      String?  // ট্রেড লাইসেন্স নম্বর
+  binNumber         String?  // ভ্যাট / BIN নম্বর
+  tinNumber         String?  // TIN নম্বর
 
-  // নতুন: ক্যাশমেমো বা ইনভয়েস ফুটার নোট
-  invoiceFooterNote String? 
+  // পেমেন্ট বা মার্চেন্ট অ্যাকাউন্ট
+  bkashMerchant     String?  // বিকাশ মার্চেন্ট নম্বর
+  nagadPersonal     String?  // নগদ নম্বর
+  bankDetails       String?  // ব্যাংক অ্যাকাউন্ট ডিটেইলস
 
-  status    Boolean  @default(true)
+  // ক্যাশমেমো বা ইনভয়েস ফুটার নোট
+  invoiceFooterNote String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status            Boolean  @default(true)
 
-  users            User[]
-  products         Product[]
-  fieldConfigs     ShopFieldConfig[]
-  sales            Sale[]
-  customers        Customer[]
-  categories       Category[]
-  suppliers        Supplier[]
-  purchases        Purchase[]
-  expenses         Expense[]
-  customerPayments CustomerPayment[]
-  inventoryLayers  InventoryLayer[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  users             User[]
+  products          Product[]
+  fieldConfigs      ShopFieldConfig[]
+  sales             Sale[]
+  customers         Customer[]
+  categories        Category[]
+  suppliers         Supplier[]
+  purchases         Purchase[]
+  expenses          Expense[]
+  customerPayments  CustomerPayment[]
+  inventoryLayers   InventoryLayer[]
+  customerReturns   CustomerReturn[]
+  purchaseReturns   PurchaseReturn[]
 
   @@map("shops")
 }
 
 model User {
-  id       Int     @id @default(autoincrement())
-  name     String
-  email    String  @unique
-  phone    String
-  password String
-  photo    String?
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  phone     String
+  password  String
+  photo     String?
 
-  role     Role    @default(CASHIER)
-  status   Boolean @default(true)
+  role      Role     @default(CASHIER)
+  status    Boolean  @default(true)
 
-  shopId   Int
-  shop     Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  sales            Sale[]
-  purchases        Purchase[]
-  stockLogs        StockLog[]
-  expenses         Expense[]
-  customerPayments CustomerPayment[]
+  sales                  Sale[]
+  purchases              Purchase[]
+  stockLogs              StockLog[]
+  expenses               Expense[]
+  customerPayments       CustomerPayment[]
+  receivedCustomerReturns CustomerReturn[]
+  createdPurchaseReturns  PurchaseReturn[]
 
   lastLogin DateTime?
 
@@ -84,134 +88,134 @@ model User {
 }
 
 model Customer {
-  id        Int      @id @default(autoincrement())
-  name      String
-  phone     String?
-  email     String?
-  address   String?
-  createdAt DateTime @default(now())
+  id               Int               @id @default(autoincrement())
+  name             String
+  phone            String?
+  email            String?
+  address          String?
+  createdAt        DateTime          @default(now())
 
-  shopId    Int
-  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId           Int
+  shop             Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   sales            Sale[]
   customerPayments CustomerPayment[]
+  customerReturns  CustomerReturn[]
 
   @@map("customers")
 }
 
 model Supplier {
-  id        Int      @id @default(autoincrement())
-  name      String
-  phone     String?
-  address   String?
-  note      String?
-  createdAt DateTime @default(now())
+  id              Int              @id @default(autoincrement())
+  name            String
+  phone           String?
+  address         String?
+  note            String?
+  createdAt       DateTime         @default(now())
 
-  shopId    Int
-  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId          Int
+  shop            Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  purchases Purchase[]
+  purchases       Purchase[]
+  purchaseReturns PurchaseReturn[]
 
   @@map("suppliers")
 }
 
 model Category {
-  id     Int    @id @default(autoincrement())
-  name   String
-  shopId Int
-  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id       Int       @id @default(autoincrement())
+  name     String
+  shopId   Int
+  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   products Product[]
 
-  @@unique([name, shopId]) 
+  @@unique([name, shopId])
   @@map("categories")
 }
 
 model Product {
-  id            Int       @id @default(autoincrement())
-  name          String
-  brand         String?  
-  sku           String?   @unique
-  barcode       String?   @unique 
-  expireDate    DateTime? @map("expire_date") 
-  quantity      Float     @default(0) 
-  
-  inventoryType String    @default("standard") @map("inventory_type")
-  baseUnit      String    @default("Pcs") @map("base_unit") 
-  
-  lowStockLimit Float     @default(5)
-  purchasePrice Float     @default(0)
-  sellingPrice  Float     @default(0)
-  description   String?
-  status        String    @default("ACTIVE")
-  customFields  Json?     @map("custom_fields")
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  brand               String?
+  sku                 String?              @unique
+  barcode             String?              @unique
+  expireDate          DateTime?            @map("expire_date")
+  quantity            Float                @default(0) // বিক্রয়যোগ্য মূল স্টক
+  damagedQuantity     Float                @default(0) @map("damaged_quantity") // কাস্টমারের নষ্ট মাল বা ড্যামেজ স্টক
 
-  categoryId    Int?
-  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  inventoryType       String               @default("standard") @map("inventory_type")
+  baseUnit            String               @default("Pcs") @map("base_unit")
 
-  shopId        Int
-  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  lowStockLimit       Float                @default(5)
+  purchasePrice       Float                @default(0)
+  sellingPrice        Float                @default(0)
+  description         String?
+  status              String               @default("ACTIVE")
+  customFields        Json?                @map("custom_fields")
 
-  packs           ProductPack[] 
-  saleItems       SaleItem[]
-  purchaseItems   PurchaseItem[]
-  stockLogs       StockLog[]
-  inventoryLayers InventoryLayer[]
+  categoryId          Int?
+  category            Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  shopId              Int
+  shop                Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  packs               ProductPack[]
+  saleItems           SaleItem[]
+  purchaseItems       PurchaseItem[]
+  stockLogs           StockLog[]
+  inventoryLayers     InventoryLayer[]
+  customerReturnItems CustomerReturnItem[]
+  purchaseReturnItems PurchaseReturnItem[]
+
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@map("products")
 }
 
 model ProductPack {
-  id            Int      @id @default(autoincrement())
-  productId     Int      @map("product_id")
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
-  packName      String   @map("pack_name") 
-  multiplier    Float    @map("multiplier") 
-  stock         Float    @default(0) @map("stock") 
-  purchasePrice Float    @default(0) @map("purchase_price")
-  sellingPrice  Float    @default(0) @map("selling_price")
+  id            Int        @id @default(autoincrement())
+  productId     Int        @map("product_id")
+  product       Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  packName      String     @map("pack_name")
+  multiplier    Float      @map("multiplier")
+  stock         Float      @default(0) @map("stock")
+  purchasePrice Float      @default(0) @map("purchase_price")
+  sellingPrice  Float      @default(0) @map("selling_price")
 
-  // নতুন: এই প্যাক দিয়ে করা পারচেজগুলো ট্র্যাক করার জন্য (restock কে pack-aware করতে)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
   purchases     Purchase[]
 
   @@map("product_packs")
 }
 
-// -----------------------------------------------------------------
-// নতুন যোগ করা মডেল: FIFO ইনভেন্টরি লেয়ার বা ব্যাচ ট্র্যাকিং
-// -----------------------------------------------------------------
 model InventoryLayer {
-  id            Int       @id @default(autoincrement())
-  shopId        Int
-  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id             Int             @id @default(autoincrement())
+  shopId         Int
+  shop           Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  productId     Int
-  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId      Int
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  purchaseId    Int?
-  purchase      Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  purchaseId     Int?
+  purchase       Purchase?       @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
 
-  initialQty    Float     // ক্রয়ের সময় মোট পরিমাণ (বেস ইউনিটে)
-  remainingQty  Float     // বর্তমানে এই লেয়ারে আর কতটুকু স্টক বাকি আছে
-  unitCost      Float     // প্রতি একক ক্রয়মূল্য (Purchase Price) — সবসময় base-unit ভিত্তিক
+  initialQty     Float           // ক্রয়ের সময় মোট পরিমাণ (বেস ইউনিটে)
+  remainingQty   Float           // বর্তমানে এই লেয়ারে আর কতটুকু স্টক বাকি আছে
+  unitCost       Float           // প্রতি একক ক্রয়মূল্য (Purchase Price)
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   saleDeductions SaleItemLayer[]
 
   @@map("inventory_layers")
 }
 
-// কোন সেল আইটেম কোন ইনভেন্টরি লেয়ার থেকে কত পিস স্টক কাটল, তা ট্র্যাক করার জন্য
 model SaleItemLayer {
   id               Int            @id @default(autoincrement())
   saleItemId       Int
@@ -236,7 +240,7 @@ model StockLog {
   userId          Int?
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  changeType      String   // PURCHASE, SALE, RETURN, DAMAGE, ADJUST
+  changeType      String   // PURCHASE, SALE, RETURN_INWARD, RETURN_OUTWARD, DAMAGE, ADJUST
   quantityChanged Float
   previousStock   Float
   newStock        Float
@@ -248,42 +252,39 @@ model StockLog {
 }
 
 model Purchase {
-  id             Int          @id @default(autoincrement())
-  invoiceNo      String       @unique
+  id               Int              @id @default(autoincrement())
+  invoiceNo        String           @unique
 
-  shopId         Int
-  shop           Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId           Int
+  shop             Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  supplier_id    Int
-  supplier       Supplier     @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
+  supplier_id      Int
+  supplier         Supplier         @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
 
-  date           String
-  payment_status String       @default("Paid")
-  product        String
-  quantity       Float        // যেভাবে ইউজার এন্ট্রি দিয়েছে: standard হলে base unit, pack হলে প্যাক-সংখ্যা
-  unit_price     Float        // standard হলে per-base-unit দাম, pack হলে per-pack দাম
-  total_amount   Float
-  paid_amount    Float        @default(0)
-  due_amount     Float        @default(0)
-  note           String?
+  date             String
+  payment_status   String           @default("Paid")
+  product          String
+  quantity         Float
+  unit_price       Float
+  total_amount     Float
+  paid_amount      Float            @default(0)
+  due_amount       Float            @default(0)
+  note             String?
 
-  // নতুন: এই পারচেজ কোন প্যাক দিয়ে করা হয়েছিল (থাকলে) — pack-aware conversion এর জন্য
-  packId         Int?
-  pack           ProductPack? @relation(fields: [packId], references: [id], onDelete: SetNull)
+  packId           Int?
+  pack             ProductPack?     @relation(fields: [packId], references: [id], onDelete: SetNull)
 
-  // নতুন: এই পারচেজের কারণে product.quantity-তে ঠিক কত base-unit যোগ হয়েছিল
-  // (delete/update-এর সময় নির্ভুলভাবে reverse করার জন্য — quantity/multiplier থেকে
-  // recompute করার উপর নির্ভর করা হয় না, কারণ পরে multiplier বদলাতে পারে)
-  baseUnitQuantity Float      @default(0)
+  baseUnitQuantity Float            @default(0)
 
-  createdBy      Int?
-  user           User?        @relation(fields: [createdBy], references: [id])
+  createdBy        Int?
+  user             User?            @relation(fields: [createdBy], references: [id])
 
-  purchaseItems  PurchaseItem[]
-  inventoryLayers InventoryLayer[]
+  purchaseItems    PurchaseItem[]
+  inventoryLayers  InventoryLayer[]
+  purchaseReturns  PurchaseReturn[]
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@map("purchases")
 }
@@ -308,85 +309,189 @@ model PurchaseItem {
 }
 
 model SaleItem {
-  id              Int      @id @default(autoincrement())
+  id              Int             @id @default(autoincrement())
   saleId          Int
-  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale            Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   productId       Int
-  product         Product  @relation(fields: [productId], references: [id])
+  product         Product         @relation(fields: [productId], references: [id])
 
   quantity        Float
   unitPrice       Float
   purchasePrice   Float
-  discount        Float    @default(0)
+  discount        Float           @default(0)
   subtotal        Float
 
-  // FIFO অনুযায়ী হিস্টোরিক্যাল কস্ট স্ন্যাপশট সংরক্ষণের জন্য নতুন ফিল্ডস
-  costPriceAtSale Float    @default(0) @map("cost_price_at_sale")
-  totalCost       Float    @default(0) @map("total_cost")
+  costPriceAtSale Float           @default(0) @map("cost_price_at_sale")
+  totalCost       Float           @default(0) @map("total_cost")
 
   layerDeductions SaleItemLayer[]
 
-  createdAt       DateTime @default(now())
+  createdAt       DateTime        @default(now())
 
   @@map("sale_items")
 }
 
 model Sale {
-  id             Int      @id @default(autoincrement())
-  invoiceNo      String   @unique
+  id                 Int                     @id @default(autoincrement())
+  invoiceNo          String                  @unique
 
-  shopId         Int
-  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId             Int
+  shop               Shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  customerId     Int?
-  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId         Int?
+  customer           Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
-  createdBy      Int
-  user           User     @relation(fields: [createdBy], references: [id])
+  createdBy          Int
+  user               User                    @relation(fields: [createdBy], references: [id])
 
-  subtotal       Float
-  discountType   String?  // FIXED or PERCENTAGE
-  discountValue  Float    @default(0)
-  discountAmount Float    @default(0)
-  vatPercentage  Float    @default(0)
-  vatAmount      Float    @default(0)
-  grandTotal     Float
-  paidAmount     Float
-  dueAmount      Float    @default(0)
-  changeAmount   Float    @default(0)
-  paymentMethod  String   // CASH, BKASH, CARD
-  paymentStatus  String   @default("PAID") // PAID, DUE, PARTIAL
+  subtotal           Float
+  discountType       String?                 // FIXED or PERCENTAGE
+  discountValue      Float                   @default(0)
+  discountAmount     Float                   @default(0)
+  vatPercentage      Float                   @default(0)
+  vatAmount          Float                   @default(0)
+  grandTotal         Float
+  paidAmount         Float
+  dueAmount          Float                   @default(0)
+  changeAmount       Float                   @default(0)
+  paymentMethod      String                  // CASH, BKASH, CARD
+  paymentStatus      String                  @default("PAID") // PAID, DUE, PARTIAL
 
   paymentAllocations SalePaymentAllocation[]
+  customerReturns    CustomerReturn[]
 
-  notes          String?
+  notes              String?
 
-  saleItems      SaleItem[]
+  saleItems          SaleItem[]
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@map("sales")
 }
 
+// -----------------------------------------------------------------
+// নতুন: Customer Return (Sales Return / Credit Note)
+// -----------------------------------------------------------------
+model CustomerReturn {
+  id              Int                  @id @default(autoincrement())
+  returnInvoiceNo String               @unique // যেমন: RET-2026-0001
+
+  shopId          Int
+  shop            Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  saleId          Int
+  sale            Sale                 @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  customerId      Int?
+  customer        Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  receivedById    Int
+  receivedBy      User                 @relation(fields: [receivedById], references: [id])
+
+  totalAmount     Float                // ফেরত হওয়া মালের মোট মূল্য
+  restockingFee   Float                @default(0) // চার্জ বা কর্তন
+  refundAmount    Float                // কাস্টমারকে ফেরত দেওয়া মোট নেট টাকা
+  refundMethod    String               // CASH, STORE_CREDIT, ADJUST_DUE
+  reason          String?              // DEFECTIVE, WRONG_SIZE, NOT_MATCHED ইত্যাদি
+  notes           String?
+
+  items           CustomerReturnItem[]
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@map("customer_returns")
+}
+
+model CustomerReturnItem {
+  id               Int            @id @default(autoincrement())
+  customerReturnId Int
+  customerReturn   CustomerReturn @relation(fields: [customerReturnId], references: [id], onDelete: Cascade)
+
+  productId        Int
+  product          Product        @relation(fields: [productId], references: [id])
+
+  quantity         Float
+  unitPrice        Float          // যে মূল্যে পণ্যটি বিক্রি হয়েছিল
+  totalPrice       Float
+
+  condition        String         @default("GOOD") // "GOOD" (মেইন স্টক) অথবা "DAMAGED" (ড্যামেজ স্টক)
+
+  createdAt        DateTime       @default(now())
+
+  @@map("customer_return_items")
+}
+
+// -----------------------------------------------------------------
+// নতুন: Purchase Return (Supplier Return / Debit Note)
+// -----------------------------------------------------------------
+model PurchaseReturn {
+  id             Int                  @id @default(autoincrement())
+  debitNoteNo    String               @unique // যেমন: DN-2026-0001
+
+  shopId         Int
+  shop           Shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  purchaseId     Int?
+  purchase       Purchase?            @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+
+  supplierId     Int
+  supplier       Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  createdById    Int
+  createdBy      User                 @relation(fields: [createdById], references: [id])
+
+  totalAmount    Float                // মোট ফেরত মালের দাম
+  settlementType String               // REDUCE_PAYABLE (দেনা সমন্বয়), CASH_REFUND (নগদ ফেরত)
+  reason         String?              // DEFECTIVE, LOW_QUALITY, WRONG_DISPATCH ইত্যাদি
+  notes          String?
+
+  items          PurchaseReturnItem[]
+
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id               Int            @id @default(autoincrement())
+  purchaseReturnId Int
+  purchaseReturn   PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+
+  productId        Int
+  product          Product        @relation(fields: [productId], references: [id])
+
+  quantity         Float
+  unitCost         Float          // যে মূল্যে পণ্যটি কেনা হয়েছিল
+  totalCost        Float
+
+  sourceLocation   String         @default("MAIN") // "MAIN" (মূল গুদাম) অথবা "DAMAGED" (ড্যামেজ স্টক থেকে)
+
+  createdAt        DateTime       @default(now())
+
+  @@map("purchase_return_items")
+}
+
 model CustomerPayment {
-  id            Int      @id @default(autoincrement())
-  shopId        Int
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id              Int                     @id @default(autoincrement())
+  shopId          Int
+  shop            Shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  customerId    Int
-  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId      Int
+  customer        Customer                @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  userId        Int
-  user          User     @relation(fields: [userId], references: [id])
+  userId          Int
+  user            User                    @relation(fields: [userId], references: [id])
   saleAllocations SalePaymentAllocation[]
 
-  amount        Float    
-  paymentMethod String   
-  notes         String?
+  amount          Float
+  paymentMethod   String
+  notes           String?
 
-  createdAt     DateTime @default(now())
+  createdAt       DateTime                @default(now())
 
   @@map("customer_payments")
 }
@@ -409,21 +514,21 @@ model Expense {
 
 model ShopFieldConfig {
   id          Int      @id @default(autoincrement())
-  
+
   shopId      Int
   shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  fieldName   String   // ফিল্ডের কি বা নাম (যেমন: size, color, expiry_date)
+  fieldName   String   // যেমন: size, color, expiry_date
   fieldLabel  String   // ইউজারের সামনে যা দেখাবে (যেমন: Product Size)
-  fieldType   String   // টাইপ (text, number, select, date)
-  options     String?  // ড্রপডাউন অপশন কমা দিয়ে সেভ রাখার জন্য (যেমন: "S, M, L")
+  fieldType   String   // text, number, select, date
+  options     String?  // ড্রপডাউন অপশন কমা দিয়ে সেভ রাখার জন্য
   isRequired  Boolean  @default(false)
   isActive    Boolean  @default(true)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([shopId, fieldName]) // একই শপে যেন একই নামের ফিল্ড দুইবার তৈরি না হয়
+  @@unique([shopId, fieldName])
   @@map("shop_field_configs")
 }
 
