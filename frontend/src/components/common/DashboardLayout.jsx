@@ -18,6 +18,9 @@ import {
   FiPrinter,
   FiSliders,
   FiCornerDownRight,
+  FiBookOpen,
+  FiArrowDownLeft,
+  FiArrowUpRight,
 } from "react-icons/fi";
 import { RiStore2Line } from "react-icons/ri";
 
@@ -60,8 +63,26 @@ export default function DashboardLayout({ children }) {
     { name: "Inventory", icon: FiBox, path: "/inventory" },
     { name: "Sales & Billing", icon: FiShoppingBag, path: "/salePage" },
     { name: "Purchase", icon: FiTruck, path: "/purchase_page" },
+    
     { name: "Profit & Margin", icon: FiTrendingUp, path: "/profit" },
     { name: "Staff Management", icon: FiUsers, path: "#" },
+    {
+      name: "Due Management",
+      icon: FiBookOpen,
+      path: "#",
+      children: [
+        {
+          name: "Customer Due (Receivable)",
+          path: "/due_payment",
+          icon: FiArrowDownLeft,
+        },
+        {
+          name: "Supplier Due (Payable)",
+          path: "/due_supplier",
+          icon: FiArrowUpRight,
+        },
+      ],
+    },
     {
       name: "Returns & Refunds",
       icon: FiRotateCcw,
@@ -162,7 +183,7 @@ export default function DashboardLayout({ children }) {
 
               return (
                 <div key={idx} className="space-y-1">
-                  {/* মেনু বাটন with Left Glow Bar on Active */}
+                  {/* মেনু বাটন with Left Indicator on Active */}
                   <button
                     onClick={() => handleMenuClick(item)}
                     className={`
@@ -177,7 +198,7 @@ export default function DashboardLayout({ children }) {
                       }
                     `}
                   >
-                    {/* একটিভ থাকলে বাম পাশে ইন্ডিকেটর বার */}
+                    {/* একটিভ থাকলে ইন্ডিকেটর বার */}
                     {isActive && !hasChildren && (
                       <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-r-full shadow-xs"></span>
                     )}
@@ -210,7 +231,7 @@ export default function DashboardLayout({ children }) {
                     )}
                   </button>
 
-                  {/* ড্রপডাউন সাব-মেনু (Animated Accordion) */}
+                  {/* ড্রপডাউন সাব-মেনু */}
                   <div
                     className={`
                       grid transition-all duration-300 ease-in-out
@@ -220,6 +241,7 @@ export default function DashboardLayout({ children }) {
                     <div className="overflow-hidden pl-7 pr-1 space-y-1 mt-0.5 border-l-2 border-slate-100 ml-5">
                       {item.children?.map((subItem, subIdx) => {
                         const isSubActive = location.pathname === subItem.path;
+                        const SubIcon = subItem.icon || FiCornerDownRight;
                         return (
                           <button
                             key={subIdx}
@@ -234,11 +256,11 @@ export default function DashboardLayout({ children }) {
                               }
                             `}
                           >
-                            <FiCornerDownRight
-                              size={12}
-                              className={`transition-colors ${isSubActive ? "text-white" : "text-slate-400"}`}
+                            <SubIcon
+                              size={13}
+                              className={`transition-colors shrink-0 ${isSubActive ? "text-white" : "text-slate-400"}`}
                             />
-                            <span>{subItem.name}</span>
+                            <span className="truncate">{subItem.name}</span>
                           </button>
                         );
                       })}
@@ -315,7 +337,7 @@ export default function DashboardLayout({ children }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 w-full  mx-auto">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 w-full mx-auto">
           {children}
         </main>
       </div>

@@ -21,7 +21,8 @@ import BulkImportPage from "./pages/dashboard/BulkImportPage.jsx";
 import ShopProfile from "./pages/Setting_Option/ShopProfile.jsx"; // Import the BulkImportPage component
 import ProductFieldSettings from "./pages/Setting_Option/ProductFieldSettings.jsx"; // Import the BulkImportPage component
 import ExpiredProducts from "./pages/dashboard/ExpiryManagement.jsx"; // Import the BulkImportPage component
-import DuePaymentPage from "./pages/dashboard/DueCustomersPage.jsx"; // Import the BulkImportPage component
+import DuePaymentPage from "./pages/DueManagement/DueCustomersPage.jsx"; 
+import DueSupplierPage from "./pages/DueManagement/SupplierDue.jsx";
 import SaleReturnPage from "./pages/ReturnItems/SalesReturn.jsx"; // Import the BulkImportPage component
 import PurchaseReturnPage from "./pages/ReturnItems/PurchaseReturn.jsx";
 
@@ -194,6 +195,16 @@ function App() {
                 <ProtectedRoute>
                   <DashboardLayout>
                     <DuePaymentPage />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/due_supplier"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <DueSupplierPage />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
