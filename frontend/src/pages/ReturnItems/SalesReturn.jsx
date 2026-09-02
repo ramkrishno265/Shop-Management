@@ -277,7 +277,7 @@ export default function SalesReturn() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className=" mx-auto space-y-6">
 
         {/* টপ হেডার ও ন্যাভিগেশন বার */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
