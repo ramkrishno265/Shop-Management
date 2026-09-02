@@ -22,6 +22,7 @@ export default function DueCustomersPage() {
   const [currentCustomer, setCurrentCustomer] = useState(null);
   const [showCollectPayment, setShowCollectPayment] = useState(false);
   const [collectAmount, setCollectAmount] = useState('');
+  const [collectMethod, setCollectMethod] = useState('CASH');
   const [collectNote, setCollectNote] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [collectError, setCollectError] = useState('');
@@ -60,14 +61,18 @@ export default function DueCustomersPage() {
         const due = Number(s.dueAmount) || 0;
         if (due <= 0) return;
 
-        const custId = s.customerId || s.customer?.id || s.customerName || 'walkin';
+        // customerId শুধু তখনই সেট থাকবে যদি এটা একজন registered Customer হয়।
+        // Walk-in Customer এর কোনো real customerId থাকে না — তাদের জন্য payment
+        // collection allow করা যাবে না (allocate করার মতো কোনো Customer রেকর্ড নেই)।
+        const realCustomerId = s.customerId || s.customer?.id || null;
+        const custId = realCustomerId || `walkin-${s.customerName || 'unknown'}`;
         const custName = s.customer ? s.customer.name : (s.customerName || 'Walk-in Customer');
         const custPhone = s.customer ? s.customer.phone : (s.customerPhone || '');
         const saleDate = s.createdAt ? new Date(s.createdAt) : null;
 
         if (!dueMap[custId]) {
           dueMap[custId] = {
-            id: custId,
+            id: realCustomerId, // null হলে walk-in, payment collect করা যাবে না
             customerName: custName,
             phone: custPhone,
             dueAmount: 0,
@@ -190,15 +195,17 @@ export default function DueCustomersPage() {
   };
 
   const openCollectModal = (cust) => {
+    if (!cust.id) return; // walk-in customer — collect করা যাবে না
     setCurrentCustomer(cust);
     setCollectAmount('');
+    setCollectMethod('CASH');
     setCollectNote('');
     setCollectError('');
     setShowCollectPayment(true);
   };
 
   const handleSubmitCollectPayment = async () => {
-    if (!currentCustomer) return;
+    if (!currentCustomer || !currentCustomer.id) return;
     const amountNum = Number(collectAmount);
 
     if (!collectAmount || isNaN(amountNum) || amountNum <= 0) {
@@ -222,19 +229,22 @@ export default function DueCustomersPage() {
         ...(shopId && { 'x-shop-id': shopId })
       };
 
-      // NOTE: adjust this endpoint/payload to match your actual backend route
-      // for recording a due-collection payment.
       await axios.post(
         `${API_URL}/customers/${currentCustomer.id}/collect-payment`,
-        { amount: amountNum, note: collectNote },
+        {
+          amount: amountNum,
+          paymentMethod: collectMethod,
+          notes: collectNote || undefined
+        },
         { headers }
       );
 
       setShowCollectPayment(false);
       fetchDueCustomers();
     } catch (err) {
+      const serverMsg = err?.response?.data?.message;
       console.error('Error collecting payment:', err);
-      setCollectError('পেমেন্ট সাবমিট করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+      setCollectError(serverMsg || 'পেমেন্ট সাবমিট করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     } finally {
       setSubmittingPayment(false);
     }
@@ -404,13 +414,22 @@ export default function DueCustomersPage() {
                         </span>
                       </td>
                       <td className="py-3.5 text-right">
-                        <button
-                          onClick={() => openCollectModal(cust)}
-                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
-                          title="Collect Payment"
-                        >
-                          💰 Collect
-                        </button>
+                        {cust.id ? (
+                          <button
+                            onClick={() => openCollectModal(cust)}
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
+                            title="Collect Payment"
+                          >
+                            💰 Collect
+                          </button>
+                        ) : (
+                          <span
+                            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-400 font-medium inline-block"
+                            title="Walk-in customer — payment collect করা যাবে না"
+                          >
+                            N/A
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -489,6 +508,26 @@ export default function DueCustomersPage() {
                 >
                   পুরো বকেয়া পরিমাণ বসাও (৳{fmt(currentCustomer.dueAmount)})
                 </button>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Payment Method</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['CASH', 'BKASH', 'CARD'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setCollectMethod(m)}
+                      className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                        collectMethod === m
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>

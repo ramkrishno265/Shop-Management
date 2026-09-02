@@ -358,6 +358,8 @@ model Sale {
   paymentMethod  String   // CASH, BKASH, CARD
   paymentStatus  String   @default("PAID") // PAID, DUE, PARTIAL
 
+  paymentAllocations SalePaymentAllocation[]
+
   notes          String?
 
   saleItems      SaleItem[]
@@ -378,6 +380,7 @@ model CustomerPayment {
 
   userId        Int
   user          User     @relation(fields: [userId], references: [id])
+  saleAllocations SalePaymentAllocation[]
 
   amount        Float    
   paymentMethod String   
@@ -422,4 +425,20 @@ model ShopFieldConfig {
 
   @@unique([shopId, fieldName]) // একই শপে যেন একই নামের ফিল্ড দুইবার তৈরি না হয়
   @@map("shop_field_configs")
+}
+
+model SalePaymentAllocation {
+  id                Int             @id @default(autoincrement())
+
+  saleId            Int
+  sale              Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  customerPaymentId Int
+  customerPayment   CustomerPayment @relation(fields: [customerPaymentId], references: [id], onDelete: Cascade)
+
+  amountApplied     Float
+
+  createdAt         DateTime        @default(now())
+
+  @@map("sale_payment_allocations")
 }

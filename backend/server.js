@@ -11,6 +11,7 @@ import profitRoutes from "./routes/profitRoutes.js";
 import AddCustomer from './routes/customer.routes.js';
 import shopRoutes from './routes/shopProfileRouter.js';
 import FieldRouter from './routes/FieldRouter.js';
+import CustomerPaymentRoutes from './routes/CustomerPaymentRouter.js';
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use("/api/profit", profitRoutes);
 app.use('/api/add_customer', AddCustomer);
 app.use('/api/shops_profile', shopRoutes);
 app.use('/api/fields', FieldRouter);
+app.use('/api', CustomerPaymentRoutes); // Customer Payment Collection & History Routes
 
 // Test Base Route
 app.get('/', (req, res) => {
