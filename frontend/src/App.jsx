@@ -25,6 +25,7 @@ import DuePaymentPage from "./pages/DueManagement/DueCustomersPage.jsx";
 import DueSupplierPage from "./pages/DueManagement/SupplierDue.jsx";
 import SaleReturnPage from "./pages/ReturnItems/SalesReturn.jsx"; // Import the BulkImportPage component
 import PurchaseReturnPage from "./pages/ReturnItems/PurchaseReturn.jsx";
+import AccountSettings from "./pages/dashboard/AccountPage.jsx"; // Import the BulkImportPage component
 
 
 // Protected Route Guard Component
@@ -226,6 +227,16 @@ function App() {
                 <ProtectedRoute>
                   <DashboardLayout>
                     <PurchaseReturnPage />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/account_Page"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <AccountSettings />
                   </DashboardLayout>
                 </ProtectedRoute>
               }

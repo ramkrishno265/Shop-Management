@@ -62,6 +62,7 @@ export default function DashboardLayout({ children }) {
     { name: "Dashboard", icon: FiGrid, path: "/dashboard" },
     { name: "Inventory", icon: FiBox, path: "/inventory" },
     { name: "Sales & Billing", icon: FiShoppingBag, path: "/salePage" },
+    { name: "Account", icon: FiSettings, path: "/account_Page" },
     { name: "Purchase", icon: FiTruck, path: "/purchase_page" },
     
     { name: "Profit & Margin", icon: FiTrendingUp, path: "/profit" },

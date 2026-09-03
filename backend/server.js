@@ -13,6 +13,7 @@ import shopRoutes from './routes/shopProfileRouter.js';
 import FieldRouter from './routes/FieldRouter.js';
 import CustomerPaymentRoutes from './routes/CustomerPaymentRouter.js';
 import ReturnRouter from './routes/ReturnRouter.js';
+import accountRoutes from './routes/accountRoutes.js'; // Import the account routes
 
 dotenv.config();
 
@@ -35,6 +36,9 @@ app.use('/api/shops_profile', shopRoutes);
 app.use('/api/fields', FieldRouter);
 app.use('/api', CustomerPaymentRoutes); // Customer Payment Collection & History Routes
 app.use('/api/returns', ReturnRouter); 
+app.use('/api/accounts', accountRoutes); // Use the account routes
+
+
 // Test Base Route
 app.get('/', (req, res) => {
   res.send('Shop Management System Clean API is running...');

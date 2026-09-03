@@ -54,6 +54,8 @@ model Shop {
   inventoryLayers   InventoryLayer[]
   customerReturns   CustomerReturn[]
   purchaseReturns   PurchaseReturn[]
+  capitals          Capital[]
+  withdrawals       Withdrawal[]
 
   @@map("shops")
 }
@@ -80,6 +82,8 @@ model User {
   supplierPayments        SupplierPayment[]
   receivedCustomerReturns CustomerReturn[]
   createdPurchaseReturns  PurchaseReturn[]
+  capitals                Capital[]
+  withdrawals             Withdrawal[]
 
   lastLogin DateTime?
 
@@ -126,10 +130,10 @@ model Supplier {
 }
 
 model Category {
-  id       Int       @id @default(autoincrement())
-  name     String
-  shopId   Int
-  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id      Int      @id @default(autoincrement())
+  name    String
+  shopId  Int
+  shop    Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   products Product[]
 
@@ -178,18 +182,18 @@ model Product {
 }
 
 model ProductPack {
-  id            Int        @id @default(autoincrement())
-  productId     Int        @map("product_id")
-  product       Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  productId     Int      @map("product_id")
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  packName      String     @map("pack_name")
-  multiplier    Float      @map("multiplier")
-  stock         Float      @default(0) @map("stock")
-  purchasePrice Float      @default(0) @map("purchase_price")
-  sellingPrice  Float      @default(0) @map("selling_price")
+  packName      String   @map("pack_name")
+  multiplier    Float    @map("multiplier")
+  stock         Float    @default(0) @map("stock")
+  purchasePrice Float    @default(0) @map("purchase_price")
+  sellingPrice  Float    @default(0) @map("selling_price")
 
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   purchases     Purchase[]
 
@@ -375,9 +379,6 @@ model Sale {
   @@map("sales")
 }
 
-// -----------------------------------------------------------------
-// Customer Return (Sales Return / Credit Note)
-// -----------------------------------------------------------------
 model CustomerReturn {
   id              Int                  @id @default(autoincrement())
   returnInvoiceNo String               @unique // যেমন: RET-2026-0001
@@ -428,9 +429,6 @@ model CustomerReturnItem {
   @@map("customer_return_items")
 }
 
-// -----------------------------------------------------------------
-// Purchase Return (Supplier Return / Debit Note)
-// -----------------------------------------------------------------
 model PurchaseReturn {
   id             Int                  @id @default(autoincrement())
   debitNoteNo    String               @unique // যেমন: DN-2026-0001
@@ -500,10 +498,6 @@ model CustomerPayment {
   @@map("customer_payments")
 }
 
-// -----------------------------------------------------------------
-// Supplier Payment (Supplier-কে দেওয়া টাকা, একসাথে একাধিক Purchase-এর
-// due-এর বিপরীতে allocate করা যায় — CustomerPayment এর mirror)
-// -----------------------------------------------------------------
 model SupplierPayment {
   id            Int                         @id @default(autoincrement())
   shopId        Int
@@ -556,6 +550,39 @@ model Expense {
   createdAt DateTime @default(now())
 
   @@map("expenses")
+}
+
+// নতুন যুক্ত করা মূলধন (Capital) টেবিল
+model Capital {
+  id        Int      @id @default(autoincrement())
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  amount    Float
+  note      String?
+  date      String
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("capitals")
+}
+
+// নতুন যুক্ত করা উত্তোলন (Withdrawal) টেবিল
+model Withdrawal {
+  id        Int      @id @default(autoincrement())
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  amount    Float
+  source    String   // 'CASH' অথবা 'BANK'
+  note      String?
+  date      String
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("withdrawals")
 }
 
 model ShopFieldConfig {
