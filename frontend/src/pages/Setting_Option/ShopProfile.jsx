@@ -26,8 +26,9 @@ export default function ShopProfile() {
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
   const token = localStorage.getItem('token') || ''; 
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-  const shopId = userInfo.shopId || userInfo.id || 1; 
+  const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
+  const shopId = userInfo.shopId ; 
+  
 
   useEffect(() => {
     const fetchShopProfile = async () => {
