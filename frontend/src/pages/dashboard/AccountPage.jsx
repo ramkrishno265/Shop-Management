@@ -13,7 +13,6 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  TrendingDown,
   ShieldCheck
 } from 'lucide-react';
 
@@ -25,7 +24,8 @@ export default function AccountsPage() {
   const currentShopId = storedUser?.shopId || 1;
 
   const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [capitalSubmitting, setCapitalSubmitting] = useState(false);
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'income' | 'expense'
   const [searchTerm, setSearchTerm] = useState('');
@@ -80,7 +80,7 @@ export default function AccountsPage() {
       if (summaryData.success) {
         setSummary(summaryData.data.summary);
       } else {
-        setErrorMsg(summaryData.message || 'সামারি লোড করতে সমস্যা হয়েছে।');
+        setErrorMsg(summaryData.message || 'সামারি লোড করতে সমস্যা হয়েছে।');
       }
 
       if (txData.success) {
@@ -88,7 +88,7 @@ export default function AccountsPage() {
       }
     } catch (err) {
       console.error("Error fetching accounts data:", err);
-      setErrorMsg('সার্ভারের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি।');
+      setErrorMsg('সার্ভারের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি।');
     } finally {
       setLoading(false);
     }
@@ -98,11 +98,11 @@ export default function AccountsPage() {
   const handleAddCapital = async (e) => {
     e.preventDefault();
     if (!capitalAmount || Number(capitalAmount) <= 0) {
-      alert('দয়া করে সঠিক মূলধনের পরিমাণ লিখুন।');
+      alert('দয়া করে সঠিক মূলধনের পরিমাণ লিখুন।');
       return;
     }
 
-    setSubmitting(true);
+    setCapitalSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/accounts/capital`, {
         method: 'POST',
@@ -119,18 +119,18 @@ export default function AccountsPage() {
 
       const data = await res.json();
       if (data.success) {
-        alert('মূলধন সফলভাবে যুক্ত হয়েছে!');
+        alert('মূলধন সফলভাবে যুক্ত হয়েছে!');
         setCapitalAmount('');
         setCapitalNote('');
         fetchAccountData(); // ডাটা রিফ্রেশ
       } else {
-        alert(data.message || 'মূলধন যোগ করতে ব্যর্থ হয়েছে।');
+        alert(data.message || 'মূলধন যোগ করতে ব্যর্থ হয়েছে।');
       }
     } catch (err) {
       console.error("Capital add error:", err);
-      alert('নেটওয়ার্ক ত্রুটি ঘটেছে।');
+      alert('নেটওয়ার্ক ত্রুটি ঘটেছে।');
     } finally {
-      setSubmitting(false);
+      setCapitalSubmitting(false);
     }
   };
 
@@ -138,7 +138,7 @@ export default function AccountsPage() {
   const handleAddWithdrawal = async (e) => {
     e.preventDefault();
     if (!withdrawAmount || Number(withdrawAmount) <= 0) {
-      alert('দয়া করে সঠিক উত্তোলনের পরিমাণ লিখুন।');
+      alert('দয়া করে সঠিক উত্তোলনের পরিমাণ লিখুন।');
       return;
     }
 
@@ -152,7 +152,7 @@ export default function AccountsPage() {
       return;
     }
 
-    setSubmitting(true);
+    setWithdrawSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/accounts/withdrawal`, {
         method: 'POST',
@@ -170,18 +170,18 @@ export default function AccountsPage() {
 
       const data = await res.json();
       if (data.success) {
-        alert('টাকা উত্তোলন সফলভাবে রেকর্ড করা হয়েছে!');
+        alert('টাকা উত্তোলন সফলভাবে রেকর্ড করা হয়েছে!');
         setWithdrawAmount('');
         setWithdrawNote('');
         fetchAccountData(); // ডাটা রিফ্রেশ
       } else {
-        alert(data.message || 'উত্তোলন রেকর্ড করতে ব্যর্থ হয়েছে।');
+        alert(data.message || 'উত্তোলন রেকর্ড করতে ব্যর্থ হয়েছে।');
       }
     } catch (err) {
       console.error("Withdrawal error:", err);
-      alert('নেটওয়ার্ক ত্রুটি ঘটেছে।');
+      alert('নেটওয়ার্ক ত্রুটি ঘটেছে।');
     } finally {
-      setSubmitting(false);
+      setWithdrawSubmitting(false);
     }
   };
 
@@ -215,7 +215,7 @@ export default function AccountsPage() {
             <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Wallet size={20} /></span>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Accounts & Finance</h1>
           </div>
-          <p className="text-xs text-slate-500 font-medium pl-9">দোকানের ক্যাশ ড্রয়ার, ব্যাংক ব্যালেন্স, মূলধন এবং আর্থিক লেনদেনের রিয়েল-টাইম হিসাব</p>
+          <p className="text-xs text-slate-500 font-medium pl-9">দোকানের ক্যাশ ড্রয়ার, ব্যাংক ব্যালেন্স, মূলধন এবং আর্থিক লেনদেনের রিয়েল-টাইম হিসাব</p>
         </div>
         <div className="flex items-center gap-3">
           <button 
@@ -271,7 +271,7 @@ export default function AccountsPage() {
           {/* Bank & Wallet */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition group">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ব্যাংক ও ওয়ালেট</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ব্যাংক ও ওয়ালেট</span>
               <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition"><Building2 size={22} /></div>
             </div>
             <div>
@@ -305,7 +305,7 @@ export default function AccountsPage() {
             <div>
               <h2 className="text-2xl font-black text-rose-600">৳ {summary.totalPayable.toLocaleString()}</h2>
               <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-1">
-                সাপ্লায়ারদের বকেয়া
+                সাপ্লায়ারদের বকেয়া
               </span>
             </div>
           </div>
@@ -348,10 +348,10 @@ export default function AccountsPage() {
             </div>
             <button 
               type="submit" 
-              disabled={submitting}
+              disabled={capitalSubmitting}
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {submitting && <Loader2 size={16} className="animate-spin" />} মূলধন যোগ করুন
+              {capitalSubmitting && <Loader2 size={16} className="animate-spin" />} মূলধন যোগ করুন
             </button>
           </form>
         </div>
@@ -362,7 +362,7 @@ export default function AccountsPage() {
             <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl"><ArrowUpRightSquare size={20} /></div>
             <div>
               <h2 className="text-sm font-extrabold text-slate-900">টাকা উত্তোলন করুন (Withdrawal)</h2>
-              <p className="text-[11px] text-slate-500">ব্যক্তিগত প্রয়োজনে ক্যাশ বা ব্যাংক থেকে টাকা তুলুন</p>
+              <p className="text-[11px] text-slate-500">ব্যক্তিগত প্রয়োজনে ক্যাশ বা ব্যাংক থেকে টাকা তুলুন</p>
             </div>
           </div>
 
@@ -402,10 +402,10 @@ export default function AccountsPage() {
             </div>
             <button 
               type="submit" 
-              disabled={submitting}
+              disabled={withdrawSubmitting}
               className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {submitting && <Loader2 size={16} className="animate-spin" />} টাকা উত্তোলন করুন
+              {withdrawSubmitting && <Loader2 size={16} className="animate-spin" />} টাকা উত্তোলন করুন
             </button>
           </form>
         </div>
@@ -430,13 +430,13 @@ export default function AccountsPage() {
                 onClick={() => { setActiveTab('income'); setCurrentPage(1); }}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'income' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
               >
-                আয় (Income)
+                আয় (Income)
               </button>
               <button
                 onClick={() => { setActiveTab('expense'); setCurrentPage(1); }}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'expense' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
               >
-                ব্যয় ও উত্তোলন (Expense)
+                ব্যয় ও উত্তোলন (Expense)
               </button>
             </div>
 
@@ -509,7 +509,7 @@ export default function AccountsPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-400 font-semibold">কোনো ট্রানজ্যাকশন পাওয়া যায়নি।</td>
+                  <td colSpan="6" className="py-12 text-center text-slate-400 font-semibold">কোনো ট্রানজ্যাকশন পাওয়া যায়নি।</td>
                 </tr>
               )}
             </tbody>
