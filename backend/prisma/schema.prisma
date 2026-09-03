@@ -50,6 +50,7 @@ model Shop {
   purchases         Purchase[]
   expenses          Expense[]
   customerPayments  CustomerPayment[]
+  supplierPayments  SupplierPayment[]
   inventoryLayers   InventoryLayer[]
   customerReturns   CustomerReturn[]
   purchaseReturns   PurchaseReturn[]
@@ -71,11 +72,12 @@ model User {
   shopId    Int
   shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  sales                  Sale[]
-  purchases              Purchase[]
-  stockLogs              StockLog[]
-  expenses               Expense[]
-  customerPayments       CustomerPayment[]
+  sales                   Sale[]
+  purchases               Purchase[]
+  stockLogs               StockLog[]
+  expenses                Expense[]
+  customerPayments        CustomerPayment[]
+  supplierPayments        SupplierPayment[]
   receivedCustomerReturns CustomerReturn[]
   createdPurchaseReturns  PurchaseReturn[]
 
@@ -106,18 +108,19 @@ model Customer {
 }
 
 model Supplier {
-  id              Int              @id @default(autoincrement())
+  id              Int               @id @default(autoincrement())
   name            String
   phone           String?
   address         String?
   note            String?
-  createdAt       DateTime         @default(now())
+  createdAt       DateTime          @default(now())
 
   shopId          Int
-  shop            Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shop            Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   purchases       Purchase[]
   purchaseReturns PurchaseReturn[]
+  payments        SupplierPayment[]
 
   @@map("suppliers")
 }
@@ -141,7 +144,7 @@ model Product {
   sku                 String?              @unique
   barcode             String?              @unique
   expireDate          DateTime?            @map("expire_date")
-  quantity            Float                @default(0) // বিক্রয়যোগ্য মূল স্টক
+  quantity            Float                @default(0) // বিক্রয়যোগ্য মূল স্টক
   damagedQuantity     Float                @default(0) @map("damaged_quantity") // কাস্টমারের নষ্ট মাল বা ড্যামেজ স্টক
 
   inventoryType       String               @default("standard") @map("inventory_type")
@@ -252,39 +255,40 @@ model StockLog {
 }
 
 model Purchase {
-  id               Int              @id @default(autoincrement())
-  invoiceNo        String           @unique
+  id                 Int                         @id @default(autoincrement())
+  invoiceNo          String                      @unique
 
-  shopId           Int
-  shop             Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId             Int
+  shop               Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  supplier_id      Int
-  supplier         Supplier         @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
+  supplier_id        Int
+  supplier           Supplier                    @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
 
-  date             String
-  payment_status   String           @default("Paid")
-  product          String
-  quantity         Float
-  unit_price       Float
-  total_amount     Float
-  paid_amount      Float            @default(0)
-  due_amount       Float            @default(0)
-  note             String?
+  date               String
+  payment_status     String                      @default("Paid")
+  product            String
+  quantity           Float
+  unit_price         Float
+  total_amount       Float
+  paid_amount        Float                       @default(0)
+  due_amount         Float                       @default(0)
+  note               String?
 
-  packId           Int?
-  pack             ProductPack?     @relation(fields: [packId], references: [id], onDelete: SetNull)
+  packId             Int?
+  pack               ProductPack?                @relation(fields: [packId], references: [id], onDelete: SetNull)
 
-  baseUnitQuantity Float            @default(0)
+  baseUnitQuantity   Float                       @default(0)
 
-  createdBy        Int?
-  user             User?            @relation(fields: [createdBy], references: [id])
+  createdBy          Int?
+  user               User?                       @relation(fields: [createdBy], references: [id])
 
-  purchaseItems    PurchaseItem[]
-  inventoryLayers  InventoryLayer[]
-  purchaseReturns  PurchaseReturn[]
+  purchaseItems      PurchaseItem[]
+  inventoryLayers    InventoryLayer[]
+  purchaseReturns    PurchaseReturn[]
+  paymentAllocations PurchasePaymentAllocation[]
 
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
 
   @@map("purchases")
 }
@@ -372,7 +376,7 @@ model Sale {
 }
 
 // -----------------------------------------------------------------
-// নতুন: Customer Return (Sales Return / Credit Note)
+// Customer Return (Sales Return / Credit Note)
 // -----------------------------------------------------------------
 model CustomerReturn {
   id              Int                  @id @default(autoincrement())
@@ -390,9 +394,9 @@ model CustomerReturn {
   receivedById    Int
   receivedBy      User                 @relation(fields: [receivedById], references: [id])
 
-  totalAmount     Float                // ফেরত হওয়া মালের মোট মূল্য
+  totalAmount     Float                // ফেরত হওয়া মালের মোট মূল্য
   restockingFee   Float                @default(0) // চার্জ বা কর্তন
-  refundAmount    Float                // কাস্টমারকে ফেরত দেওয়া মোট নেট টাকা
+  refundAmount    Float                // কাস্টমারকে ফেরত দেওয়া মোট নেট টাকা
   refundMethod    String               // CASH, STORE_CREDIT, ADJUST_DUE
   reason          String?              // DEFECTIVE, WRONG_SIZE, NOT_MATCHED ইত্যাদি
   notes           String?
@@ -414,7 +418,7 @@ model CustomerReturnItem {
   product          Product        @relation(fields: [productId], references: [id])
 
   quantity         Float
-  unitPrice        Float          // যে মূল্যে পণ্যটি বিক্রি হয়েছিল
+  unitPrice        Float          // যে মূল্যে পণ্যটি বিক্রি হয়েছিল
   totalPrice       Float
 
   condition        String         @default("GOOD") // "GOOD" (মেইন স্টক) অথবা "DAMAGED" (ড্যামেজ স্টক)
@@ -425,7 +429,7 @@ model CustomerReturnItem {
 }
 
 // -----------------------------------------------------------------
-// নতুন: Purchase Return (Supplier Return / Debit Note)
+// Purchase Return (Supplier Return / Debit Note)
 // -----------------------------------------------------------------
 model PurchaseReturn {
   id             Int                  @id @default(autoincrement())
@@ -465,7 +469,7 @@ model PurchaseReturnItem {
   product          Product        @relation(fields: [productId], references: [id])
 
   quantity         Float
-  unitCost         Float          // যে মূল্যে পণ্যটি কেনা হয়েছিল
+  unitCost         Float          // যে মূল্যে পণ্যটি কেনা হয়েছিল
   totalCost        Float
 
   sourceLocation   String         @default("MAIN") // "MAIN" (মূল গুদাম) অথবা "DAMAGED" (ড্যামেজ স্টক থেকে)
@@ -494,6 +498,48 @@ model CustomerPayment {
   createdAt       DateTime                @default(now())
 
   @@map("customer_payments")
+}
+
+// -----------------------------------------------------------------
+// Supplier Payment (Supplier-কে দেওয়া টাকা, একসাথে একাধিক Purchase-এর
+// due-এর বিপরীতে allocate করা যায় — CustomerPayment এর mirror)
+// -----------------------------------------------------------------
+model SupplierPayment {
+  id            Int                         @id @default(autoincrement())
+  shopId        Int
+  shop          Shop                        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  supplierId    Int
+  supplier      Supplier                    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  userId        Int
+  user          User                        @relation(fields: [userId], references: [id])
+
+  amount        Float
+  paymentMethod String                      // CASH, BKASH, BANK ইত্যাদি
+  notes         String?
+
+  allocations   PurchasePaymentAllocation[]
+
+  createdAt     DateTime                    @default(now())
+
+  @@map("supplier_payments")
+}
+
+model PurchasePaymentAllocation {
+  id                Int             @id @default(autoincrement())
+
+  purchaseId        Int
+  purchase          Purchase        @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  supplierPaymentId Int
+  supplierPayment   SupplierPayment @relation(fields: [supplierPaymentId], references: [id], onDelete: Cascade)
+
+  amountApplied     Float
+
+  createdAt         DateTime        @default(now())
+
+  @@map("purchase_payment_allocations")
 }
 
 model Expense {

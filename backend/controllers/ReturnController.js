@@ -203,8 +203,9 @@ export const createCustomerReturn = async (req, res) => {
   }
 };
 
+
 // =================================================================
-// ৩. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return)
+// ৩. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return) - Fixed & Optimized
 // =================================================================
 export const createPurchaseReturn = async (req, res) => {
   try {
@@ -228,6 +229,7 @@ export const createPurchaseReturn = async (req, res) => {
       const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitCost)), 0);
       const debitNoteNo = `DN-${Date.now().toString().slice(-6)}`;
 
+      // ১. পারচেজ রিটার্ন রেকর্ড বা ডেবিট নোট তৈরি
       const purchaseReturn = await tx.purchaseReturn.create({
         data: {
           debitNoteNo,
@@ -245,19 +247,20 @@ export const createPurchaseReturn = async (req, res) => {
               quantity: Number(item.quantity),
               unitCost: Number(item.unitCost),
               totalCost: Number(item.quantity) * Number(item.unitCost),
-              sourceLocation: item.sourceLocation
+              sourceLocation: item.sourceLocation || "MAIN"
             }))
           }
         },
         include: { items: true }
       });
 
+      // ২. ইনভেন্টরি, স্টক এবং FIFO লেয়ার আপডেট লজিক
       for (const item of items) {
         const prodId = Number(item.productId);
         const qty = Number(item.quantity);
 
         const product = await tx.product.findUnique({ where: { id: prodId } });
-        if (!product) throw new Error(`প্রোডাক্ট পাওয়া যায়নি: ID ${prodId}`);
+        if (!product) throw new Error(`প্রোডাক্ট পাওয়া যায়নি: ID ${prodId}`);
 
         if (item.sourceLocation === "DAMAGED") {
           if (product.damagedQuantity < qty) {
@@ -273,11 +276,13 @@ export const createPurchaseReturn = async (req, res) => {
             throw new Error(`${product.name}-এর পর্যাপ্ত স্টক নেই।`);
           }
 
+          // মূল স্টক কমানো
           await tx.product.update({
             where: { id: prodId },
             data: { quantity: { decrement: qty } }
           });
 
+          // FIFO লেয়ার থেকে স্টক কাটছাট (Reverse FIFO)
           let qtyToDeduct = qty;
           const layers = await tx.inventoryLayer.findMany({
             where: { productId: prodId, remainingQty: { gt: 0 } },
@@ -294,6 +299,7 @@ export const createPurchaseReturn = async (req, res) => {
             qtyToDeduct -= take;
           }
 
+          // স্টক লগ তৈরি
           await tx.stockLog.create({
             data: {
               productId: prodId,
@@ -308,18 +314,33 @@ export const createPurchaseReturn = async (req, res) => {
         }
       }
 
-      if (settlementType === "REDUCE_PAYABLE" && purchaseId) {
-        const purchase = await tx.purchase.findUnique({ where: { id: Number(purchaseId) } });
-        if (purchase && purchase.due_amount > 0) {
-          const newDue = Math.max(0, purchase.due_amount - totalAmount);
-          await tx.purchase.update({
-            where: { id: Number(purchaseId) },
-            data: {
-              due_amount: newDue,
-              payment_status: newDue === 0 ? "Paid" : "Partial"
-            }
-          });
-        }
+      // ৩. অ্যাকাউন্ট বা দেনা সমন্বয় লজিক (Settlement Adjustment)
+      if (settlementType === "REDUCE_PAYABLE") {
+        // যদি নির্দিষ্ট কোনো ক্রয় বিল (purchaseId) সিলেক্ট করা থাকে
+        if (purchaseId) {
+          const purchase = await tx.purchase.findUnique({ where: { id: Number(purchaseId) } });
+          if (purchase && purchase.due_amount > 0) {
+            const newDue = Math.max(0, purchase.due_amount - totalAmount);
+            await tx.purchase.update({
+              where: { id: Number(purchaseId) },
+              data: {
+                due_amount: newDue,
+                payment_status: newDue === 0 ? "Paid" : "Partial"
+              }
+            });
+          }
+        } 
+        
+        // গ্লোবাল বা সাপ্লায়ারের লেজারে যদি কারেন্ট ব্যালেন্স ফিল্ড থাকে তা অ্যাডজাস্ট করার জন্য 
+        // আপনি যদি Supplier মডেলে currentBalance ফিল্ড ব্যবহার করে থাকেন তবে নিচের কোডটি এনাবল করে দিতে পারেন:
+        /*
+        await tx.supplier.update({
+          where: { id: Number(supplierId) },
+          data: {
+            currentBalance: { decrement: totalAmount }
+          }
+        });
+        */
       }
 
       return purchaseReturn;
@@ -327,10 +348,11 @@ export const createPurchaseReturn = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "সাপ্লায়ার রিটার্ন সম্পন্ন হয়েছে এবং ডেবিট নোট জেনারেট হয়েছে।",
+      message: "সাপ্লায়ার রিটার্ন সম্পন্ন হয়েছে এবং ডেবিট নোট জেনারেট হয়েছে।",
       data: result
     });
   } catch (error) {
+    console.error("Purchase Return Error:", error); // ডিবাগিং এর জন্য কনসোলে প্রিন্ট হবে
     return res.status(500).json({ success: false, message: error.message });
   }
 };

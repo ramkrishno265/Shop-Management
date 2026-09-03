@@ -79,6 +79,245 @@ export const deleteSupplier = async (req, res) => {
   }
 };
 
+// ==========================================
+// SUPPLIER DUE / PAYMENT CONTROLLERS
+// (CustomerPayment + SalePaymentAllocation-এর mirror — supplier-কে
+//  দেওয়া টাকা একাধিক Purchase-এর due-এর বিপরীতে allocate করা যায়)
+// ==========================================
+
+/**
+ * নির্দিষ্ট supplier-এর মোট due এবং due-থাকা purchase-গুলোর লিস্ট।
+ * totalDue বের করা হয় সব purchase-এর due_amount যোগ করে —
+ * যেটা প্রতিটা payment allocation-এর পর নিচের updatePurchaseDueOnPayment
+ * ফাংশনে ইতিমধ্যে আপডেট হয়ে থাকে, তাই এখানে আলাদা করে হিসাব করার দরকার নেই।
+ */
+export const getSupplierDue = async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+
+    if (!supplierId) {
+      return res.status(400).json({ success: false, message: "supplierId is required" });
+    }
+
+    const purchases = await prisma.purchase.findMany({
+      where: { supplier_id: Number(supplierId) },
+      select: {
+        id: true,
+        invoiceNo: true,
+        date: true,
+        total_amount: true,
+        paid_amount: true,
+        due_amount: true,
+        payment_status: true,
+      },
+      orderBy: { id: 'desc' },
+    });
+
+    const totalDue = purchases.reduce((sum, p) => sum + Number(p.due_amount || 0), 0);
+    const totalPurchased = purchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0);
+    const totalPaid = purchases.reduce((sum, p) => sum + Number(p.paid_amount || 0), 0);
+
+    res.status(200).json({
+      success: true,
+      data: { totalDue, totalPurchased, totalPaid, purchases },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * একটি supplier payment তৈরি করা এবং সেটা এক বা একাধিক Purchase-এ allocate করা।
+ * body: { shopId, supplierId, amount, paymentMethod, notes, allocations: [{purchaseId, amountApplied}, ...] }
+ *
+ * allocations না দিলে (undefined/empty), সবচেয়ে পুরনো (FIFO) due-থাকা purchase
+ * থেকে শুরু করে অটো-অ্যালোকেট করা হয় — যাতে ফ্রন্টএন্ড থেকে খুঁটিনাটি না পাঠালেও
+ * শুধু "supplier + amount" দিয়েই payment রেকর্ড করা যায়।
+ */
+export const createSupplierPayment = async (req, res) => {
+  try {
+    const {
+      shopId,
+      supplierId,
+      amount,
+      paymentMethod,
+      notes,
+      allocations,
+      userId = req.user?.id || 1,
+    } = req.body;
+
+    const numericShopId = Number(shopId);
+    const numericSupplierId = Number(supplierId);
+    const paymentAmount = Number(amount) || 0;
+
+    if (!numericShopId || !numericSupplierId) {
+      return res.status(400).json({ success: false, message: "shopId and supplierId are required" });
+    }
+    if (paymentAmount <= 0) {
+      return res.status(400).json({ success: false, message: "amount must be greater than 0" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const payment = await tx.supplierPayment.create({
+        data: {
+          shopId: numericShopId,
+          supplierId: numericSupplierId,
+          userId: Number(userId),
+          amount: paymentAmount,
+          paymentMethod: paymentMethod || "CASH",
+          notes: notes || "",
+        },
+      });
+
+      // allocations ফ্রন্টএন্ড থেকে দেওয়া হলে সেটাই ব্যবহার করা হবে;
+      // নাহলে FIFO ভিত্তিতে (পুরনো due আগে) অটো-অ্যালোকেট করা হবে।
+      let resolvedAllocations = allocations;
+
+      if (!resolvedAllocations || !Array.isArray(resolvedAllocations) || resolvedAllocations.length === 0) {
+        const duePurchases = await tx.purchase.findMany({
+          where: { supplier_id: numericSupplierId, due_amount: { gt: 0 } },
+          orderBy: { id: 'asc' },
+        });
+
+        let remaining = paymentAmount;
+        resolvedAllocations = [];
+        for (const p of duePurchases) {
+          if (remaining <= 0) break;
+          const applied = Math.min(remaining, Number(p.due_amount));
+          resolvedAllocations.push({ purchaseId: p.id, amountApplied: applied });
+          remaining -= applied;
+        }
+
+        if (remaining > 0) {
+          // দেওয়া টাকার পুরোটা কোনো due-এর সাথে মেলানো গেল না (advance payment) —
+          // এই অতিরিক্ত অংশ কোনো purchase-এ allocate না করেই payment হিসেবে থেকে যাবে।
+        }
+      }
+
+      // প্রতিটা allocation অনুযায়ী purchase-এর paid_amount/due_amount/payment_status আপডেট
+      for (const a of resolvedAllocations) {
+        const purchase = await tx.purchase.findUnique({ where: { id: Number(a.purchaseId) } });
+        if (!purchase) {
+          throw new Error(`Purchase ID ${a.purchaseId} খুঁজে পাওয়া যায়নি!`);
+        }
+
+        const applyAmount = Number(a.amountApplied) || 0;
+        if (applyAmount <= 0) continue;
+
+        if (applyAmount > Number(purchase.due_amount)) {
+          throw new Error(
+            `Purchase (${purchase.invoiceNo})-এর due ${purchase.due_amount} টাকা, কিন্তু allocate করা হচ্ছে ${applyAmount} টাকা — due-এর বেশি allocate করা যাবে না।`
+          );
+        }
+
+        await tx.purchasePaymentAllocation.create({
+          data: {
+            purchaseId: purchase.id,
+            supplierPaymentId: payment.id,
+            amountApplied: applyAmount,
+          },
+        });
+
+        const newPaid = Number(purchase.paid_amount) + applyAmount;
+        const newDue = Math.max(0, Number(purchase.total_amount) - newPaid);
+
+        await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            paid_amount: newPaid,
+            due_amount: newDue,
+            payment_status: newDue === 0 ? "Paid" : (newPaid > 0 ? "Partial" : "Due"),
+          },
+        });
+      }
+
+      return tx.supplierPayment.findUnique({
+        where: { id: payment.id },
+        include: {
+          supplier: true,
+          allocations: { include: { purchase: true } },
+        },
+      });
+    }, {
+      maxWait: 15000,
+      timeout: 15000,
+    });
+
+    res.status(201).json({ success: true, message: "Supplier payment recorded successfully", data: result });
+  } catch (err) {
+    console.error("Create Supplier Payment Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// নির্দিষ্ট supplier-এর সব payment history
+export const getSupplierPayments = async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+
+    if (!supplierId) {
+      return res.status(400).json({ success: false, message: "supplierId is required" });
+    }
+
+    const payments = await prisma.supplierPayment.findMany({
+      where: { supplierId: Number(supplierId) },
+      include: {
+        user: { select: { id: true, name: true } },
+        allocations: { include: { purchase: { select: { id: true, invoiceNo: true } } } },
+      },
+      orderBy: { id: 'desc' },
+    });
+
+    res.status(200).json({ success: true, data: payments });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// একটি ভুল হয়ে যাওয়া supplier payment ডিলিট করা — সংশ্লিষ্ট allocation-গুলো
+// reverse করে purchase-এর paid_amount/due_amount আবার আগের মতো ফিরিয়ে দেয়
+export const deleteSupplierPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const paymentId = Number(id);
+
+    await prisma.$transaction(async (tx) => {
+      const payment = await tx.supplierPayment.findUnique({
+        where: { id: paymentId },
+        include: { allocations: true },
+      });
+
+      if (!payment) {
+        throw new Error("Supplier payment খুঁজে পাওয়া যায়নি!");
+      }
+
+      for (const alloc of payment.allocations) {
+        const purchase = await tx.purchase.findUnique({ where: { id: alloc.purchaseId } });
+        if (!purchase) continue;
+
+        const newPaid = Math.max(0, Number(purchase.paid_amount) - Number(alloc.amountApplied));
+        const newDue = Math.max(0, Number(purchase.total_amount) - newPaid);
+
+        await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            paid_amount: newPaid,
+            due_amount: newDue,
+            payment_status: newDue === 0 ? "Paid" : (newPaid > 0 ? "Partial" : "Due"),
+          },
+        });
+      }
+
+      await tx.purchasePaymentAllocation.deleteMany({ where: { supplierPaymentId: paymentId } });
+      await tx.supplierPayment.delete({ where: { id: paymentId } });
+    });
+
+    res.status(200).json({ success: true, message: "Supplier payment deleted and dues reversed successfully" });
+  } catch (err) {
+    console.error("Delete Supplier Payment Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 // ==========================================
 // PURCHASE CONTROLLERS (FIFO Layer Integrated, Pack-Aware)
@@ -138,7 +377,6 @@ const resolvePurchaseConversion = ({ product, pack, enteredQuantity, enteredUnit
   };
 };
 
-// ২. নতুন পারচেজ সেভ করা (FIFO Inventory Layer + Pack-aware)
 // ২. নতুন পারচেজ সেভ করা (FIFO Inventory Layer + Pack-aware, Multi-item Supported)
 export const createPurchase = async (req, res) => {
   try {
@@ -220,8 +458,8 @@ export const createPurchase = async (req, res) => {
           totalPrice: itemTotal,
         });
 
-        // সাময়িক পারচেজ অবজেক্টের জন্য বেস ইউনিট কোয়ান্টিটি হিসাব রাখা
-        // (নিচে purchase তৈরির সময় মূল data-তে এটি হ্যান্ডেল করা হবে)
+        // সাময়িক পারচেজ অবজেক্টের জন্য বেস ইউনিট কোয়ান্টিটি হিসাব রাখা
+        // (নিচে purchase তৈরির সময় মূল data-তে এটি হ্যান্ডেল করা হবে)
         item._baseQty = baseQty;
         item._unitCostPerBase = unitCostPerBase;
         item._packCount = packCount;
@@ -384,6 +622,17 @@ export const updatePurchase = async (req, res) => {
       const oldBaseQty = Number(existingPurchase.baseUnitQuantity) || 0;
       const baseQtyDifference = newBaseQty - oldBaseQty;
 
+      // ⚠️ NOTE: এই purchase-এ যদি আগে থেকে কোনো SupplierPayment allocate করা থাকে,
+      // paid_amount এখানে সরাসরি overwrite করলে সেই allocation history-র সাথে
+      // out-of-sync হয়ে যেতে পারে। total_amount কমানোর সময় paid_amount যেন কখনো
+      // total_amount-কে ছাড়িয়ে না যায় সেটা এখানে গার্ড করা হলো।
+      const safePaidAmount = paid_amount !== undefined
+        ? Math.min(Number(paid_amount), parsedTotalAmount)
+        : Math.min(Number(existingPurchase.paid_amount), parsedTotalAmount);
+      const safeDueAmount = due_amount !== undefined
+        ? Number(due_amount)
+        : Math.max(0, parsedTotalAmount - safePaidAmount);
+
       // পারচেজ রেকর্ড আপডেট
       const updated = await tx.purchase.update({
         where: { id: purchaseId },
@@ -395,8 +644,8 @@ export const updatePurchase = async (req, res) => {
           quantity: enteredQuantity,
           unit_price: enteredUnitPrice,
           total_amount: parsedTotalAmount,
-          paid_amount: paid_amount !== undefined ? Number(paid_amount) : existingPurchase.paid_amount,
-          due_amount: due_amount !== undefined ? Number(due_amount) : existingPurchase.due_amount,
+          paid_amount: safePaidAmount,
+          due_amount: safeDueAmount,
           note: note !== undefined ? note : existingPurchase.note,
           packId: newPackId,
           baseUnitQuantity: newBaseQty,
@@ -502,6 +751,20 @@ export const deletePurchase = async (req, res) => {
 
       if (!existingPurchase) {
         throw new Error("Purchase record not found");
+      }
+
+      // ⚠️ NEW GUARD: এই purchase-এর বিপরীতে যদি ইতিমধ্যে কোনো SupplierPayment
+      // allocate করা থাকে, তাহলে ডিলিট করলে সেই payment history orphan হয়ে যাবে
+      // (foreign key onDelete: Cascade থাকায় allocation রো নিজেও মুছে যাবে, কিন্তু
+      // supplier payment-এর টাকাটা তখন কোনো purchase-এর সাথে ম্যাপড থাকবে না)।
+      const existingAllocations = await tx.purchasePaymentAllocation.findMany({
+        where: { purchaseId },
+      });
+      if (existingAllocations.length > 0) {
+        const allocatedTotal = existingAllocations.reduce((sum, a) => sum + Number(a.amountApplied), 0);
+        throw new Error(
+          `এই পারচেজের বিপরীতে ইতিমধ্যে ${allocatedTotal} টাকা supplier payment allocate করা আছে, তাই এটি ডিলিট করা যাবে না। (আগে সংশ্লিষ্ট payment allocation বাতিল করুন)`
+        );
       }
 
       const layer = await tx.inventoryLayer.findFirst({ where: { purchaseId } });

@@ -154,7 +154,7 @@ export default function DashboardLayout({ children }) {
                   Shop<span className="text-blue-600">Sync</span>
                 </span>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">
-                  POS & Inventory fdgdfg
+                  POS & Inventory
                 </span>
               </div>
             </div>

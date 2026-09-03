@@ -44,7 +44,9 @@ export default function SupplierDue() {
     }
   }, [currentShopId]);
 
-  // সাপ্লায়ার লিস্ট ও বকেয়া লোড
+  // সাপ্লায়ার লিস্ট লোড করে প্রতিটার জন্য due-ও ফেচ করে merge করা হয়
+  // (ব্যাকএন্ডের /suppliers এন্ডপয়েন্ট নিজে থেকে due দেয় না — সেটা
+  // /suppliers/:id/due থেকে আলাদাভাবে হিসাব করে আনতে হয়)
   const fetchSupplierDues = async () => {
     setLoading(true);
     try {
@@ -56,16 +58,35 @@ export default function SupplierDue() {
       );
       const result = await res.json();
       const list = result.data || (Array.isArray(result) ? result : []);
-      setSuppliers(list);
+
+      // প্রতিটা সাপ্লায়ারের due সমান্তরালে (parallel) ফেচ করা হচ্ছে
+      const withDue = await Promise.all(
+        list.map(async (sup) => {
+          try {
+            const dueRes = await fetch(
+              `${API_BASE_URL}/suppliers/${sup.id}/due`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            const dueResult = await dueRes.json();
+            const totalDue = dueResult?.data?.totalDue ?? 0;
+            return { ...sup, currentPayable: totalDue };
+          } catch {
+            // কোনো একটা সাপ্লায়ারের due ফেচ ব্যর্থ হলেও যেন পুরো লিস্ট ভেঙে না পড়ে
+            return { ...sup, currentPayable: 0 };
+          }
+        })
+      );
+
+      setSuppliers(withDue);
     } catch (error) {
       console.error("Error fetching suppliers:", error);
-      setMessage({ type: "error", text: "সাপ্লায়ার ডেটা লোড করতে সমস্যা হয়েছে।" });
+      setMessage({ type: "error", text: "সাপ্লায়ার ডেটা লোড করতে সমস্যা হয়েছে।" });
     } finally {
       setLoading(false);
     }
   };
 
-  // বকেয়া পরিশোধ সাবমিট
+  // বকেয়া পরিশোধ সাবমিট
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     const amount = Number(payAmount);
@@ -77,13 +98,13 @@ export default function SupplierDue() {
 
     const currentPayable = selectedSupplier?.currentPayable || 0;
     if (amount > currentPayable) {
-      alert("বকেয়ার পরিমাণের চেয়ে বেশি পেমেন্ট করা যাবে না।");
+      alert("বকেয়ার পরিমাণের চেয়ে বেশি পেমেন্ট করা যাবে না।");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/suppliers/pay-due`, {
+      const res = await fetch(`${API_BASE_URL}/supplier-payments`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -94,29 +115,31 @@ export default function SupplierDue() {
           supplierId: selectedSupplier.id,
           amount,
           paymentMethod,
-          note: paymentNote,
+          notes: paymentNote,
+          // allocations ইচ্ছাকৃতভাবে পাঠানো হচ্ছে না — ব্যাকএন্ড নিজে থেকে
+          // FIFO অনুযায়ী (সবচেয়ে পুরনো due আগে) allocate করে নেবে
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "পেমেন্ট সম্পন্ন করা যায়নি।");
+        throw new Error(data.message || "পেমেন্ট সম্পন্ন করা যায়নি।");
       }
 
-      setMessage({ type: "success", text: "বকেয়া সফলভাবে পরিশোধ হয়েছে!" });
+      setMessage({ type: "success", text: "বকেয়া সফলভাবে পরিশোধ হয়েছে!" });
       setSelectedSupplier(null);
       setPayAmount("");
       setPaymentNote("");
       fetchSupplierDues(); // রিফ্রেশ লিস্ট
     } catch (err) {
-      alert(err.message || "সার্ভার এরর হয়েছে।");
+      alert(err.message || "সার্ভার এরর হয়েছে।");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ফিল্টার করা সাপ্লায়ার লিস্ট
+  // ফিল্টার করা সাপ্লায়ার লিস্ট
   const filteredSuppliers = suppliers.filter((sup) => {
     const q = searchQuery.toLowerCase();
     const nameMatch = (sup.name || "").toLowerCase().includes(q);
@@ -151,7 +174,7 @@ export default function SupplierDue() {
             Supplier Due & Payable Ledger
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            সাপ্লায়ার ও মহাজনদের কাছে মোট দেনা ও বাকি পরিশোধের খাতা
+            সাপ্লায়ার ও মহাজনদের কাছে মোট দেনা ও বাকি পরিশোধের খাতা
           </p>
         </div>
 
@@ -205,7 +228,7 @@ export default function SupplierDue() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase text-slate-400">
-              বকেয়া সাপ্লায়ার সংখ্যা
+              বকেয়া সাপ্লায়ার সংখ্যা
             </p>
             <h3 className="text-2xl font-black text-slate-800 mt-1">
               {totalSuppliersWithDue} <span className="text-xs font-medium text-slate-400">জন</span>
@@ -219,7 +242,7 @@ export default function SupplierDue() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-bold uppercase text-slate-400">
-              মোট রেজিস্টার্ড সাপ্লায়ার
+              মোট রেজিস্টার্ড সাপ্লায়ার
             </p>
             <h3 className="text-2xl font-black text-slate-800 mt-1">
               {suppliers.length} <span className="text-xs font-medium text-slate-400">জন</span>
@@ -231,14 +254,14 @@ export default function SupplierDue() {
         </div>
       </div>
 
-      {/* ৩. ফিল্টার ও সাপ্লায়ার টেবিল */}
+      {/* ৩. ফিল্টার ও সাপ্লায়ার টেবিল */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-3.5 top-2.5 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="সাপ্লায়ারের নাম বা ফোন নম্বর খুঁজুন..."
+              placeholder="সাপ্লায়ারের নাম বা ফোন নম্বর খুঁজুন..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition font-medium"
@@ -254,7 +277,7 @@ export default function SupplierDue() {
                   : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              শুধু বকেয়া ({totalSuppliersWithDue})
+              শুধু বকেয়া ({totalSuppliersWithDue})
             </button>
             <button
               onClick={() => setFilterType("ALL")}
@@ -264,7 +287,7 @@ export default function SupplierDue() {
                   : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              সকল সাপ্লায়ার ({suppliers.length})
+              সকল সাপ্লায়ার ({suppliers.length})
             </button>
           </div>
         </div>
@@ -273,7 +296,7 @@ export default function SupplierDue() {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 border-b border-slate-100 uppercase text-[11px] font-bold tracking-wider">
               <tr>
-                <th className="py-3 px-5">সাপ্লায়ার নাম</th>
+                <th className="py-3 px-5">সাপ্লায়ার নাম</th>
                 <th className="py-3 px-5">ফোন / ঠিকানা</th>
                 <th className="py-3 px-5 text-center">স্ট্যাটাস</th>
                 <th className="py-3 px-5 text-right">বাকি পরিমাণ (Payable)</th>
@@ -290,7 +313,7 @@ export default function SupplierDue() {
               ) : filteredSuppliers.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="text-center py-10 text-slate-400 font-medium">
-                    কোনো সাপ্লায়ার পাওয়া যায়নি।
+                    কোনো সাপ্লায়ার পাওয়া যায়নি।
                   </td>
                 </tr>
               ) : (
@@ -320,7 +343,7 @@ export default function SupplierDue() {
                               : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           }`}
                         >
-                          {payable > 0 ? "বাকি রয়েছে" : "পরিশোধিত"}
+                          {payable > 0 ? "বাকি রয়েছে" : "পরিশোধিত"}
                         </span>
                       </td>
                       <td className="py-3.5 px-5 text-right font-black text-base font-mono text-slate-900">
@@ -331,7 +354,7 @@ export default function SupplierDue() {
                           disabled={payable <= 0}
                           onClick={() => {
                             setSelectedSupplier(sup);
-                            setPayAmount(payable.toString()); // ডিফল্ট পুরো টাকা বসিয়ে দেওয়া
+                            setPayAmount(payable.toString()); // ডিফল্ট পুরো টাকা বসিয়ে দেওয়া
                           }}
                           className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ml-auto cursor-pointer ${
                             payable > 0
@@ -358,10 +381,10 @@ export default function SupplierDue() {
             <div className="flex justify-between items-start border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-bold text-slate-900 text-base">
-                  বকেয়া পরিশোধ (Supplier Payment)
+                  বকেয়া পরিশোধ (Supplier Payment)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  সাপ্লায়ার: <span className="font-bold text-slate-700">{selectedSupplier.name}</span>
+                  সাপ্লায়ার: <span className="font-bold text-slate-700">{selectedSupplier.name}</span>
                 </p>
               </div>
               <button
@@ -373,7 +396,7 @@ export default function SupplierDue() {
             </div>
 
             <div className="p-3.5 bg-rose-50/70 border border-rose-100 rounded-2xl flex justify-between items-center text-sm">
-              <span className="text-xs font-semibold text-rose-800">মোট বাকি রয়েছে:</span>
+              <span className="text-xs font-semibold text-rose-800">মোট বাকি রয়েছে:</span>
               <span className="font-black text-rose-600 text-base font-mono">
                 ৳ {Number(selectedSupplier.currentPayable || 0).toLocaleString()}
               </span>
