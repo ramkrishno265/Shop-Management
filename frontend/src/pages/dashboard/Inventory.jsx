@@ -10,6 +10,7 @@ import {
   FiEdit2,
   FiTrash2,
   FiLoader,
+  FiDollarSign,
 } from "react-icons/fi";
 
 const ITEMS_PER_PAGE = 15;
@@ -182,6 +183,14 @@ const InventoryPage = () => {
     return total > 0 && total <= (p.lowStockLimit || 5);
   }).length;
 
+  // --- স্টকে থাকা সব প্রোডাক্টের ক্রয়মূল্য অনুযায়ী মোট টাকার পরিমাণ ---
+  // প্রতিটা প্রোডাক্টের (স্টক পরিমাণ × purchasePrice) যোগ করে টোটাল বের করা হচ্ছে
+  const totalStockValue = products.reduce((acc, curr) => {
+    const stockQty = calculateTotalStock(curr);
+    const purchasePrice = Number(curr.purchasePrice) || 0;
+    return acc + stockQty * purchasePrice;
+  }, 0);
+
   // --- Products থেকে ইউনিক ক্যাটাগরি লিস্ট বের করা (ড্রপডাউনের জন্য) ---
   const categoryOptions = Array.from(
     new Set(
@@ -291,7 +300,7 @@ const InventoryPage = () => {
         </div>
 
         {/* Summary Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Card 1: Total Products */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
             <div>
@@ -325,7 +334,25 @@ const InventoryPage = () => {
             </div>
           </div>
 
-          {/* Card 3: Low Stock Products */}
+          {/* Card 3: Total Stock Value (Purchase Price ভিত্তিক) */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Total Stock Value
+              </p>
+              <h3 className="text-2xl font-extrabold text-slate-800 mt-1">
+                ৳
+                {totalStockValue.toLocaleString("en-IN", {
+                  maximumFractionDigits: 0,
+                })}
+              </h3>
+            </div>
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+              <FiDollarSign size={22} />
+            </div>
+          </div>
+
+          {/* Card 4: Low Stock Products */}
           <div
             onClick={() => navigate("/stock_low")}
             className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between cursor-pointer hover:shadow-lg hover:border-amber-300 transition-all duration-200"
@@ -343,7 +370,7 @@ const InventoryPage = () => {
             </div>
           </div>
 
-          {/* Card 4: Out of Stock */}
+          {/* Card 5: Out of Stock */}
           <div
             onClick={() => navigate("/stock_low")}
             className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between cursor-pointer hover:shadow-lg hover:border-rose-300 transition-all duration-200"

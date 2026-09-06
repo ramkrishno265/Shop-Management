@@ -324,7 +324,7 @@ export default function InventoryManagement() {
 
     const purchaseData = {
       shopId: currentShopId,
-      invoiceNo: invoiceNo || `PO-${Date.now().toString().slice(-6)}`, // ✅ ইনভয়েস নম্বর যোগ করা হয়েছে
+      invoiceNo: invoiceNo || `PO-${Date.now().toString().slice(-6)}`, // ✅ ইনভয়েস নম্বর যোগ করা হয়েছে
       supplier_id: supplierId,
       date,
       payment_status: paymentStatus,
@@ -466,7 +466,7 @@ export default function InventoryManagement() {
 
   const handleEditPurchase = (item) => {
     setEditingPurchaseId(item.id);
-    setInvoiceNo(item.invoiceNo || item.invoice_no || ""); // ✅ এডিট করার সময় ইনভয়েস লোড
+    setInvoiceNo(item.invoiceNo || item.invoice_no || ""); // ✅ এডিট করার সময় ইনভয়েস লোড
     const sId = item.supplier_id || item.supplierId || "";
     setSupplierId(sId);
     const foundSupplier = suppliers.find((sup) => sup.id == sId);
@@ -575,7 +575,7 @@ export default function InventoryManagement() {
 
   const resetPurchaseForm = () => {
     setEditingPurchaseId(null);
-    setInvoiceNo(""); // ✅ ইনভয়েস স্টেট রিসেট
+    setInvoiceNo(""); // ✅ ইনভয়েস স্টেট রিসেট
     setSupplierId("");
     setSupplierNumber("");
     setPaidAmount("");
@@ -685,7 +685,7 @@ export default function InventoryManagement() {
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-100 text-gray-500 text-xs uppercase tracking-wider">
                   <th className="p-4 font-bold">Date</th>
-                  {/* ✅ লাল দাগের জায়গায় Invoice No হেডার */}
+                  {/* ✅ লাল দাগের জায়গায় Invoice No হেডার */}
                   <th className="p-4 font-bold">Invoice No</th>
                   <th className="p-4 font-bold">Products</th>
                   <th className="p-4 font-bold">Items</th>
@@ -898,20 +898,24 @@ export default function InventoryManagement() {
                       setIsDropdownOpen(true);
                     }}
                     onFocus={() => setIsDropdownOpen(true)}
-                    placeholder="Type to search product..."
+                    placeholder="Type product name, SKU..."
                     className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 transition font-medium"
                   />
                   {isDropdownOpen && product && (
                     <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl divide-y divide-gray-100">
                       {products
                         .filter((p) => {
-                          const pName =
-                            typeof p === "string"
-                              ? p
-                              : p.name || p.product_name || "";
-                          return pName
-                            .toLowerCase()
-                            .includes(product.toLowerCase());
+                          const term = product.toLowerCase();
+
+                          if (typeof p === "string") {
+                            return p.toLowerCase().includes(term);
+                          }
+
+                          const pName = (p.name || p.product_name || "").toLowerCase();
+                          const pSku = (p.sku || "").toLowerCase();
+
+                          // ✅ নাম অথবা SKU — যেকোনো একটাতে ম্যাচ পেলেই দেখাবে
+                          return pName.includes(term) || pSku.includes(term);
                         })
                         .map((p, index) => {
                           const pName =
@@ -924,7 +928,14 @@ export default function InventoryManagement() {
                               onClick={() => handleSelectProduct(p)}
                               className="p-3 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer font-medium flex items-center justify-between"
                             >
-                              <span>{pName}</span>
+                              <span>
+                                {pName}
+                                {p.sku && (
+                                  <span className="ml-2 text-[10px] text-gray-400 font-mono">
+                                    ({p.sku})
+                                  </span>
+                                )}
+                              </span>
                               {p.inventoryType === "pack" && (
                                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
                                   Pack
