@@ -61,17 +61,28 @@ export const getProducts = async (req, res) => {
       include: {
         category: true,
         packs: true,
-        inventoryLayers: true,
+        // inventoryLayers কে createdAt বা id অনুযায়ী ascending (পুরোনো থেকে নতুন) সাজাতে পারেন
+        inventoryLayers: {
+          orderBy: { id: "asc" }, // অথবা { createdAt: 'asc' }
+        },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    // প্রোডাক্টের মূল purchasePrice কে active layer এর unitCost দিয়ে ওভাররাইট করা
     const formattedProducts = products.map((product) => {
-      const activeLayer = product.inventoryLayers?.[0];
+      const layers = product.inventoryLayers || [];
+
+      // ১. এমন লেয়ার খুঁজব যেটার remainingQty এখনো শূন্যের বেশি আছে (FIFO রুল অনুযায়ী active layer)
+      let activeLayer = layers.find((layer) => layer.remainingQty > 0);
+
+      // ২. যদি সবগুলোর remainingQty 0 হয়ে যায় (stock out), তবে একদম শেষের লেয়ারটি ধরতে পারেন
+      if (!activeLayer && layers.length > 0) {
+        activeLayer = layers[layers.length - 1];
+      }
+
       return {
         ...product,
-        // এখন এই দামটি শুধুমাত্র ওই শপের FIFO লেয়ার থেকেই আসবে
+        // active layer থেকে unitCost নেব, না থাকলে প্রোডাক্টের নিজস্ব purchasePrice থাকবে
         purchasePrice: activeLayer ? activeLayer.unitCost : product.purchasePrice,
       };
     });
