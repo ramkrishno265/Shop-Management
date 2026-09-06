@@ -59,7 +59,9 @@ const InventoryPage = () => {
             const sortedLayers = [...layers].sort((a, b) => a.id - b.id);
 
             // যে লেয়ারের remainingQty এখনো শূন্যের বেশি আছে (Active Layer)
-            let activeLayer = sortedLayers.find((layer) => layer.remainingQty > 0);
+            let activeLayer = sortedLayers.find(
+              (layer) => layer.remainingQty > 0,
+            );
 
             // যদি সবগুলোর remainingQty 0 হয়ে যায়, তবে শেষ লেয়ারটি ধরব
             if (!activeLayer && sortedLayers.length > 0) {
@@ -69,17 +71,20 @@ const InventoryPage = () => {
             // লেয়ারগুলো থেকে মোট রিমেইনিং স্টক হিসাব করা (যদি প্রডাক্টের নিজস্ব quantity না থাকে)
             const totalLayerQuantity = sortedLayers.reduce(
               (sum, layer) => sum + (Number(layer.remainingQty) || 0),
-              0
+              0,
             );
 
             return {
               ...product,
               // FIFO লেয়ারের unitCost দিয়ে purchasePrice ওভাররাইট করা
-              purchasePrice: activeLayer ? Number(activeLayer.unitCost) : Number(product.purchasePrice) || 0,
+              purchasePrice: activeLayer
+                ? Number(activeLayer.unitCost)
+                : Number(product.purchasePrice) || 0,
               // যদি প্রোডাক্ট টেবিলে quantity না থাকে, তবে লেয়ারের remainingQty গুলোর যোগফলকে quantity হিসেবে ধরবে
-              quantity: product.quantity !== undefined && product.quantity !== null 
-                ? Number(product.quantity) 
-                : totalLayerQuantity,
+              quantity:
+                product.quantity !== undefined && product.quantity !== null
+                  ? Number(product.quantity)
+                  : totalLayerQuantity,
               inventoryLayers: sortedLayers,
             };
           });
@@ -125,22 +130,20 @@ const InventoryPage = () => {
   // --- Select One / Select All Toggle ---
   const toggleSelectOne = (id) => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
   const toggleSelectAll = () => {
     const currentPageIds = paginatedProducts.map((p) => p.id);
-    const allSelected = currentPageIds.every((id) =>
-      selectedIds.includes(id)
-    );
+    const allSelected = currentPageIds.every((id) => selectedIds.includes(id));
     if (allSelected) {
       setSelectedIds((prev) =>
-        prev.filter((id) => !currentPageIds.includes(id))
+        prev.filter((id) => !currentPageIds.includes(id)),
       );
     } else {
       setSelectedIds((prev) =>
-        Array.from(new Set([...prev, ...currentPageIds]))
+        Array.from(new Set([...prev, ...currentPageIds])),
       );
     }
   };
@@ -150,7 +153,7 @@ const InventoryPage = () => {
     if (selectedIds.length === 0) return;
     if (
       !window.confirm(
-        `আপনি কি নিশ্চিত ${selectedIds.length} টি পণ্য মুছে ফেলতে চান?`
+        `আপনি কি নিশ্চিত ${selectedIds.length} টি পণ্য মুছে ফেলতে চান?`,
       )
     )
       return;
@@ -167,9 +170,7 @@ const InventoryPage = () => {
       });
 
       if (response.ok) {
-        setProducts((prev) =>
-          prev.filter((p) => !selectedIds.includes(p.id))
-        );
+        setProducts((prev) => prev.filter((p) => !selectedIds.includes(p.id)));
         setSelectedIds([]);
       } else {
         alert("কিছু পণ্য ডিলিট করতে সমস্যা হয়েছে।");
@@ -184,12 +185,10 @@ const InventoryPage = () => {
             fetch(`${API_URL}/products/${id}`, {
               method: "DELETE",
               headers: { Authorization: `Bearer ${token}` },
-            })
-          )
+            }),
+          ),
         );
-        setProducts((prev) =>
-          prev.filter((p) => !selectedIds.includes(p.id))
-        );
+        setProducts((prev) => prev.filter((p) => !selectedIds.includes(p.id)));
         setSelectedIds([]);
       } catch (fallbackError) {
         console.error("Fallback bulk delete failed:", fallbackError);
@@ -207,7 +206,7 @@ const InventoryPage = () => {
   // --- Calculations for Top Cards ---
   const totalProductsCount = products.length;
   const outOfStockCount = products.filter(
-    (p) => calculateTotalStock(p) === 0
+    (p) => calculateTotalStock(p) === 0,
   ).length;
   const lowStockCount = products.filter((p) => {
     const total = calculateTotalStock(p);
@@ -226,8 +225,8 @@ const InventoryPage = () => {
     new Set(
       products
         .map((p) => p.category?.name || p.category)
-        .filter((c) => c && c.trim() !== "")
-    )
+        .filter((c) => c && c.trim() !== ""),
+    ),
   ).sort();
 
   // --- Products থেকে ইউনিক ব্র্যান্ড লিস্ট বের করা ---
@@ -235,8 +234,8 @@ const InventoryPage = () => {
     new Set(
       products
         .map((p) => p.brand?.name || p.brand)
-        .filter((b) => b && b.trim() !== "")
-    )
+        .filter((b) => b && b.trim() !== ""),
+    ),
   ).sort();
 
   // --- Search + Category + Brand ফিল্টার করা লিস্ট ---
@@ -271,11 +270,11 @@ const InventoryPage = () => {
   // --- Pagination Calculation ---
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredProducts.length / ITEMS_PER_PAGE)
+    Math.ceil(filteredProducts.length / ITEMS_PER_PAGE),
   );
   const paginatedProducts = filteredProducts.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   const isAllCurrentPageSelected =
@@ -350,7 +349,7 @@ const InventoryPage = () => {
               <h3 className="text-2xl font-extrabold text-slate-800 mt-1">
                 {products.reduce(
                   (acc, curr) => acc + calculateTotalStock(curr),
-                  0
+                  0,
                 )}
               </h3>
             </div>
@@ -464,23 +463,23 @@ const InventoryPage = () => {
             <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-slate-50/80 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
-                  <th className="p-4 w-10">
+                  <th className="p-4 w-10 text-center align-middle">
                     <input
                       type="checkbox"
                       checked={isAllCurrentPageSelected}
                       onChange={toggleSelectAll}
-                      className="w-4 h-4 rounded cursor-pointer accent-slate-900"
+                      className="w-4 h-4 rounded cursor-pointer accent-slate-900 align-middle"
                     />
                   </th>
-                  <th className="p-4">Product Info</th>
-                  <th className="p-4">SKU</th>
-                  <th className="p-4">Category</th>
-                  <th className="p-4">Brand</th>
-                  <th className="p-4">Purchase Price (FIFO)</th>
-                  <th className="p-4">Selling Price</th>
-                  <th className="p-4">Stock Quantity</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-center">Actions</th>
+                  <th className="p-4 align-middle">Product Info</th>
+                  <th className="p-4 align-middle">SKU</th>
+                  <th className="p-4 align-middle">Category</th>
+                  <th className="p-4 align-middle">Brand</th>
+                  <th className="p-4 align-middle">Purchase Price (FIFO)</th>
+                  <th className="p-4 align-middle">Selling Price</th>
+                  <th className="p-4 align-middle">Stock Quantity</th>
+                  <th className="p-4 align-middle">Status</th>
+                  <th className="p-4 text-center align-middle">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -491,7 +490,8 @@ const InventoryPage = () => {
                       className="text-center py-10 text-slate-400 font-medium"
                     >
                       <div className="flex justify-center items-center gap-2">
-                        <FiLoader className="animate-spin" size={20} /> ডেটা লোড হচ্ছে...
+                        <FiLoader className="animate-spin" size={20} /> ডেটা লোড
+                        হচ্ছে...
                       </div>
                     </td>
                   </tr>
@@ -511,38 +511,39 @@ const InventoryPage = () => {
                           isChecked ? "bg-slate-50" : ""
                         }`}
                       >
-                        <td className="p-4">
+                        <td className="p-4 align-middle text-center">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleSelectOne(product.id)}
-                            className="w-4 h-4 rounded cursor-pointer accent-slate-900"
+                            className="w-4 h-4 rounded cursor-pointer accent-slate-900 align-middle"
                           />
                         </td>
-                        <td className="p-4 font-bold text-slate-800">
+                        <td className="p-4 align-middle font-bold text-slate-800">
                           {product.name}
                         </td>
-                        <td className="p-4 text-slate-500 font-mono text-xs">
+                        <td className="p-4 align-middle text-slate-500 font-mono text-xs">
                           {product.sku}
                         </td>
-                        <td className="p-4 text-slate-600">
+                        <td className="p-4 align-middle text-slate-600">
                           {product.category?.name || product.category || "N/A"}
                         </td>
-                        <td className="p-4 text-slate-600">
+                        <td className="p-4 align-middle text-slate-600">
                           {product.brand?.name || product.brand || "N/A"}
                         </td>
-                        <td className="p-4 text-emerald-600 font-semibold">
+                        <td className="p-4 align-middle text-emerald-600 font-semibold">
                           ৳{product.purchasePrice?.toFixed(2) || "0.00"}
                         </td>
-                        <td className="p-4 text-slate-600">
+                        <td className="p-4 align-middle text-slate-600">
                           ৳{product.sellingPrice?.toFixed(2) || "0.00"}
                         </td>
 
-                        <td className="p-4 flex items-center justify-center">
+                        {/* স্টক কোয়ান্টিটি কলাম (অ্যালাইনমেন্ট ঠিক করা হয়েছে) */}
+                        <td className="p-4 align-middle">
                           {isPack ? (
                             <button
                               onClick={() => setSelectedProductPacks(product)}
-                              className="font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs text-xs"
+                              className="font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl transition inline-flex items-center gap-1.5 cursor-pointer shadow-xs text-xs"
                               title="প্যাকের বিস্তারিত দেখতে ক্লিক করুন"
                             >
                               <span>
@@ -553,15 +554,15 @@ const InventoryPage = () => {
                               </span>
                             </button>
                           ) : (
-                            <span className="font-semibold text-slate-700">
+                            <span className="font-semibold text-slate-700 inline-block">
                               {totalStock} {product.baseUnit || "Pcs"}
                             </span>
                           )}
                         </td>
 
-                        <td className="p-4">
+                        <td className="p-4 align-middle">
                           <span
-                            className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
+                            className={`px-2.5 py-1 text-xs font-bold rounded-lg inline-block ${
                               product.status === "ACTIVE"
                                 ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
                                 : "bg-rose-50 text-rose-600 border border-rose-200/50"
@@ -571,7 +572,7 @@ const InventoryPage = () => {
                           </span>
                         </td>
 
-                        <td className="p-4 text-center">
+                        <td className="p-4 align-middle text-center">
                           <div className="flex items-center justify-center gap-3">
                             <button
                               onClick={() =>
