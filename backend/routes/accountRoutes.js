@@ -3,11 +3,15 @@ import {
   getAccountsSummary, 
   getAllTransactions, 
   addCapital, 
-  addWithdrawal 
+  addWithdrawal,
+  getShopAccounts // 👈 নতুন অ্যাকাউন্ট ফেচ করার কন্ট্রোলার (যদি থাকে)
 } from '../controllers/accountController.js';
-import { protect } from '../middleware/authMiddleware.js'; // আপনার অথ মিডলওয়্যার
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// ✅ শপের সব অ্যাকাউন্ট (Cash, Bank, Bkash) ফেচ করার রাউট
+router.get('/', protect, getShopAccounts); 
 
 // অ্যাকাউন্টস সামারি এবং ট্রানজ্যাকশন ফেচ করার রাউট
 router.get('/summary', protect, getAccountsSummary);

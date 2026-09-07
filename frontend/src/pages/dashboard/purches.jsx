@@ -16,13 +16,15 @@ export default function InventoryManagement() {
   const [purchases, setPurchases] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [accounts, setAccounts] = useState([]); // 👈 নতুন: অ্যাকাউন্ট লিস্ট স্টেট
+  const [selectedAccountId, setSelectedAccountId] = useState(""); // 👈 নতুন: সিলেক্টেড অ্যাকাউন্ট আইডি
 
   // Edit Tracking States
   const [editingPurchaseId, setEditingPurchaseId] = useState(null);
   const [editingSupplierId, setEditingSupplierId] = useState(null);
 
   // Purchase Form States
-  const [invoiceNo, setInvoiceNo] = useState(""); // ✅ নতুন: Purchase Invoice No
+  const [invoiceNo, setInvoiceNo] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [supplierNumber, setSupplierNumber] = useState("");
   const [date, setDate] = useState("");
@@ -91,6 +93,7 @@ export default function InventoryManagement() {
     fetchProducts();
     fetchPurchases();
     fetchSuppliers();
+    fetchAccounts(); // 👈 নতুন: অ্যাকাউন্ট ফেচ কল করা হলো
   }, []);
 
   useEffect(() => {
@@ -178,6 +181,33 @@ export default function InventoryManagement() {
       );
     } catch (error) {
       console.error("Error fetching suppliers:", error);
+    }
+  };
+
+  // ✅ নতুন: অ্যাকাউন্ট ফেচ করার ফাংশন
+ // ✅ অ্যাকাউন্ট ফেচ করার সঠিক ফাংশন
+  const fetchAccounts = async () => {
+    try {
+      const token = localStorage.getItem("token") || "";
+      const storedUser = localStorage.getItem("user");
+      const currentShopId = storedUser ? JSON.parse(storedUser)?.shopId : null;
+      if (!currentShopId) return;
+
+      // লক্ষ্য করুন: এখানে ব্যাকএন্ডের রাউটের সাথে মিলিয়ে /api/accounts কল করা হচ্ছে
+      const response = await fetch(`${API_BASE_URL}/accounts?shopId=${currentShopId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json();
+      
+      if (result.success && Array.isArray(result.data)) {
+        setAccounts(result.data);
+        // ডিফল্ট ক্যাশ অ্যাকাউন্ট সিলেক্ট করে দেওয়া
+        const def = result.data.find((acc) => acc.isDefault || acc.type === "CASH");
+        if (def) setSelectedAccountId(def.id);
+        else if (result.data.length > 0) setSelectedAccountId(result.data[0].id);
+      }
+    } catch (error) {
+      console.error("Error fetching accounts:", error);
     }
   };
 
@@ -324,7 +354,7 @@ export default function InventoryManagement() {
 
     const purchaseData = {
       shopId: currentShopId,
-      invoiceNo: invoiceNo || `PO-${Date.now().toString().slice(-6)}`, // ✅ ইনভয়েস নম্বর যোগ করা হয়েছে
+      invoiceNo: invoiceNo ? invoiceNo.trim() : `PO-${Date.now().toString().slice(-6)}`,
       supplier_id: supplierId,
       date,
       payment_status: paymentStatus,
@@ -340,6 +370,7 @@ export default function InventoryManagement() {
       paid_amount: Number(paidAmount) || 0,
       due_amount: dueAmount,
       note,
+      accountId: selectedAccountId ? Number(selectedAccountId) : undefined, // 👈 ব্যাকএন্ডে অ্যাকাউন্ট আইডি পাঠানো হলো
     };
 
     setIsSavingPurchase(true);
@@ -466,7 +497,7 @@ export default function InventoryManagement() {
 
   const handleEditPurchase = (item) => {
     setEditingPurchaseId(item.id);
-    setInvoiceNo(item.invoiceNo || item.invoice_no || ""); // ✅ এডিট করার সময় ইনভয়েস লোড
+    setInvoiceNo(item.invoiceNo || item.invoice_no || "");
     const sId = item.supplier_id || item.supplierId || "";
     setSupplierId(sId);
     const foundSupplier = suppliers.find((sup) => sup.id == sId);
@@ -575,7 +606,7 @@ export default function InventoryManagement() {
 
   const resetPurchaseForm = () => {
     setEditingPurchaseId(null);
-    setInvoiceNo(""); // ✅ ইনভয়েস স্টেট রিসেট
+    setInvoiceNo("");
     setSupplierId("");
     setSupplierNumber("");
     setPaidAmount("");
@@ -685,7 +716,6 @@ export default function InventoryManagement() {
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-100 text-gray-500 text-xs uppercase tracking-wider">
                   <th className="p-4 font-bold">Date</th>
-                  {/* ✅ লাল দাগের জায়গায় Invoice No হেডার */}
                   <th className="p-4 font-bold">Invoice No</th>
                   <th className="p-4 font-bold">Products</th>
                   <th className="p-4 font-bold">Items</th>
@@ -722,7 +752,6 @@ export default function InventoryManagement() {
                         <td className="p-4 text-gray-600 font-medium">
                           {item.date}
                         </td>
-                        {/* ✅ Invoice No ডেটা সেল */}
                         <td className="p-4 font-mono font-semibold text-blue-600">
                           {item.invoiceNo || item.invoice_no || `PO-${item.id}`}
                         </td>
@@ -817,7 +846,6 @@ export default function InventoryManagement() {
 
           <form onSubmit={handleSavePurchase} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-              {/* ✅ নতুন: Invoice Number Input */}
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
                   Invoice No (Bill No)
@@ -826,7 +854,7 @@ export default function InventoryManagement() {
                   type="text"
                   value={invoiceNo}
                   onChange={(e) => setInvoiceNo(e.target.value)}
-                  placeholder="उदा: PO-9942 (ফাঁকা রাখলে অটো হবে)"
+                  placeholder="Example: PO-9942 (ফাঁকা রাখলে অটো হবে)"
                   className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-mono font-medium"
                 />
               </div>
@@ -906,15 +934,11 @@ export default function InventoryManagement() {
                       {products
                         .filter((p) => {
                           const term = product.toLowerCase();
-
                           if (typeof p === "string") {
                             return p.toLowerCase().includes(term);
                           }
-
                           const pName = (p.name || p.product_name || "").toLowerCase();
                           const pSku = (p.sku || "").toLowerCase();
-
-                          // ✅ নাম অথবা SKU — যেকোনো একটাতে ম্যাচ পেলেই দেখাবে
                           return pName.includes(term) || pSku.includes(term);
                         })
                         .map((p, index) => {
@@ -1108,12 +1132,12 @@ export default function InventoryManagement() {
               </div>
             </div>
 
-            {/* Payment Details */}
+            {/* Payment Details & Account Selector */}
             <div className="border border-gray-100 rounded-2xl p-6 bg-gray-50/50">
               <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                 💳 Payment & Due Details
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                     Payment Status <span className="text-red-500">*</span>
@@ -1134,6 +1158,26 @@ export default function InventoryManagement() {
                     </option>
                   </select>
                 </div>
+
+                {/* 👈 নতুন: পেমেন্ট অ্যাকাউন্ট সিলেক্টর (কোন অ্যাকাউন্ট থেকে টাকা দেওয়া হবে) */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Payment Source Account
+                  </label>
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500/20 font-semibold text-gray-700"
+                  >
+                    <option value="">Select Account</option>
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} (৳ {acc.balance})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                     Paid Amount (৳)
@@ -1392,7 +1436,6 @@ export default function InventoryManagement() {
                 <h3 className="font-bold text-gray-800 text-lg">
                   Purchase Details
                 </h3>
-                {/* ✅ পপআপের ভিতরে ইনভয়েস নম্বর প্রদর্শন */}
                 <p className="text-xs text-blue-600 font-mono font-bold mt-0.5">
                   Invoice: {selectedPurchaseForDetails.invoiceNo || selectedPurchaseForDetails.invoice_no || `PO-${selectedPurchaseForDetails.id}`}
                 </p>

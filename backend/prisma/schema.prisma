@@ -56,6 +56,9 @@ model Shop {
   purchaseReturns   PurchaseReturn[]
   capitals          Capital[]
   withdrawals       Withdrawal[]
+  accounts          Account[]
+  transactions      Transaction[]
+  activityLogs      ActivityLog[]
 
   @@map("shops")
 }
@@ -84,6 +87,8 @@ model User {
   createdPurchaseReturns  PurchaseReturn[]
   capitals                Capital[]
   withdrawals             Withdrawal[]
+  transactions            Transaction[]
+  activityLogs            ActivityLog[]
 
   lastLogin DateTime?
 
@@ -619,4 +624,50 @@ model SalePaymentAllocation {
   createdAt         DateTime        @default(now())
 
   @@map("sale_payment_allocations")
+}
+
+model Account {
+  id           Int      @id @default(autoincrement())
+  shopId       Int
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name         String   // যেমন: "Cash in Hand", "Bank"
+  type         String   // "CASH", "BANK", "MOBILE_BANKING"
+  accountNo    String?
+  balance      Float    @default(0)
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  transactions Transaction[]
+  @@map("accounts")
+}
+
+model Transaction {
+  id            Int      @id @default(autoincrement())
+  shopId        Int
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  accountId     Int
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type          String   // "IN" অথবা "OUT"
+  amount        Float
+  category      String   // "SALE", "EXPENSE", "CAPITAL" ইত্যাদি
+  referenceId   Int?
+  note          String?
+  date          String
+  createdById   Int?
+  user          User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  @@map("transactions")
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  shopId    Int
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  @@map("activity_logs")
 }

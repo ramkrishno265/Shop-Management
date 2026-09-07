@@ -47,8 +47,6 @@ export const createSupplier = async (req, res) => {
   }
 };
 
-// ✅ ফিক্স: স্কিমায় Supplier মডেলে `company`/`email` ফিল্ড নেই — আগে এগুলো পাঠানো হলে
-// Prisma validation error দিয়ে request পুরোপুরি fail করত (supplier edit কার্যত ভাঙা ছিল)।
 export const updateSupplier = async (req, res) => {
   try {
     const { id } = req.params;
@@ -81,16 +79,8 @@ export const deleteSupplier = async (req, res) => {
 
 // ==========================================
 // SUPPLIER DUE / PAYMENT CONTROLLERS
-// (CustomerPayment + SalePaymentAllocation-এর mirror — supplier-কে
-//  দেওয়া টাকা একাধিক Purchase-এর due-এর বিপরীতে allocate করা যায়)
 // ==========================================
 
-/**
- * নির্দিষ্ট supplier-এর মোট due এবং due-থাকা purchase-গুলোর লিস্ট।
- * totalDue বের করা হয় সব purchase-এর due_amount যোগ করে —
- * যেটা প্রতিটা payment allocation-এর পর নিচের updatePurchaseDueOnPayment
- * ফাংশনে ইতিমধ্যে আপডেট হয়ে থাকে, তাই এখানে আলাদা করে হিসাব করার দরকার নেই।
- */
 export const getSupplierDue = async (req, res) => {
   try {
     const { supplierId } = req.params;
@@ -126,14 +116,6 @@ export const getSupplierDue = async (req, res) => {
   }
 };
 
-/**
- * একটি supplier payment তৈরি করা এবং সেটা এক বা একাধিক Purchase-এ allocate করা।
- * body: { shopId, supplierId, amount, paymentMethod, notes, allocations: [{purchaseId, amountApplied}, ...] }
- *
- * allocations না দিলে (undefined/empty), সবচেয়ে পুরনো (FIFO) due-থাকা purchase
- * থেকে শুরু করে অটো-অ্যালোকেট করা হয় — যাতে ফ্রন্টএন্ড থেকে খুঁটিনাটি না পাঠালেও
- * শুধু "supplier + amount" দিয়েই payment রেকর্ড করা যায়।
- */
 export const createSupplierPayment = async (req, res) => {
   try {
     const {
@@ -143,7 +125,8 @@ export const createSupplierPayment = async (req, res) => {
       paymentMethod,
       notes,
       allocations,
-      userId = req.user?.id || 1,
+      accountId, // 👈 কোন অ্যাকাউন্ট থেকে টাকা দেওয়া হলো (যেমন: ক্যাশ বা ব্যাংক অ্যাকাউন্ট আইডি)
+      userId = req.user?.id ,
     } = req.body;
 
     const numericShopId = Number(shopId);
@@ -158,6 +141,34 @@ export const createSupplierPayment = async (req, res) => {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // ১. অ্যাকাউন্ট ব্যালেন্স চেক ও ডিডাকশন (যদি নির্দিষ্ট অ্যাকাউন্ট আইডি দেওয়া হয়)
+      let targetAccountId = accountId ? Number(accountId) : null;
+      if (!targetAccountId) {
+        // যদি অ্যাকাউন্ট আইডি না পাঠানো হয়, তবে শপের ডিফল্ট ক্যাশ অ্যাকাউন্ট খুঁজে নেওয়া হবে
+        const defaultAccount = await tx.account.findFirst({
+          where: { shopId: numericShopId, type: 'CASH', isDefault: true }
+        }) || await tx.account.findFirst({
+          where: { shopId: numericShopId }
+        });
+
+        if (!defaultAccount) {
+          throw new Error("এই শপের জন্য কোনো অ্যাকাউন্ট (Account) পাওয়া যায়নি! দয়া করে আগে অ্যাকাউন্ট তৈরি করুন।");
+        }
+        targetAccountId = defaultAccount.id;
+      }
+
+      const account = await tx.account.findUnique({ where: { id: targetAccountId } });
+      if (!account || account.balance < paymentAmount) {
+        throw new Error(`অপর্যাপ্ত ব্যালেন্স! অ্যাকাউন্টে (${account?.name || 'Selected Account'}) পর্যাপ্ত টাকা নেই।`);
+      }
+
+      // অ্যাকাউন্টের ব্যালেন্স কমানো
+      await tx.account.update({
+        where: { id: targetAccountId },
+        data: { balance: { decrement: paymentAmount } }
+      });
+
+      // ২. Supplier Payment রেকর্ড তৈরি
       const payment = await tx.supplierPayment.create({
         data: {
           shopId: numericShopId,
@@ -169,8 +180,21 @@ export const createSupplierPayment = async (req, res) => {
         },
       });
 
-      // allocations ফ্রন্টএন্ড থেকে দেওয়া হলে সেটাই ব্যবহার করা হবে;
-      // নাহলে FIFO ভিত্তিতে (পুরনো due আগে) অটো-অ্যালোকেট করা হবে।
+      // ৩. সেন্ট্রাল ট্রানজাকশন লেজারে এন্ট্রি (OUT)
+      await tx.transaction.create({
+        data: {
+          shopId: numericShopId,
+          accountId: targetAccountId,
+          type: 'OUT',
+          amount: paymentAmount,
+          category: 'SUPPLIER_PAYMENT',
+          referenceId: payment.id,
+          note: `Supplier Payment to ID: ${numericSupplierId} - ${notes || ''}`,
+          date: new Date().toISOString().split('T')[0],
+          createdById: Number(userId),
+        }
+      });
+
       let resolvedAllocations = allocations;
 
       if (!resolvedAllocations || !Array.isArray(resolvedAllocations) || resolvedAllocations.length === 0) {
@@ -187,14 +211,8 @@ export const createSupplierPayment = async (req, res) => {
           resolvedAllocations.push({ purchaseId: p.id, amountApplied: applied });
           remaining -= applied;
         }
-
-        if (remaining > 0) {
-          // দেওয়া টাকার পুরোটা কোনো due-এর সাথে মেলানো গেল না (advance payment) —
-          // এই অতিরিক্ত অংশ কোনো purchase-এ allocate না করেই payment হিসেবে থেকে যাবে।
-        }
       }
 
-      // প্রতিটা allocation অনুযায়ী purchase-এর paid_amount/due_amount/payment_status আপডেট
       for (const a of resolvedAllocations) {
         const purchase = await tx.purchase.findUnique({ where: { id: Number(a.purchaseId) } });
         if (!purchase) {
@@ -250,7 +268,6 @@ export const createSupplierPayment = async (req, res) => {
   }
 };
 
-// নির্দিষ্ট supplier-এর সব payment history
 export const getSupplierPayments = async (req, res) => {
   try {
     const { supplierId } = req.params;
@@ -274,8 +291,6 @@ export const getSupplierPayments = async (req, res) => {
   }
 };
 
-// একটি ভুল হয়ে যাওয়া supplier payment ডিলিট করা — সংশ্লিষ্ট allocation-গুলো
-// reverse করে purchase-এর paid_amount/due_amount আবার আগের মতো ফিরিয়ে দেয়
 export const deleteSupplierPayment = async (req, res) => {
   try {
     const { id } = req.params;
@@ -289,6 +304,20 @@ export const deleteSupplierPayment = async (req, res) => {
 
       if (!payment) {
         throw new Error("Supplier payment খুঁজে পাওয়া যায়নি!");
+      }
+
+      // ১. পেমেন্টের টাকা সংশ্লিষ্ট অ্যাকাউন্ট বা ক্যাশে রিভার্স করা (Increment)
+      const relatedTransaction = await tx.transaction.findFirst({
+        where: { category: 'SUPPLIER_PAYMENT', referenceId: paymentId }
+      });
+
+      if (relatedTransaction) {
+        await tx.account.update({
+          where: { id: relatedTransaction.accountId },
+          data: { balance: { increment: payment.amount } }
+        });
+        // ট্রানজাকশন লেজার থেকে রিমুভ করা
+        await tx.transaction.delete({ where: { id: relatedTransaction.id } });
       }
 
       for (const alloc of payment.allocations) {
@@ -312,7 +341,7 @@ export const deleteSupplierPayment = async (req, res) => {
       await tx.supplierPayment.delete({ where: { id: paymentId } });
     });
 
-    res.status(200).json({ success: true, message: "Supplier payment deleted and dues reversed successfully" });
+    res.status(200).json({ success: true, message: "Supplier payment deleted and account balance reversed successfully" });
   } catch (err) {
     console.error("Delete Supplier Payment Error:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -320,7 +349,7 @@ export const deleteSupplierPayment = async (req, res) => {
 };
 
 // ==========================================
-// PURCHASE CONTROLLERS (FIFO Layer Integrated, Pack-Aware)
+// PURCHASE CONTROLLERS (FIFO, Pack-Aware & Account Integrated)
 // ==========================================
 
 export const getPurchases = async (req, res) => {
@@ -335,12 +364,10 @@ export const getPurchases = async (req, res) => {
       where: { shopId: Number(shopId) },
       include: {
         supplier: true,
-        user: {
-          select: { id: true, name: true, email: true }
-        },
+        user: { select: { id: true, name: true, email: true } },
         purchaseItems: true,
         inventoryLayers: true,
-        pack: true, // 👈 pack info দেখানোর জন্য (কোন প্যাক দিয়ে কেনা হয়েছিল)
+        pack: true,
       },
       orderBy: { id: 'desc' },
     });
@@ -351,25 +378,15 @@ export const getPurchases = async (req, res) => {
   }
 };
 
-/**
- * একটি প্রোডাক্ট/প্যাক-এর জন্য এন্ট্রি করা (quantity, unit_price)-কে
- * সবসময় base-unit ভিত্তিক (baseQty, unitCostPerBase) এ কনভার্ট করে।
- *
- * - standard প্রোডাক্ট: quantity = base unit সংখ্যা, unit_price = per-base-unit দাম। কনভার্সনের দরকার নেই।
- * - pack প্রোডাক্ট + packId দেওয়া হয়েছে: quantity = কয়টা প্যাক কেনা হয়েছে,
- *   unit_price = প্রতি প্যাকের দাম। multiplier দিয়ে ভাগ/গুণ করে base unit-এ আনা হয়।
- */
 const resolvePurchaseConversion = ({ product, pack, enteredQuantity, enteredUnitPrice }) => {
   if (product.inventoryType === 'pack' && pack) {
     const multiplier = Number(pack.multiplier) || 1;
     return {
       baseQty: enteredQuantity * multiplier,
       unitCostPerBase: multiplier > 0 ? enteredUnitPrice / multiplier : enteredUnitPrice,
-      packCount: enteredQuantity, // ProductPack.stock আপডেটের জন্য
+      packCount: enteredQuantity,
     };
   }
-  // standard প্রোডাক্ট, বা pack টাইপ কিন্তু packId দেওয়া হয়নি (তখনও raw ভ্যালুই base ধরা হয়,
-  // যাতে অন্তত পুরনো raw-quantity ফ্লো ভাঙে না — কিন্তু ফ্রন্টএন্ডে packId পাঠানো বাধ্যতামূলক করা উচিত)
   return {
     baseQty: enteredQuantity,
     unitCostPerBase: enteredUnitPrice,
@@ -377,7 +394,6 @@ const resolvePurchaseConversion = ({ product, pack, enteredQuantity, enteredUnit
   };
 };
 
-// ২. নতুন পারচেজ সেভ করা (FIFO Inventory Layer + Pack-aware, Multi-item Supported)
 export const createPurchase = async (req, res) => {
   try {
     const {
@@ -385,15 +401,19 @@ export const createPurchase = async (req, res) => {
       supplier_id,
       date,
       payment_status,
-      items, // 👈 ফ্রন্টএন্ড থেকে পাঠানো items অ্যারে
+      items,
       total_amount,
       paid_amount,
       due_amount,
       note,
-      createdBy = req.user?.id || 1
+      accountId,
+      invoiceNo, // 👈 ১. এখানে invoiceNo রিসিভ করা হলো
+      createdBy = req.user?.id 
     } = req.body;
 
     const numericShopId = Number(shopId);
+    const paidAmountVal = Number(paid_amount) || 0;
+
     if (!numericShopId || !supplier_id) {
       return res.status(400).json({ success: false, message: "Shop ID and Supplier are required" });
     }
@@ -402,15 +422,48 @@ export const createPurchase = async (req, res) => {
       return res.status(400).json({ success: false, message: "At least one purchase item is required" });
     }
 
-    const invoiceNo = `INV-${Date.now().toString().slice(-8)}`;
+    // ২. ইউজার ইনভয়েস দিলে সেটা নেবে, না দিলে অটো-জেনারেট করবে
+    const finalInvoiceNo = invoiceNo && invoiceNo.trim() !== "" 
+      ? invoiceNo.trim() 
+      : `INV-${Date.now().toString().slice(-8)}`;
 
     const newPurchase = await prisma.$transaction(async (tx) => {
+      // ৩. একই শপে ডুপ্লিকেট ইনভয়েস চেক করা (ঐচ্ছিক কিন্তু সুরক্ষার জন্য ভালো)
+      const existingInvoice = await tx.purchase.findFirst({
+        where: { shopId: numericShopId, invoiceNo: finalInvoiceNo }
+      });
+      if (existingInvoice) {
+        throw new Error(`ইনভয়েস নম্বর "${finalInvoiceNo}" ইতিমধ্যে বিদ্যমান রয়েছে!`);
+      }
+
+      // ১. যদি paid_amount > 0 হয়, তবে অ্যাকাউন্ট ব্যালেন্স চেক এবং কাটতে হবে
+      let targetAccountId = null;
+      if (paidAmountVal > 0) {
+        targetAccountId = accountId ? Number(accountId) : null;
+        if (!targetAccountId) {
+          const defaultAccount = await tx.account.findFirst({
+            where: { shopId: numericShopId, type: 'CASH', isDefault: true }
+          }) || await tx.account.findFirst({ where: { shopId: numericShopId } });
+
+          if (!defaultAccount) {
+            throw new Error("এই শপের জন্য কোনো অ্যাকাউন্ট পাওয়া যায়নি! পেমেন্ট করার জন্য অ্যাকাউন্ট প্রয়োজন।");
+          }
+          targetAccountId = defaultAccount.id;
+        }
+
+        const account = await tx.account.findUnique({ where: { id: targetAccountId } });
+        if (!account || account.balance < paidAmountVal) {
+          throw new Error(`অপর্যাপ্ত ব্যালেন্স! অ্যাকাউন্টে (${account?.name || 'Selected Account'}) পর্যাপ্ত টাকা নেই।`);
+        }
+
+        await tx.account.update({
+          where: { id: targetAccountId },
+          data: { balance: { decrement: paidAmountVal } }
+        });
+      }
+
       let calculatedTotal = 0;
       const purchaseItemsData = [];
-      const inventoryLayersData = [];
-      const productUpdates = [];
-      const stockLogsData = [];
-      const packUpdates = [];
 
       for (const item of items) {
         let targetProductId = Number(item.productId);
@@ -458,8 +511,6 @@ export const createPurchase = async (req, res) => {
           totalPrice: itemTotal,
         });
 
-        // সাময়িক পারচেজ অবজেক্টের জন্য বেস ইউনিট কোয়ান্টিটি হিসাব রাখা
-        // (নিচে purchase তৈরির সময় মূল data-তে এটি হ্যান্ডেল করা হবে)
         item._baseQty = baseQty;
         item._unitCostPerBase = unitCostPerBase;
         item._packCount = packCount;
@@ -467,10 +518,10 @@ export const createPurchase = async (req, res) => {
         item._packRecord = packRecord;
       }
 
-      // মূল Purchase রেকর্ড তৈরি
+      // মূল Purchase রেকর্ড তৈরি (এখানে finalInvoiceNo ব্যবহার করা হয়েছে)
       const purchase = await tx.purchase.create({
         data: {
-          invoiceNo,
+          invoiceNo: finalInvoiceNo,
           shopId: numericShopId,
           supplier_id: Number(supplier_id),
           date: date || new Date().toISOString().split('T')[0],
@@ -479,25 +530,34 @@ export const createPurchase = async (req, res) => {
           quantity: items.reduce((acc, curr) => acc + Number(curr.quantity), 0),
           unit_price: items.length === 1 ? Number(items[0].unit_price) : 0,
           total_amount: Number(total_amount) || calculatedTotal,
-          paid_amount: Number(paid_amount) || 0,
+          paid_amount: paidAmountVal,
           due_amount: Number(due_amount) || 0,
           note: note || "",
           createdBy: Number(createdBy),
           packId: items.length === 1 && items[0].packId ? Number(items[0].packId) : null,
           baseUnitQuantity: items.reduce((acc, curr) => acc + curr._baseQty, 0),
-
-          purchaseItems: {
-            create: purchaseItemsData
-          }
+          purchaseItems: { create: purchaseItemsData }
         },
-        include: {
-          supplier: true,
-          purchaseItems: true,
-          pack: true,
-        }
+        include: { supplier: true, purchaseItems: true, pack: true }
       });
 
-      // প্রতিটা আইটেমের জন্য ইনভেন্টরি লেয়ার, স্টক এবং লগ আপডেট
+      // পেমেন্ট করা হয়ে থাকলে সেন্ট্রাল ট্রানজাকশন লেজারে এন্ট্রি (OUT)
+      if (paidAmountVal > 0 && targetAccountId) {
+        await tx.transaction.create({
+          data: {
+            shopId: numericShopId,
+            accountId: targetAccountId,
+            type: 'OUT',
+            amount: paidAmountVal,
+            category: 'PURCHASE',
+            referenceId: purchase.id,
+            note: `Purchase Payment for Invoice: ${finalInvoiceNo}`,
+            date: date || new Date().toISOString().split('T')[0],
+            createdById: Number(createdBy),
+          }
+        });
+      }
+
       for (const item of items) {
         await tx.inventoryLayer.create({
           data: {
@@ -536,7 +596,7 @@ export const createPurchase = async (req, res) => {
             quantityChanged: item._baseQty,
             previousStock: previousStock,
             newStock: newStock,
-            note: `Purchase Invoice: ${invoiceNo}${item._packRecord ? ` (Pack: ${item._packRecord.packName} x${item._packCount})` : ''}`,
+            note: `Purchase Invoice: ${finalInvoiceNo}${item._packRecord ? ` (Pack: ${item._packRecord.packName} x${item._packCount})` : ''}`,
           },
         });
       }
@@ -547,14 +607,13 @@ export const createPurchase = async (req, res) => {
       timeout: 15000
     });
 
-    res.status(201).json({ success: true, message: 'Purchase saved and FIFO inventory layer created successfully', data: newPurchase });
+    res.status(201).json({ success: true, message: 'Purchase saved and account/inventory updated successfully', data: newPurchase });
   } catch (err) {
     console.error("Create Purchase Error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ৩. পারচেজ আপডেট করা (PUT) — pack-aware, একই transaction-এ atomic
 export const updatePurchase = async (req, res) => {
   try {
     const { id } = req.params;
@@ -587,7 +646,7 @@ export const updatePurchase = async (req, res) => {
 
       const firstItem = existingPurchase.purchaseItems[0];
       if (!firstItem || !firstItem.productId) {
-        throw new Error("এই পারচেজের সাথে কোনো প্রোডাক্ট লিংক করা নেই, আপডেট করা সম্ভব নয়।");
+        throw new Error("এই পারচেজের সাথে কোনো প্রোডাক্ট লিংক করা নেই।");
       }
 
       const productRecord = await tx.product.findUnique({ where: { id: firstItem.productId } });
@@ -604,10 +663,6 @@ export const updatePurchase = async (req, res) => {
         }
       }
 
-      if (productRecord.inventoryType === 'pack' && !packRecord) {
-        throw new Error("এটি একটি Pack প্রোডাক্ট — কোন প্যাক দিয়ে কেনা হয়েছে তা নির্বাচন করা আবশ্যক!");
-      }
-
       const enteredQuantity = quantity !== undefined ? Number(quantity) : Number(existingPurchase.quantity);
       const enteredUnitPrice = unit_price !== undefined ? Number(unit_price) : Number(existingPurchase.unit_price);
       const parsedTotalAmount = total_amount !== undefined ? Number(total_amount) : Number(existingPurchase.total_amount);
@@ -622,10 +677,6 @@ export const updatePurchase = async (req, res) => {
       const oldBaseQty = Number(existingPurchase.baseUnitQuantity) || 0;
       const baseQtyDifference = newBaseQty - oldBaseQty;
 
-      // ⚠️ NOTE: এই purchase-এ যদি আগে থেকে কোনো SupplierPayment allocate করা থাকে,
-      // paid_amount এখানে সরাসরি overwrite করলে সেই allocation history-র সাথে
-      // out-of-sync হয়ে যেতে পারে। total_amount কমানোর সময় paid_amount যেন কখনো
-      // total_amount-কে ছাড়িয়ে না যায় সেটা এখানে গার্ড করা হলো।
       const safePaidAmount = paid_amount !== undefined
         ? Math.min(Number(paid_amount), parsedTotalAmount)
         : Math.min(Number(existingPurchase.paid_amount), parsedTotalAmount);
@@ -633,7 +684,6 @@ export const updatePurchase = async (req, res) => {
         ? Number(due_amount)
         : Math.max(0, parsedTotalAmount - safePaidAmount);
 
-      // পারচেজ রেকর্ড আপডেট
       const updated = await tx.purchase.update({
         where: { id: purchaseId },
         data: {
@@ -653,7 +703,6 @@ export const updatePurchase = async (req, res) => {
         include: { supplier: true, purchaseItems: true, pack: true },
       });
 
-      // সংশ্লিষ্ট ইনভেন্টরি লেয়ার আপডেট (base-unit ভিত্তিক)
       const targetLayer = await tx.inventoryLayer.findFirst({
         where: { purchaseId: purchaseId }
       });
@@ -661,9 +710,7 @@ export const updatePurchase = async (req, res) => {
       if (targetLayer) {
         const consumedQty = Number(targetLayer.initialQty) - Number(targetLayer.remainingQty);
         if (consumedQty > newBaseQty) {
-          throw new Error(
-            `এই পারচেজ থেকে ইতিমধ্যে ${consumedQty} ইউনিট বিক্রি হয়ে গেছে, যা নতুন quantity (${newBaseQty}) থেকে কম করা যাবে না।`
-          );
+          throw new Error(`এই পারচেজ থেকে ইতিমধ্যে ${consumedQty} ইউনিট বিক্রি হয়ে গেছে, quantity কমানো যাবে না।`);
         }
         const newRemainingQty = newBaseQty - consumedQty;
 
@@ -677,7 +724,6 @@ export const updatePurchase = async (req, res) => {
         });
       }
 
-      // Product স্টক atomic adjust (base-unit ডিফারেন্স দিয়ে, raw quantity দিয়ে না)
       const previousStock = Number(productRecord.quantity) || 0;
       const newStock = Math.max(0, previousStock + baseQtyDifference);
 
@@ -689,7 +735,6 @@ export const updatePurchase = async (req, res) => {
         },
       });
 
-      // পুরনো ও নতুন প্যাক আলাদা হলে দুই জায়গার stock ঠিক করা; একই হলে diff apply করা
       const oldPackId = existingPurchase.packId;
       const oldPackCount = Number(existingPurchase.quantity) || 0;
 
@@ -727,7 +772,7 @@ export const updatePurchase = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Purchase updated and FIFO inventory layer adjusted successfully!",
+      message: "Purchase updated successfully!",
       data: updatedPurchase,
     });
   } catch (err) {
@@ -736,8 +781,6 @@ export const updatePurchase = async (req, res) => {
   }
 };
 
-// ৪. পারচেজ ডিলিট করা (DELETE) — এখন স্টক ও pack-stock reverse করে,
-// এবং লেয়ার থেকে ইতিমধ্যে বিক্রি হয়ে যাওয়া অংশ থাকলে ডিলিট আটকায় (data-integrity সেফটি)
 export const deletePurchase = async (req, res) => {
   try {
     const { id } = req.params;
@@ -753,33 +796,32 @@ export const deletePurchase = async (req, res) => {
         throw new Error("Purchase record not found");
       }
 
-      // ⚠️ NEW GUARD: এই purchase-এর বিপরীতে যদি ইতিমধ্যে কোনো SupplierPayment
-      // allocate করা থাকে, তাহলে ডিলিট করলে সেই payment history orphan হয়ে যাবে
-      // (foreign key onDelete: Cascade থাকায় allocation রো নিজেও মুছে যাবে, কিন্তু
-      // supplier payment-এর টাকাটা তখন কোনো purchase-এর সাথে ম্যাপড থাকবে না)।
       const existingAllocations = await tx.purchasePaymentAllocation.findMany({
         where: { purchaseId },
       });
       if (existingAllocations.length > 0) {
-        const allocatedTotal = existingAllocations.reduce((sum, a) => sum + Number(a.amountApplied), 0);
-        throw new Error(
-          `এই পারচেজের বিপরীতে ইতিমধ্যে ${allocatedTotal} টাকা supplier payment allocate করা আছে, তাই এটি ডিলিট করা যাবে না। (আগে সংশ্লিষ্ট payment allocation বাতিল করুন)`
-        );
+        throw new Error("এই পারচেজের বিপরীতে supplier payment allocate করা আছে, তাই এটি ডিলিট করা যাবে না।");
+      }
+
+      // যদি এই পারচেজের বিপরীতে কোনো পেমেন্ট ক্যাশ থেকে পরিশোধ করা হয়ে থাকে, তবে তা অ্যাকাউন্টে রিভার্স করতে হবে
+      const relatedTransaction = await tx.transaction.findFirst({
+        where: { category: 'PURCHASE', referenceId: purchaseId }
+      });
+
+      if (relatedTransaction) {
+        await tx.account.update({
+          where: { id: relatedTransaction.accountId },
+          data: { balance: { increment: existingPurchase.paid_amount } }
+        });
+        await tx.transaction.delete({ where: { id: relatedTransaction.id } });
       }
 
       const layer = await tx.inventoryLayer.findFirst({ where: { purchaseId } });
 
-      // ✅ আগে delete শুধু purchase রো মুছত — product.quantity, pack.stock, বা
-      // InventoryLayer কিছুই reverse হতো না, ফলে ডিলিটের পরও স্টক বাড়তি থেকে যেত।
       if (layer) {
         const consumedQty = Number(layer.initialQty) - Number(layer.remainingQty);
         if (consumedQty > 0) {
-          // এই লেয়ার থেকে ইতিমধ্যে কিছু বিক্রি হয়ে গেছে — সেই sale-এর cost এই লেয়ারের
-          // উপর নির্ভরশীল, তাই layer/purchase মুছে ফেললে ঐ পুরনো sale-এর cost history
-          // ভেঙে যাবে। নিরাপদ না হওয়া পর্যন্ত ডিলিট block করা হলো।
-          throw new Error(
-            `এই পারচেজ থেকে ${consumedQty} ইউনিট ইতিমধ্যে বিক্রি হয়ে গেছে, তাই এটি ডিলিট করা যাবে না। (রিভার্স করতে হলে আগে সংশ্লিষ্ট sale বাতিল করুন)`
-          );
+          throw new Error("এই পারচেজ থেকে পণ্য বিক্রি হয়ে গেছে, তাই এটি ডিলিট করা যাবে না।");
         }
 
         const productRecord = await tx.product.findUnique({ where: { id: layer.productId } });
@@ -818,7 +860,7 @@ export const deletePurchase = async (req, res) => {
       await tx.purchase.delete({ where: { id: purchaseId } });
     });
 
-    res.status(200).json({ success: true, message: 'Purchase deleted successfully' });
+    res.status(200).json({ success: true, message: 'Purchase deleted and financial balances reversed successfully' });
   } catch (err) {
     console.error("Delete Purchase Error:", err);
     res.status(500).json({ success: false, message: err.message });

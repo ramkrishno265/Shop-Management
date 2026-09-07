@@ -1,11 +1,11 @@
-import prisma from "../config/db.js";
+import prisma from '../config/db.js';
 
 // =================================================================
-// ১. অ্যাকাউন্টস সামারি ও ড্যাশবোর্ড মেট্রিকস ফেচ করা (ডেটাবেজ ভিত্তিক)
+// ১. অ্যাকাউন্টস সামারি ও ড্যাশবোর্ড মেট্রিকস ফেচ করা (Account Table ভিত্তিক)
 // =================================================================
 export const getAccountsSummary = async (req, res) => {
   try {
-    const { shopId } = req.query;
+    const shopId = req.query.shopId || req.user?.shopId;
 
     if (!shopId) {
       return res.status(400).json({ success: false, message: "Shop ID প্রয়োজন।" });
@@ -13,98 +13,62 @@ export const getAccountsSummary = async (req, res) => {
 
     const numericShopId = Number(shopId);
 
-    // ১. সেলস ডেটা এবং পেমেন্ট মেথড চেক করা
-    const sales = await prisma.sale.findMany({
-      where: { shopId: numericShopId },
-      select: { grandTotal: true, paidAmount: true, dueAmount: true, paymentMethod: true }
+    // ১. অ্যাকাউন্ট টেবিল থেকে ক্যাশ ও ব্যাংক ব্যালেন্স সরাসরি নেওয়া
+    const accounts = await prisma.account.findMany({
+      where: { shopId: numericShopId }
     });
 
-    const totalSales = sales.reduce((acc, s) => acc + s.grandTotal, 0);
-    const totalReceivable = sales.reduce((acc, s) => acc + s.dueAmount, 0); // মোট পাওনা
+    let cashInHand = 0;
+    let bankBalance = 0;
 
-    // CASH হলে ক্যাশ ইন হ্যান্ডে যাবে, অন্যথায় (BKASH, CARD ইত্যাদি) ব্যাংক/ওয়ালেটে যাবে
-    const cashSalesPaid = sales
-      .filter(s => s.paymentMethod === 'CASH')
-      .reduce((acc, s) => acc + s.paidAmount, 0);
+    accounts.forEach(acc => {
+      if (acc.type === 'CASH') {
+        cashInHand += Number(acc.balance || 0);
+      } else {
+        bankBalance += Number(acc.balance || 0);
+      }
+    });
 
-    const digitalSalesPaid = sales
-      .filter(s => s.paymentMethod && s.paymentMethod !== 'CASH')
-      .reduce((acc, s) => acc + s.paidAmount, 0);
+    // ২. সেলস থেকে মোট বিক্রি ও মোট পাওনা (Receivable)
+    const sales = await prisma.sale.findMany({
+      where: { shopId: numericShopId },
+      select: { grandTotal: true, dueAmount: true }
+    });
 
-    // ২. ক্রয় ও সাপ্লায়ার দেনা
+    const totalSales = sales.reduce((acc, s) => acc + Number(s.grandTotal || 0), 0);
+    const totalReceivable = sales.reduce((acc, s) => acc + Number(s.dueAmount || 0), 0);
+
+    // ৩. ক্রয় ও সাপ্লায়ার দেনা (Payable)
     const purchases = await prisma.purchase.findMany({
       where: { shopId: numericShopId },
       select: { due_amount: true }
     });
-    const totalPayable = purchases.reduce((acc, p) => acc + p.due_amount, 0); // মোট দেনা
+    const totalPayable = purchases.reduce((acc, p) => acc + Number(p.due_amount || 0), 0);
 
-    // ৩. দোকান খরচ (Expenses)
+    // ৪. দোকান খরচ (Expenses)
     const expenses = await prisma.expense.findMany({
       where: { shopId: numericShopId },
       select: { amount: true }
     });
-    const totalExpense = expenses.reduce((acc, e) => acc + e.amount, 0);
+    const totalExpense = expenses.reduce((acc, e) => acc + Number(e.amount || 0), 0);
 
-    // ৪. কাস্টমার ও সাপ্লায়ার পেমেন্ট
-    const customerPayments = await prisma.customerPayment.findMany({
-      where: { shopId: numericShopId },
-      select: { amount: true, paymentMethod: true }
-    });
-    const cashCustomerPaid = customerPayments
-      .filter(p => p.paymentMethod === 'CASH')
-      .reduce((acc, p) => acc + p.amount, 0);
-
-    const digitalCustomerPaid = customerPayments
-      .filter(p => p.paymentMethod && p.paymentMethod !== 'CASH')
-      .reduce((acc, p) => acc + p.amount, 0);
-
-    const supplierPayments = await prisma.supplierPayment.findMany({
-      where: { shopId: numericShopId },
-      select: { amount: true, paymentMethod: true }
-    });
-    const totalSupplierCashPaid = supplierPayments
-      .filter(p => p.paymentMethod === 'CASH')
-      .reduce((acc, sp) => acc + sp.amount, 0);
-
-    // ৫. ডেটাবেজ থেকে ক্যাপিটাল (মূলধন ইনভেস্ট) ফেচ করা
+    // ৫. মোট মূলধন ইনভেস্ট
     const capitals = await prisma.capital.findMany({
       where: { shopId: numericShopId },
       select: { amount: true }
     });
-    const totalInvestedCapital = capitals.reduce((acc, c) => acc + c.amount, 0);
-
-    // ৬. ডেটাবেজ থেকে উইথড্রল (টাকা উত্তোলন) ফেচ করা
-    const withdrawals = await prisma.withdrawal.findMany({
-      where: { shopId: numericShopId },
-      select: { amount: true, source: true }
-    });
-    const cashWithdraw = withdrawals
-      .filter(w => w.source === 'CASH')
-      .reduce((acc, w) => acc + w.amount, 0);
-
-    const bankWithdraw = withdrawals
-      .filter(w => w.source === 'BANK')
-      .reduce((acc, w) => acc + w.amount, 0);
-
-    // ৭. চূড়ান্ত হিসাব:
-    // ক্যাশ ইন হ্যান্ড = (মূলধন + নগদ বিক্রি + নগদ কাস্টমার পেমেন্ট) - (খরচ + ক্যাশ সাপ্লায়ার পেমেন্ট + ক্যাশ উত্তোলন)
-    const cashInHand = (totalInvestedCapital + cashSalesPaid + cashCustomerPaid) - (totalExpense + totalSupplierCashPaid + cashWithdraw);
-
-    // ব্যাংক ও ওয়ালেট = (ডিজিটাল বিক্রি + ডিজিটাল কাস্টমার পেমেন্ট) - ব্যাংক উত্তোলন
-    const bankBalance = (digitalSalesPaid + digitalCustomerPaid) - bankWithdraw;
+    const totalInvestedCapital = capitals.reduce((acc, c) => acc + Number(c.amount || 0), 0);
 
     return res.status(200).json({
       success: true,
       data: {
-        summary: {
-          cashInHand: Math.max(0, cashInHand),
-          bankBalance: Math.max(0, bankBalance),
-          totalReceivable,
-          totalPayable,
-          totalSales,
-          totalExpense,
-          totalInvestedCapital
-        }
+        cashInHand,
+        bankBalance,
+        totalReceivable,
+        totalPayable,
+        totalSales,
+        totalExpense,
+        totalInvestedCapital
       }
     });
 
@@ -115,32 +79,62 @@ export const getAccountsSummary = async (req, res) => {
 };
 
 // =================================================================
-// ২. মূলধন ইনভেস্ট সেভ করার কন্ট্রোলার
+// ২. মূলধন ইনভেস্ট সেভ করার কন্ট্রোলার (Account & Transaction Integrated)
 // =================================================================
 export const addCapital = async (req, res) => {
   try {
-    const { amount, note, date } = req.body;
-    const shopId = req.user?.shopId;
-    const userId = req.user?.id;
+    const { amount, accountId, note, date } = req.body;
+    const shopId = req.user?.shopId || req.body.shopId;
+    const userId = req.user?.id || 1;
 
-    if (!shopId || !amount) {
-      return res.status(400).json({ success: false, message: "প্রয়োজনীয় তথ্য অনুপস্থিত।" });
+    if (!shopId || !amount || !accountId) {
+      return res.status(400).json({ success: false, message: "প্রয়োজনীয় তথ্য (Shop ID, Amount, Account ID) অনুপস্থিত।" });
     }
 
-    const capital = await prisma.capital.create({
-      data: {
-        shopId: Number(shopId),
-        userId: Number(userId),
-        amount: Number(amount),
-        note: note || "ব্যক্তিগত মূলধন ইনভেস্ট",
-        date: date || new Date().toISOString().split('T')[0]
-      }
+    const numericAmount = Number(amount);
+    const numericShopId = Number(shopId);
+    const numericAccountId = Number(accountId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // ১. ক্যাপিটাল রেকর্ড তৈরি
+      const capital = await tx.capital.create({
+        data: {
+          shopId: numericShopId,
+          userId: Number(userId),
+          amount: numericAmount,
+          note: note || "ব্যক্তিগত মূলধন ইনভেস্ট",
+          date: date || new Date().toISOString().split('T')[0]
+        }
+      });
+
+      // ২. সংশ্লিষ্ট অ্যাকাউন্টে টাকা যোগ করা (Increment)
+      await tx.account.update({
+        where: { id: numericAccountId },
+        data: { balance: { increment: numericAmount } }
+      });
+
+      // ৩. সেন্ট্রাল ট্রানজাকশন লেজারে এন্ট্রি (IN)
+      await tx.transaction.create({
+        data: {
+          shopId: numericShopId,
+          accountId: numericAccountId,
+          type: 'IN',
+          amount: numericAmount,
+          category: 'CAPITAL',
+          referenceId: capital.id,
+          note: `Capital Investment: ${note || 'Personal'}`,
+          date: date || new Date().toISOString().split('T')[0],
+          createdById: Number(userId)
+        }
+      });
+
+      return capital;
     });
 
     return res.status(201).json({
       success: true,
-      message: "মূলধন সফলভাবে যুক্ত হয়েছে!",
-      data: capital
+      message: "মূলধন সফলভাবে যুক্ত হয়েছে!",
+      data: result
     });
   } catch (error) {
     console.error("Add Capital Error:", error);
@@ -149,33 +143,69 @@ export const addCapital = async (req, res) => {
 };
 
 // =================================================================
-// ৩. টাকা উত্তোলন (Withdrawal) সেভ করার কন্ট্রোলার
+// ৩. টাকা উত্তোলন (Withdrawal) সেভ করার কন্ট্রোলার (Account & Transaction Integrated)
 // =================================================================
 export const addWithdrawal = async (req, res) => {
   try {
-    const { amount, source, note, date } = req.body;
-    const shopId = req.user?.shopId;
-    const userId = req.user?.id;
+    const { amount, accountId, note, date } = req.body;
+    const shopId = req.user?.shopId || req.body.shopId;
+    const userId = req.user?.id || 1;
 
-    if (!shopId || !amount || !source) {
-      return res.status(400).json({ success: false, message: "প্রয়োজনীয় তথ্য অনুপস্থিত।" });
+    if (!shopId || !amount || !accountId) {
+      return res.status(400).json({ success: false, message: "প্রয়োজনীয় তথ্য (Shop ID, Amount, Account ID) অনুপস্থিত।" });
     }
 
-    const withdrawal = await prisma.withdrawal.create({
-      data: {
-        shopId: Number(shopId),
-        userId: Number(userId),
-        amount: Number(amount),
-        source: source, // 'CASH' অথবা 'BANK'
-        note: note || "মালিকের ব্যক্তিগত উত্তোলন",
-        date: date || new Date().toISOString().split('T')[0]
+    const numericAmount = Number(amount);
+    const numericShopId = Number(shopId);
+    const numericAccountId = Number(accountId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // ১. অ্যাকাউন্ট ব্যালেন্স চেক করা
+      const account = await tx.account.findUnique({ where: { id: numericAccountId } });
+      if (!account || account.balance < numericAmount) {
+        throw new Error(`অপর্যাপ্ত ব্যালেন্স! অ্যাকাউন্টে (${account?.name || 'Selected Account'}) পর্যাপ্ত টাকা নেই।`);
       }
+
+      // ২. উইথড্রল রেকর্ড তৈরি
+      const withdrawal = await tx.withdrawal.create({
+        data: {
+          shopId: numericShopId,
+          userId: Number(userId),
+          amount: numericAmount,
+          source: account.type, // 'CASH' বা 'BANK'
+          note: note || "মালিকের ব্যক্তিগত উত্তোলন",
+          date: date || new Date().toISOString().split('T')[0]
+        }
+      });
+
+      // ৩. অ্যাকাউন্ট থেকে টাকা কমানো (Decrement)
+      await tx.account.update({
+        where: { id: numericAccountId },
+        data: { balance: { decrement: numericAmount } }
+      });
+
+      // ৪. সেন্ট্রাল ট্রানজাকশন লেজারে এন্ট্রি (OUT)
+      await tx.transaction.create({
+        data: {
+          shopId: numericShopId,
+          accountId: numericAccountId,
+          type: 'OUT',
+          amount: numericAmount,
+          category: 'WITHDRAWAL',
+          referenceId: withdrawal.id,
+          note: `Withdrawal: ${note || 'Personal'}`,
+          date: date || new Date().toISOString().split('T')[0],
+          createdById: Number(userId)
+        }
+      });
+
+      return withdrawal;
     });
 
     return res.status(201).json({
       success: true,
-      message: "উত্তোলন সফলভাবে রেকর্ড করা হয়েছে!",
-      data: withdrawal
+      message: "উত্তোলন সফলভাবে রেকর্ড করা হয়েছে!",
+      data: result
     });
   } catch (error) {
     console.error("Add Withdrawal Error:", error);
@@ -184,11 +214,11 @@ export const addWithdrawal = async (req, res) => {
 };
 
 // =================================================================
-// ৪. সকল ট্রানজ্যাকশন (সেলস, এক্সপেন্স, ক্যাপিটাল, উইথড্রল) ফেচ করা
+// ৪. সেন্ট্রাল ট্রানজাকশন লেজার থেকে সকল লেনদেন ফেচ করা
 // =================================================================
 export const getAllTransactions = async (req, res) => {
   try {
-    const { shopId } = req.query;
+    const shopId = req.query.shopId || req.user?.shopId;
 
     if (!shopId) {
       return res.status(400).json({ success: false, message: "Shop ID প্রয়োজন।" });
@@ -196,72 +226,58 @@ export const getAllTransactions = async (req, res) => {
 
     const numericShopId = Number(shopId);
 
-    const [expenses, sales, capitals, withdrawals] = await Promise.all([
-      prisma.expense.findMany({ where: { shopId: numericShopId }, orderBy: { createdAt: 'desc' } }),
-      prisma.sale.findMany({ where: { shopId: numericShopId }, orderBy: { createdAt: 'desc' } }),
-      prisma.capital.findMany({ where: { shopId: numericShopId }, orderBy: { createdAt: 'desc' } }),
-      prisma.withdrawal.findMany({ where: { shopId: numericShopId }, orderBy: { createdAt: 'desc' } })
-    ]);
+    // সেন্ট্রাল ট্রানজাকশন টেবিল থেকে অ্যাকাউন্ট ইনফোসহ সব লেনদেন ফেচ করা
+    const transactions = await prisma.transaction.findMany({
+      where: { shopId: numericShopId },
+      include: {
+        account: { select: { id: true, name: true, type: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
-    const formattedExpenses = expenses.map(e => ({
-      id: `exp-${e.id}`,
-      date: e.createdAt.toISOString().split('T')[0],
-      title: `Expense: ${e.category}`,
-      category: e.category,
-      type: 'EXPENSE',
-      method: 'CASH',
-      amount: e.amount,
-      createdAt: e.createdAt
+    const formattedTransactions = transactions.map(tx => ({
+      id: tx.id,
+      date: tx.date,
+      title: tx.note || tx.category,
+      category: tx.category,
+      type: tx.type, // 'IN' অথবা 'OUT'
+      method: tx.account?.name || 'Cash',
+      amount: tx.amount,
+      account: tx.account,
+      createdAt: tx.createdAt
     }));
-
-    const formattedSales = sales.map(s => ({
-      id: `sale-${s.id}`,
-      date: s.createdAt.toISOString().split('T')[0],
-      title: `Sales Invoice #${s.invoiceNo}`,
-      category: 'Sales',
-      type: 'INCOME',
-      method: s.paymentMethod || 'CASH',
-      amount: s.paidAmount,
-      createdAt: s.createdAt
-    }));
-
-    const formattedCapitals = capitals.map(c => ({
-      id: `cap-${c.id}`,
-      date: c.date,
-      title: `Capital Investment: ${c.note || 'Personal'}`,
-      category: 'Capital',
-      type: 'INCOME',
-      method: 'CASH',
-      amount: c.amount,
-      createdAt: c.createdAt
-    }));
-
-    const formattedWithdrawals = withdrawals.map(w => ({
-      id: `wd-${w.id}`,
-      date: w.date,
-      title: `Withdrawal (${w.source}): ${w.note || 'Personal'}`,
-      category: 'Withdrawal',
-      type: 'EXPENSE',
-      method: w.source,
-      amount: w.amount,
-      createdAt: w.createdAt
-    }));
-
-    // সব ট্রানজ্যাকশন একসাথে মার্চ করে ডেট অনুযায়ী সাজানো
-    const allTransactions = [
-      ...formattedExpenses,
-      ...formattedSales,
-      ...formattedCapitals,
-      ...formattedWithdrawals
-    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return res.status(200).json({
       success: true,
-      data: allTransactions
+      data: formattedTransactions
     });
 
   } catch (error) {
     console.error("Transactions Fetch Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// শপের সকল অ্যাকাউন্ট ফেচ করা
+export const getShopAccounts = async (req, res) => {
+  try {
+    const shopId = req.query.shopId || req.user?.shopId;
+
+    if (!shopId) {
+      return res.status(400).json({ success: false, message: "Shop ID প্রয়োজন।" });
+    }
+
+    const accounts = await prisma.account.findMany({
+      where: { shopId: Number(shopId) },
+      orderBy: { id: 'asc' }
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: accounts
+    });
+  } catch (error) {
+    console.error("Get Accounts Error:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

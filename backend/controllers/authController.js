@@ -20,10 +20,46 @@ export const register = async (req, res) => {
 
     let targetShopId = null;
 
+    // 💡 যদি রোল ADMIN হয়, তবে শপ এবং শপের ডিফল্ট অ্যাকাউন্টগুলো একসাথে তৈরি হবে
     if (assignedRole === 'ADMIN') {
       if (!shopName) return res.status(400).json({ message: 'Shop name required for Admin' });
-      const newShop = await prisma.shop.create({ data: { name: shopName } });
-      targetShopId = newShop.id;
+
+      // প্রিজমা ট্রানজাকশন ব্যবহার করে শপ ও ডিফল্ট অ্যাকাউন্ট একসাথে ক্রিয়েট করা হচ্ছে
+      const result = await prisma.$transaction(async (tx) => {
+        // ১. নতুন শপ তৈরি
+        const newShop = await tx.shop.create({ data: { name: shopName } });
+
+        // ২. নতুন শপের জন্য ডিফল্ট অ্যাকাউন্টগুলো তৈরি
+        await tx.account.createMany({
+          data: [
+            {
+              shopId: newShop.id,
+              name: 'Cash in Hand',
+              type: 'CASH',
+              isDefault: true,
+              balance: 0,
+            },
+            {
+              shopId: newShop.id,
+              name: 'Bkash Merchant',
+              type: 'MOBILE_BANKING',
+              isDefault: false,
+              balance: 0,
+            },
+            {
+              shopId: newShop.id,
+              name: 'Bank Account',
+              type: 'BANK',
+              isDefault: false,
+              balance: 0,
+            },
+          ],
+        });
+
+        return newShop;
+      });
+
+      targetShopId = result.id;
     } else {
       if (!shopId) return res.status(400).json({ message: 'Shop ID required' });
       targetShopId = parseInt(shopId);
@@ -34,9 +70,9 @@ export const register = async (req, res) => {
     });
 
     const { password: _, ...userWithoutPassword } = newUser;
-    res.status(201).json({ user: userWithoutPassword });
+    res.status(201).json({ success: true, message: "User registered successfully", user: userWithoutPassword });
   } catch (error) {
-    console.error(error); // টার্মিনালে আসল এররটি দেখতে পাবেন
+    console.error("Register Error:", error);
     res.status(500).json({ message: 'Database Error', details: error.message });
   }
 };

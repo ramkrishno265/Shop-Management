@@ -13,7 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  ShieldCheck
+  ShieldCheck,
+  ArrowRightLeft,
+  Smartphone
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -24,37 +26,35 @@ export default function AccountsPage() {
   const currentShopId = storedUser?.shopId || 1;
 
   const [loading, setLoading] = useState(false);
-  const [capitalSubmitting, setCapitalSubmitting] = useState(false);
-  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'income' | 'expense'
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'INCOME' | 'OUT'
   const [searchTerm, setSearchTerm] = useState('');
 
   // পেজিনেশন স্টেট
   const [itemsPerPage, setItemsPerPage] = useState(15);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // মূলধন (Capital) ফরম স্টেট
-  const [capitalAmount, setCapitalAmount] = useState('');
-  const [capitalNote, setCapitalNote] = useState('');
-
-  // উইথড্রল (Withdrawal) ফরম স্টেট
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawSource, setWithdrawSource] = useState('CASH'); // 'CASH' or 'BANK'
-  const [withdrawNote, setWithdrawNote] = useState('');
-
-  // সামারি ও ট্রানজ্যাকশন স্টেট
+  // ডাটা স্টেটস
+  const [accounts, setAccounts] = useState([]);
   const [summary, setSummary] = useState({
-    cashInHand: 0,
-    bankBalance: 0,
+    totalBalance: 0,
     totalReceivable: 0,
     totalPayable: 0,
     totalSales: 0,
     totalExpense: 0,
     totalInvestedCapital: 0
   });
-
   const [transactions, setTransactions] = useState([]);
+
+  // ফরম স্টেটস
+  const [capitalAmount, setCapitalAmount] = useState('');
+  const [capitalAccountId, setCapitalAccountId] = useState('');
+  const [capitalNote, setCapitalNote] = useState('');
+
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawAccountId, setWithdrawAccountId] = useState('');
+  const [withdrawNote, setWithdrawNote] = useState('');
 
   useEffect(() => {
     if (currentShopId) {
@@ -69,18 +69,27 @@ export default function AccountsPage() {
     try {
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [summaryRes, txRes] = await Promise.all([
+      // আপনার ব্যাকএন্ড রাউটের সাথে মিলিয়ে এন্ডপয়েন্টগুলো সেট করবেন
+      const [accRes, summaryRes, txRes] = await Promise.all([
+        fetch(`${API_URL}/accounts?shopId=${currentShopId}`, { headers }),
         fetch(`${API_URL}/accounts/summary?shopId=${currentShopId}`, { headers }),
         fetch(`${API_URL}/accounts/transactions?shopId=${currentShopId}`, { headers })
       ]);
 
+      const accData = await accRes.json();
       const summaryData = await summaryRes.json();
       const txData = await txRes.json();
 
+      if (accData.success) {
+        setAccounts(accData.data);
+        if (accData.data.length > 0) {
+          setCapitalAccountId(accData.data[0].id);
+          setWithdrawAccountId(accData.data[0].id);
+        }
+      }
+
       if (summaryData.success) {
-        setSummary(summaryData.data.summary);
-      } else {
-        setErrorMsg(summaryData.message || 'সামারি লোড করতে সমস্যা হয়েছে।');
+        setSummary(summaryData.data);
       }
 
       if (txData.success) {
@@ -94,15 +103,15 @@ export default function AccountsPage() {
     }
   };
 
-  // মূলধন ইনভেস্ট সাবমিট (Backend API)
+  // মূলধন ইনভেস্ট সাবমিট
   const handleAddCapital = async (e) => {
     e.preventDefault();
-    if (!capitalAmount || Number(capitalAmount) <= 0) {
-      alert('দয়া করে সঠিক মূলধনের পরিমাণ লিখুন।');
+    if (!capitalAmount || Number(capitalAmount) <= 0 || !capitalAccountId) {
+      alert('সঠিক পরিমাণ এবং অ্যাকাউন্ট নির্বাচন করুন।');
       return;
     }
 
-    setCapitalSubmitting(true);
+    setSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/accounts/capital`, {
         method: 'POST',
@@ -112,6 +121,7 @@ export default function AccountsPage() {
         },
         body: JSON.stringify({
           amount: Number(capitalAmount),
+          accountId: Number(capitalAccountId),
           note: capitalNote,
           shopId: currentShopId
         })
@@ -122,7 +132,7 @@ export default function AccountsPage() {
         alert('মূলধন সফলভাবে যুক্ত হয়েছে!');
         setCapitalAmount('');
         setCapitalNote('');
-        fetchAccountData(); // ডাটা রিফ্রেশ
+        fetchAccountData();
       } else {
         alert(data.message || 'মূলধন যোগ করতে ব্যর্থ হয়েছে।');
       }
@@ -130,29 +140,26 @@ export default function AccountsPage() {
       console.error("Capital add error:", err);
       alert('নেটওয়ার্ক ত্রুটি ঘটেছে।');
     } finally {
-      setCapitalSubmitting(false);
+      setSubmitting(false);
     }
   };
 
-  // টাকা উত্তোলন (Withdrawal) সাবমিট (Backend API)
+  // টাকা উত্তোলন (Withdrawal) সাবমিট
   const handleAddWithdrawal = async (e) => {
     e.preventDefault();
-    if (!withdrawAmount || Number(withdrawAmount) <= 0) {
-      alert('দয়া করে সঠিক উত্তোলনের পরিমাণ লিখুন।');
+    if (!withdrawAmount || Number(withdrawAmount) <= 0 || !withdrawAccountId) {
+      alert('সঠিক পরিমাণ এবং অ্যাকাউন্ট নির্বাচন করুন।');
       return;
     }
 
     const amt = Number(withdrawAmount);
-    if (withdrawSource === 'CASH' && amt > summary.cashInHand) {
-      alert('পর্যাপ্ত ক্যাশ ইন হ্যান্ড নেই!');
-      return;
-    }
-    if (withdrawSource === 'BANK' && amt > summary.bankBalance) {
-      alert('পর্যাপ্ত ব্যাংক ব্যালেন্স নেই!');
+    const selectedAcc = accounts.find(a => a.id === Number(withdrawAccountId));
+    if (selectedAcc && amt > selectedAcc.balance) {
+      alert(`পর্যাপ্ত ব্যালেন্স নেই! এই অ্যাকাউন্টে আছে: ৳ ${selectedAcc.balance}`);
       return;
     }
 
-    setWithdrawSubmitting(true);
+    setSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/accounts/withdrawal`, {
         method: 'POST',
@@ -162,7 +169,7 @@ export default function AccountsPage() {
         },
         body: JSON.stringify({
           amount: amt,
-          source: withdrawSource,
+          accountId: Number(withdrawAccountId),
           note: withdrawNote,
           shopId: currentShopId
         })
@@ -173,7 +180,7 @@ export default function AccountsPage() {
         alert('টাকা উত্তোলন সফলভাবে রেকর্ড করা হয়েছে!');
         setWithdrawAmount('');
         setWithdrawNote('');
-        fetchAccountData(); // ডাটা রিফ্রেশ
+        fetchAccountData();
       } else {
         alert(data.message || 'উত্তোলন রেকর্ড করতে ব্যর্থ হয়েছে।');
       }
@@ -181,20 +188,18 @@ export default function AccountsPage() {
       console.error("Withdrawal error:", err);
       alert('নেটওয়ার্ক ত্রুটি ঘটেছে।');
     } finally {
-      setWithdrawSubmitting(false);
+      setSubmitting(false);
     }
   };
 
   // ফিল্টারিং ও সার্চ লজিক
   const filteredTransactions = transactions.filter(tx => {
     const matchesTab = 
-      activeTab === 'all' ? true :
-      activeTab === 'income' ? tx.type === 'INCOME' :
-      activeTab === 'expense' ? tx.type === 'EXPENSE' : true;
+      activeTab === 'all' ? true : tx.type === activeTab;
 
     const matchesSearch = 
-      tx.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      tx.category.toLowerCase().includes(searchTerm.toLowerCase());
+      (tx.note || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (tx.category || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesTab && matchesSearch;
   });
@@ -213,16 +218,16 @@ export default function AccountsPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Wallet size={20} /></span>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Accounts & Finance</h1>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Accounts & Finance Hub</h1>
           </div>
-          <p className="text-xs text-slate-500 font-medium pl-9">দোকানের ক্যাশ ড্রয়ার, ব্যাংক ব্যালেন্স, মূলধন এবং আর্থিক লেনদেনের রিয়েল-টাইম হিসাব</p>
+          <p className="text-xs text-slate-500 font-medium pl-9">মাল্টি-অ্যাকাউন্ট ব্যালেন্স, ক্যাশ ফ্লো, মূলধন এবং সেন্ট্রাল ট্রানজাকশন লেজার</p>
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => alert('রিপোর্ট ডাউনলোড ফিচারটি শীঘ্রই আসছে।')}
+            onClick={fetchAccountData}
             className="px-4 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-2xs"
           >
-            <Download size={16} /> রিপোর্ট ডাউনলোড
+            <Download size={16} /> রিফ্রেশ ডেটা
           </button>
         </div>
       </div>
@@ -233,186 +238,190 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* Financial Summary Cards */}
-      {loading ? (
-        <div className="py-16 text-center text-slate-400 flex justify-center items-center gap-2 font-semibold">
-          <Loader2 className="animate-spin text-indigo-600" size={24} /> আর্থিক হিসাব লোড হচ্ছে...
+      {/* ১. মাল্টি-অ্যাকাউন্ট ওভারভিউ কার্ডস (Cash, Bank, Bkash ইত্যাদি) */}
+      <div>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">ফান্ড ও অ্যাকাউন্টসমূহ (Accounts Balance)</h3>
+        {loading ? (
+          <div className="py-8 text-center text-slate-400 flex justify-center items-center gap-2 font-semibold">
+            <Loader2 className="animate-spin text-indigo-600" size={20} /> অ্যাকাউন্ট ব্যালেন্স লোড হচ্ছে...
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {accounts.map((acc) => {
+              let IconComp = Wallet;
+              let badgeColor = "bg-emerald-50 text-emerald-600";
+              if (acc.type === 'BANK') {
+                IconComp = Building2;
+                badgeColor = "bg-blue-50 text-blue-600";
+              } else if (acc.type === 'MOBILE_BANKING') {
+                IconComp = Smartphone;
+                badgeColor = "bg-indigo-50 text-indigo-600";
+              }
+
+              return (
+                <div key={acc.id} className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3 hover:border-indigo-300 transition group">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-slate-700">{acc.name}</span>
+                    <div className={`p-2.5 rounded-2xl group-hover:scale-110 transition ${badgeColor}`}>
+                      <IconComp size={20} />
+                    </div>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 font-mono">৳ {Number(acc.balance || 0).toLocaleString()}</h2>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1 block">
+                      Type: {acc.type} {acc.accountNo ? `(${acc.accountNo})` : ''}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ২. ফাইন্যান্সিয়াল সামারি কার্ডস */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">মোট মূলধন (Capital)</span>
+          <h2 className="text-2xl font-black text-indigo-600 font-mono">৳ {(summary.totalInvestedCapital || 0).toLocaleString()}</h2>
+          <span className="text-[11px] text-slate-500 font-semibold">ব্যবসায়ে মোট বিনিয়োগ</span>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-          {/* Cash in Hand */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition group">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ক্যাশ ইন হ্যান্ড</span>
-              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:scale-110 transition"><Wallet size={22} /></div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900">৳ {summary.cashInHand.toLocaleString()}</h2>
-              <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-                <ShieldCheck size={13} /> ড্রয়ারে বর্তমান ক্যাশ
-              </span>
-            </div>
-          </div>
 
-          {/* Capital */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition group">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">মোট মূলধন</span>
-              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl group-hover:scale-110 transition"><PiggyBank size={22} /></div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-indigo-600">৳ {summary.totalInvestedCapital.toLocaleString()}</h2>
-              <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-1">
-                <TrendingUp size={13} className="text-indigo-500" /> ইনভেস্টেড ক্যাপিটাল
-              </span>
-            </div>
-          </div>
-
-          {/* Bank & Wallet */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition group">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ব্যাংক ও ওয়ালেট</span>
-              <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:scale-110 transition"><Building2 size={22} /></div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900">৳ {summary.bankBalance.toLocaleString()}</h2>
-              <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1 mt-1">
-                বিকাশ, নগদ ও ব্যাংক
-              </span>
-            </div>
-          </div>
-
-          {/* Receivable */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition group">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">মোট পাওনা</span>
-              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:scale-110 transition"><ArrowDownLeft size={22} /></div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-emerald-600">৳ {summary.totalReceivable.toLocaleString()}</h2>
-              <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-1">
-                কাস্টমারদের নিকট পাওনা
-              </span>
-            </div>
-          </div>
-
-          {/* Payable */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition group">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">মোট দেনা</span>
-              <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl group-hover:scale-110 transition"><ArrowUpRight size={22} /></div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-rose-600">৳ {summary.totalPayable.toLocaleString()}</h2>
-              <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-1">
-                সাপ্লায়ারদের বকেয়া
-              </span>
-            </div>
-          </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">মোট বিক্রি (Sales)</span>
+          <h2 className="text-2xl font-black text-slate-900 font-mono">৳ {(summary.totalSales || 0).toLocaleString()}</h2>
+          <span className="text-[11px] text-emerald-600 font-semibold">রেভিনিউ জেনারেটেড</span>
         </div>
-      )}
 
-      {/* Forms Section: Capital & Withdrawal */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">মোট পাওনা (Receivable)</span>
+          <h2 className="text-2xl font-black text-emerald-600 font-mono">৳ {(summary.totalReceivable || 0).toLocaleString()}</h2>
+          <span className="text-[11px] text-slate-500 font-semibold">কাস্টমার ডিউ</span>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">মোট দেনা (Payable)</span>
+          <h2 className="text-2xl font-black text-rose-600 font-mono">৳ {(summary.totalPayable || 0).toLocaleString()}</h2>
+          <span className="text-[11px] text-slate-500 font-semibold">সাপ্লায়ার ডিউ</span>
+        </div>
+      </div>
+
+      {/* ৩. ফরম সেকশন: মূলধন ও উত্তোলন */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
-        {/* ১. মূলধন ইনভেস্ট ফরম */}
+        {/* মূলধন ইনভেস্ট ফরম */}
         <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-5">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
             <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><PiggyBank size={20} /></div>
             <div>
               <h2 className="text-sm font-extrabold text-slate-900">মূলধন ইনভেস্ট করুন (Add Capital)</h2>
-              <p className="text-[11px] text-slate-500">দোকানে নতুন ক্যাশ বা মূলধন যুক্ত করুন</p>
+              <p className="text-[11px] text-slate-500">দোকানে নতুন মূলধন এনে নির্দিষ্ট অ্যাকাউন্টে যুক্ত করুন</p>
             </div>
           </div>
 
           <form onSubmit={handleAddCapital} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">টাকার পরিমাণ (৳)</label>
-              <input
-                type="number"
-                value={capitalAmount}
-                onChange={(e) => setCapitalAmount(e.target.value)}
-                placeholder="যেমন: ৫০০০০"
-                className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">অ্যাকাউন্ট সিলেক্ট করুন</label>
+                <select
+                  value={capitalAccountId}
+                  onChange={(e) => setCapitalAccountId(e.target.value)}
+                  className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none font-semibold text-slate-700"
+                >
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.name} (৳ {acc.balance})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">পরিমাণ (৳)</label>
+                <input
+                  type="number"
+                  value={capitalAmount}
+                  onChange={(e) => setCapitalAmount(e.target.value)}
+                  placeholder="যেমন: ৫০০০০"
+                  className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none"
+                />
+              </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">বিবরণ / উৎস</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">নোট / বিবরণ</label>
               <input
                 type="text"
                 value={capitalNote}
                 onChange={(e) => setCapitalNote(e.target.value)}
-                placeholder="যেমন: ব্যক্তিগত মূলধন ইনভেস্ট"
-                className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                placeholder="যেমন: পার্সোনাল ক্যাশ ইনভেস্ট"
+                className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none"
               />
             </div>
             <button 
               type="submit" 
-              disabled={capitalSubmitting}
+              disabled={submitting}
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {capitalSubmitting && <Loader2 size={16} className="animate-spin" />} মূলধন যোগ করুন
+              {submitting && <Loader2 size={16} className="animate-spin" />} মূলধন যোগ করুন
             </button>
           </form>
         </div>
 
-        {/* ২. টাকা উত্তোলন ফরম */}
+        {/* টাকা উত্তোলন ফরম */}
         <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-5">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
             <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl"><ArrowUpRightSquare size={20} /></div>
             <div>
               <h2 className="text-sm font-extrabold text-slate-900">টাকা উত্তোলন করুন (Withdrawal)</h2>
-              <p className="text-[11px] text-slate-500">ব্যক্তিগত প্রয়োজনে ক্যাশ বা ব্যাংক থেকে টাকা তুলুন</p>
+              <p className="text-[11px] text-slate-500">ব্যক্তিগত প্রয়োজনে নির্দিষ্ট অ্যাকাউন্ট থেকে টাকা তুলুন</p>
             </div>
           </div>
 
           <form onSubmit={handleAddWithdrawal} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">উত্তোলনের মাধ্যম</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">অ্যাকাউন্ট সিলেক্ট করুন</label>
                 <select
-                  value={withdrawSource}
-                  onChange={(e) => setWithdrawSource(e.target.value)}
-                  className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition font-semibold"
+                  value={withdrawAccountId}
+                  onChange={(e) => setWithdrawAccountId(e.target.value)}
+                  className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none font-semibold text-slate-700"
                 >
-                  <option value="CASH">ক্যাশ ড্রয়ার (Cash)</option>
-                  <option value="BANK">ব্যাংক/ওয়ালেট (Bank)</option>
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.name} (৳ {acc.balance})</option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">টাকার পরিমাণ (৳)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">পরিমাণ (৳)</label>
                 <input
                   type="number"
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
                   placeholder="যেমন: ৫০০০"
-                  className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition"
+                  className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">বিবরণ / কারণ</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">নোট / কারণ</label>
               <input
                 type="text"
                 value={withdrawNote}
                 onChange={(e) => setWithdrawNote(e.target.value)}
                 placeholder="যেমন: মালিকের ব্যক্তিগত খরচ"
-                className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition"
+                className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none"
               />
             </div>
             <button 
               type="submit" 
-              disabled={withdrawSubmitting}
+              disabled={submitting}
               className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {withdrawSubmitting && <Loader2 size={16} className="animate-spin" />} টাকা উত্তোলন করুন
+              {submitting && <Loader2 size={16} className="animate-spin" />} টাকা উত্তোলন করুন
             </button>
           </form>
         </div>
 
       </div>
 
-      {/* Transactions Section */}
+      {/* ৪. সেন্ট্রাল ট্রানজাকশন লেজার (Transaction Ledger Table) */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden space-y-4">
         
         {/* Table Controls */}
@@ -424,19 +433,19 @@ export default function AccountsPage() {
                 onClick={() => { setActiveTab('all'); setCurrentPage(1); }}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'all' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
               >
-                সকল ট্রানজ্যাকশন
+                সকল লেনদেন
               </button>
               <button
-                onClick={() => { setActiveTab('income'); setCurrentPage(1); }}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'income' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                onClick={() => { setActiveTab('INCOME'); setCurrentPage(1); }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'INCOME' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
               >
-                আয় (Income)
+                টাকা জমা (IN)
               </button>
               <button
-                onClick={() => { setActiveTab('expense'); setCurrentPage(1); }}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'expense' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                onClick={() => { setActiveTab('OUT'); setCurrentPage(1); }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'OUT' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
               >
-                ব্যয় ও উত্তোলন (Expense)
+                টাকা খরচ/প্রদান (OUT)
               </button>
             </div>
 
@@ -460,7 +469,7 @@ export default function AccountsPage() {
             <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="লেনদেন বা বিবরণ খুঁজুন..."
+              placeholder="বিবরণ বা ক্যাটাগরি খুঁজুন..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="w-full pl-11 pr-4 py-2.5 border border-slate-300/80 rounded-2xl text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
@@ -474,9 +483,9 @@ export default function AccountsPage() {
             <thead className="bg-slate-50/70 border-b border-slate-200/60 text-xs font-bold text-slate-500 uppercase tracking-wider">
               <tr>
                 <th className="py-4 px-6">তারিখ</th>
-                <th className="py-4 px-6">লেনদেনের বিবরণ</th>
+                <th className="py-4 px-6">অ্যাকাউন্ট</th>
                 <th className="py-4 px-6">ক্যাটাগরি</th>
-                <th className="py-4 px-6">পেমেন্ট মাধ্যম</th>
+                <th className="py-4 px-6">বিবরণ / নোট</th>
                 <th className="py-4 px-6 text-center">টাইপ</th>
                 <th className="py-4 px-6 text-right">পরিমাণ</th>
               </tr>
@@ -486,24 +495,20 @@ export default function AccountsPage() {
                 currentItems.map((tx) => (
                   <tr key={tx.id} className="hover:bg-slate-50/80 transition">
                     <td className="py-4 px-6 text-slate-500 font-medium">{tx.date}</td>
-                    <td className="py-4 px-6 font-bold text-slate-900">{tx.title}</td>
-                    <td className="py-4 px-6 text-slate-600 font-semibold">{tx.category}</td>
-                    <td className="py-4 px-6">
-                      <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-xl font-bold tracking-wide">
-                        {tx.method}
-                      </span>
-                    </td>
+                    <td className="py-4 px-6 font-bold text-indigo-600">{tx.account?.name || 'Cash in Hand'}</td>
+                    <td className="py-4 px-6 font-semibold text-slate-800">{tx.category}</td>
+                    <td className="py-4 px-6 text-slate-600">{tx.note || '—'}</td>
                     <td className="py-4 px-6 text-center">
                       <span className={`inline-flex px-3 py-1 rounded-full font-extrabold text-[11px] ${
-                        tx.type === 'INCOME' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                        tx.type === 'IN' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700 border border-rose-200/60'
                       }`}>
                         {tx.type}
                       </span>
                     </td>
-                    <td className={`py-4 px-6 text-right font-black text-sm ${
-                      tx.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'
+                    <td className={`py-4 px-6 text-right font-black text-sm font-mono ${
+                      tx.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'
                     }`}>
-                      {tx.type === 'INCOME' ? '+' : '-'} ৳ {tx.amount.toLocaleString()}
+                      {tx.type === 'IN' ? '+' : '-'} ৳ {Number(tx.amount || 0).toLocaleString()}
                     </td>
                   </tr>
                 ))
@@ -519,7 +524,7 @@ export default function AccountsPage() {
         {/* Pagination Controls */}
         <div className="p-5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-600">
           <div>
-            মোট ট্রানজ্যাকশন: <span className="font-bold text-slate-900">{filteredTransactions.length}</span> টি 
+            মোট লেনদেন: <span className="font-bold text-slate-900">{filteredTransactions.length}</span> টি 
             (পেজ <span className="font-bold text-slate-900">{currentPage}</span> / {totalPages})
           </div>
           <div className="flex items-center gap-2">
@@ -535,7 +540,7 @@ export default function AccountsPage() {
               disabled={currentPage === totalPages}
               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl disabled:opacity-40 flex items-center gap-1 font-bold cursor-pointer transition"
             >
-              পরবর্তী <ChevronRight size={16} />
+               পরবর্তী <ChevronRight size={16} />
             </button>
           </div>
         </div>
