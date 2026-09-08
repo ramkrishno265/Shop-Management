@@ -213,12 +213,22 @@ const InventoryPage = () => {
     return total > 0 && total <= (p.lowStockLimit || 5);
   }).length;
 
-  // --- স্টকে থাকা সব প্রোডাক্টের ক্রয়মূল্য (FIFO Unit Cost) অনুযায়ী মোট টাকার পরিমাণ ---
-  const totalStockValue = products.reduce((acc, curr) => {
-    const stockQty = calculateTotalStock(curr);
-    const purchasePrice = Number(curr.purchasePrice) || 0;
-    return acc + stockQty * purchasePrice;
+// নিখুঁত মোট স্টক ভ্যালু হিসাব করার কোড
+  const totalStockValue = products.reduce((acc, product) => {
+    // সেফটি চেক: inventoryLayers অ্যারে কি না নিশ্চিত করা
+    const layers = Array.isArray(product.inventoryLayers) ? product.inventoryLayers : [];
+
+    // প্রতিটি প্রোডাক্টের ইনভেন্টরি লেয়ারগুলোর (remainingQty * unitCost) যোগফল বের করা
+    const productLayerValue = layers.reduce((layerSum, layer) => {
+      const remaining = Number(layer.remainingQty) || 0;
+      const cost = Number(layer.unitCost) || 0;
+      return layerSum + (remaining * cost);
+    }, 0);
+
+    return acc + productLayerValue;
   }, 0);
+
+
 
   // --- Products থেকে ইউনিক ক্যাটাগরি লিস্ট বের করা ---
   const categoryOptions = Array.from(
@@ -507,9 +517,8 @@ const InventoryPage = () => {
                     return (
                       <tr
                         key={product.id}
-                        className={`hover:bg-slate-50/50 transition ${
-                          isChecked ? "bg-slate-50" : ""
-                        }`}
+                        className={`hover:bg-slate-50/50 transition ${isChecked ? "bg-slate-50" : ""
+                          }`}
                       >
                         <td className="p-4 align-middle text-center">
                           <input
@@ -562,11 +571,10 @@ const InventoryPage = () => {
 
                         <td className="p-4 align-middle">
                           <span
-                            className={`px-2.5 py-1 text-xs font-bold rounded-lg inline-block ${
-                              product.status === "ACTIVE"
-                                ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
-                                : "bg-rose-50 text-rose-600 border border-rose-200/50"
-                            }`}
+                            className={`px-2.5 py-1 text-xs font-bold rounded-lg inline-block ${product.status === "ACTIVE"
+                              ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
+                              : "bg-rose-50 text-rose-600 border border-rose-200/50"
+                              }`}
                           >
                             {product.status || "ACTIVE"}
                           </span>

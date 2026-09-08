@@ -27,7 +27,8 @@ export default function InventoryManagement() {
   const [invoiceNo, setInvoiceNo] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [supplierNumber, setSupplierNumber] = useState("");
-  const [date, setDate] = useState("");
+  const getTodayDate = () => new Date().toISOString().split("T")[0];
+  const [date, setDate] = useState(getTodayDate());
   const [paymentStatus, setPaymentStatus] = useState("Paid");
   const [note, setNote] = useState("");
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
@@ -54,8 +55,8 @@ export default function InventoryManagement() {
   const isPackProduct = selectedProduct?.inventoryType === "pack";
   const selectedPack = isPackProduct
     ? (selectedProduct?.packs || []).find(
-        (p) => String(p.id) === String(selectedPackId),
-      )
+      (p) => String(p.id) === String(selectedPackId),
+    )
     : null;
 
   const stagingTotal = Number(quantity) * Number(unitPrice) || 0;
@@ -185,7 +186,7 @@ export default function InventoryManagement() {
   };
 
   // ✅ নতুন: অ্যাকাউন্ট ফেচ করার ফাংশন
- // ✅ অ্যাকাউন্ট ফেচ করার সঠিক ফাংশন
+  // ✅ অ্যাকাউন্ট ফেচ করার সঠিক ফাংশন
   const fetchAccounts = async () => {
     try {
       const token = localStorage.getItem("token") || "";
@@ -198,7 +199,7 @@ export default function InventoryManagement() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const result = await response.json();
-      
+
       if (result.success && Array.isArray(result.data)) {
         setAccounts(result.data);
         // ডিফল্ট ক্যাশ অ্যাকাউন্ট সিলেক্ট করে দেওয়া
@@ -610,7 +611,7 @@ export default function InventoryManagement() {
     setSupplierId("");
     setSupplierNumber("");
     setPaidAmount("");
-    setDate("");
+    setDate(getTodayDate());
     setPaymentStatus("Paid");
     setNote("");
     setProduct("");
@@ -639,11 +640,10 @@ export default function InventoryManagement() {
             setActiveTab("purchase_list");
             resetPurchaseForm();
           }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
-            activeTab === "purchase_list"
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "purchase_list"
               ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
               : "text-gray-600 hover:bg-gray-100/80"
-          }`}
+            }`}
         >
           📋 Purchase List
         </button>
@@ -652,11 +652,10 @@ export default function InventoryManagement() {
             setActiveTab("purchase_add");
             resetPurchaseForm();
           }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
-            activeTab === "purchase_add"
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "purchase_add"
               ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
               : "text-gray-600 hover:bg-gray-100/80"
-          }`}
+            }`}
         >
           {editingPurchaseId ? "✏️ Edit Purchase" : "➕ Add Purchase"}
         </button>
@@ -665,11 +664,10 @@ export default function InventoryManagement() {
             setActiveTab("supplier_list");
             resetSupplierForm();
           }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
-            activeTab === "supplier_list"
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "supplier_list"
               ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
               : "text-gray-600 hover:bg-gray-100/80"
-          }`}
+            }`}
         >
           🏢 Supplier List
         </button>
@@ -678,11 +676,10 @@ export default function InventoryManagement() {
             setActiveTab("supplier_add");
             resetSupplierForm();
           }}
-          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${
-            activeTab === "supplier_add"
+          className={`px-4 py-2.5 rounded-xl font-semibold text-xs tracking-wide transition-all ${activeTab === "supplier_add"
               ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
               : "text-gray-600 hover:bg-gray-100/80"
-          }`}
+            }`}
         >
           {editingSupplierId ? "✏️ Edit Supplier" : "➕ Add Supplier"}
         </button>
@@ -738,7 +735,7 @@ export default function InventoryManagement() {
                   purchases.map((item) => {
                     const items =
                       Array.isArray(item.purchaseItems) &&
-                      item.purchaseItems.length > 0
+                        item.purchaseItems.length > 0
                         ? item.purchaseItems
                         : item.product
                           ? [item]
@@ -791,12 +788,11 @@ export default function InventoryManagement() {
                         </td>
                         <td className="p-4">
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              (item.payment_status || item.paymentStatus) ===
-                              "Paid"
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${(item.payment_status || item.paymentStatus) ===
+                                "Paid"
                                 ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
                                 : "bg-amber-50 text-amber-600 border border-amber-100"
-                            }`}
+                              }`}
                           >
                             {item.payment_status || item.paymentStatus}
                           </span>
@@ -1040,8 +1036,8 @@ export default function InventoryManagement() {
                       ≈ ৳
                       {selectedPack.multiplier > 0
                         ? (
-                            Number(unitPrice) / Number(selectedPack.multiplier)
-                          ).toFixed(2)
+                          Number(unitPrice) / Number(selectedPack.multiplier)
+                        ).toFixed(2)
                         : "0.00"}
                       )
                     </p>
