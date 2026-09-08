@@ -28,11 +28,11 @@ const ShopDashboard = () => {
     cashSales: 0,
     digitalSales: 0,
     totalProfit: 0,
+    totalReturns: 0,
   });
 
   const [expenseData, setExpenseData] = useState(0);
   const [netProfit, setNetProfit] = useState(0);
-  const [cashDrawer, setCashDrawer] = useState(0);
 
   const [expenseCategory, setExpenseCategory] = useState("দোকান ভাড়া");
   const [expenseAmount, setExpenseAmount] = useState("");
@@ -58,30 +58,20 @@ const ShopDashboard = () => {
       }
 
       const [profitRes, expenseRes] = await Promise.all([
-        axios
-          .get(profitUrl, { headers, cache: "no-store" })
-          .catch(() => ({ data: {} })),
-        axios
-          .get(`${API_URL}/expenses?shopId=${currentShopId}`, {
-            headers,
-            cache: "no-store",
-          })
-          .catch(() => ({ data: [] })),
+        axios.get(profitUrl, { headers, cache: "no-store" }).catch(() => ({ data: {} })),
+        axios.get(`${API_URL}/expenses?shopId=${currentShopId}`, { headers, cache: "no-store" }).catch(() => ({ data: [] })),
       ]);
 
       const profitInfo = profitRes.data || {};
-      const expenses = Array.isArray(expenseRes.data)
-        ? expenseRes.data
-        : expenseRes.data.data || [];
+      const expenses = Array.isArray(expenseRes.data) ? expenseRes.data : expenseRes.data.data || [];
 
       const totalSales = Number(profitInfo.totalSale) || 0;
       const totalProfit = Number(profitInfo.totalProfit) || 0;
+      const totalReturns = Number(profitInfo.totalReturn) || 0;
 
       let filteredExpenses = expenses;
       if (filterType === "today") {
-        filteredExpenses = expenses.filter(
-          (e) => e.createdAt && e.createdAt.startsWith(todayStr),
-        );
+        filteredExpenses = expenses.filter((e) => e.createdAt && e.createdAt.startsWith(todayStr));
       } else if (filterType === "custom" && startDate && endDate) {
         filteredExpenses = expenses.filter((e) => {
           if (!e.createdAt) return false;
@@ -90,10 +80,7 @@ const ShopDashboard = () => {
         });
       }
 
-      const totalExpense = filteredExpenses.reduce(
-        (acc, curr) => acc + (Number(curr.amount) || 0),
-        0,
-      );
+      const totalExpense = filteredExpenses.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
       setExpenseData(totalExpense);
 
       const formattedExpenses = filteredExpenses.map((item) => ({
@@ -105,18 +92,14 @@ const ShopDashboard = () => {
       }));
       setExpensesList(formattedExpenses);
 
-      let cash = totalSales;
-      let digital = 0;
-
       setSalesData({
-        totalSales,
-        cashSales: cash,
-        digitalSales: digital,
+        totalSales: totalSales - totalReturns,
+        cashSales: totalSales,
         totalProfit,
+        totalReturns,
       });
 
-      setNetProfit(totalProfit);
-      setCashDrawer(cash - totalExpense);
+      setNetProfit(totalProfit - totalExpense);
     } catch (error) {
       console.error("Error fetching profit/sales data:", error);
     }
@@ -148,7 +131,7 @@ const ShopDashboard = () => {
             amount: Number(expenseAmount),
             note: expenseNote || "",
           },
-          { headers },
+          { headers }
         );
         alert("খরচ সফলভাবে আপডেট করা হয়েছে!");
         setEditingExpenseId(null);
@@ -206,7 +189,7 @@ const ShopDashboard = () => {
             শপ ম্যানেজমেন্ট ড্যাশবোর্ড
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            আপনার ব্যবসার দৈনিক আয়-ব্যয় এবং লাভ-লোকসানের রিয়েল-টাইম হিসাব
+            আপনার ব্যবসার দৈনিক আয়-ব্যয় এবং লাভ-লোকসানের রিয়েল-টাইম হিসাব
           </p>
         </div>
 
@@ -215,9 +198,7 @@ const ShopDashboard = () => {
             <button
               onClick={() => setFilterType("today")}
               className={`flex-1 sm:flex-initial px-5 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all ${
-                filterType === "today"
-                  ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
+                filterType === "today" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               আজকের হিসাব
@@ -225,12 +206,10 @@ const ShopDashboard = () => {
             <button
               onClick={() => setFilterType("custom")}
               className={`flex-1 sm:flex-initial px-5 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all ${
-                filterType === "custom"
-                  ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
+                filterType === "custom" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              তারিখ অনুযায়ী ফিল্টার
+              তারিখ অনুযায়ী ফিল্টার
             </button>
           </div>
 
@@ -263,14 +242,20 @@ const ShopDashboard = () => {
           <div className="flex items-center justify-between relative z-10">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                মোট বিক্রি (Total Sales)
+                নিট বিক্রি (Net Sales)
               </p>
               <h3 className="text-3xl font-extrabold text-slate-900 mt-2">
                 ৳ {salesData?.totalSales ? salesData.totalSales.toLocaleString() : 0}
               </h3>
-              <div className="flex items-center gap-1.5 text-emerald-600 text-xs mt-3 font-semibold bg-emerald-50 w-fit px-2.5 py-1 rounded-full">
-                <ArrowUpRight size={14} />
-                <span>ক্যাশ: ৳ {salesData?.cashSales?.toLocaleString() || 0}</span>
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">
+                  গ্রস: ৳ {salesData?.cashSales?.toLocaleString() || 0}
+                </span>
+                {salesData?.totalReturns > 0 && (
+                  <span className="text-rose-600 text-xs font-semibold bg-rose-50 px-2.5 py-1 rounded-full">
+                    রিটার্ন: -৳ {salesData.totalReturns.toLocaleString()}
+                  </span>
+                )}
               </div>
             </div>
             <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
@@ -312,7 +297,7 @@ const ShopDashboard = () => {
                 ৳ {netProfit.toLocaleString()}
               </h3>
               <p className="text-slate-500 text-xs mt-3 font-medium bg-emerald-50 text-emerald-700 w-fit px-2.5 py-1 rounded-full">
-                মোট প্রফিট: ৳ {salesData?.totalProfit?.toLocaleString() || 0}
+                গ্রস প্রফিট: ৳ {salesData?.totalProfit?.toLocaleString() || 0}
               </p>
             </div>
             <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
@@ -324,7 +309,6 @@ const ShopDashboard = () => {
 
       {/* Expense Form & Recent Expense Table */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Expense Form */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-100 lg:col-span-1 h-fit">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
@@ -391,11 +375,7 @@ const ShopDashboard = () => {
               }`}
             >
               {!isSubmittingExpense && !editingExpenseId && <Plus size={18} />}
-              {isSubmittingExpense
-                ? "⏳ প্রসেসিং হচ্ছে..."
-                : editingExpenseId
-                ? "খরচ আপডেট করুন"
-                : "খরচ যোগ করুন"}
+              {isSubmittingExpense ? "⏳ প্রসেসিং হচ্ছে..." : editingExpenseId ? "খরচ আপডেট করুন" : "খরচ যোগ করুন"}
             </button>
 
             {editingExpenseId && (

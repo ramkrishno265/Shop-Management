@@ -1,4 +1,5 @@
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 // =================================================================
 // ১. অ্যাকাউন্টস সামারি ও ড্যাশবোর্ড মেট্রিকস ফেচ করা (Account Table ভিত্তিক)
@@ -13,7 +14,7 @@ export const getAccountsSummary = async (req, res) => {
 
     const numericShopId = Number(shopId);
 
-    // ১. অ্যাকাউন্ট টেবিল থেকে ক্যাশ ও ব্যাংক ব্যালেন্স সরাসরি নেওয়া
+    // ১. অ্যাকাউন্ট টেবিল থেকে ক্যাশ ও ব্যাংক ব্যালেন্স সরাসরি নেওয়া
     const accounts = await prisma.account.findMany({
       where: { shopId: numericShopId }
     });
@@ -35,8 +36,18 @@ export const getAccountsSummary = async (req, res) => {
       select: { grandTotal: true, dueAmount: true }
     });
 
-    const totalSales = sales.reduce((acc, s) => acc + Number(s.grandTotal || 0), 0);
+    const rawTotalSales = sales.reduce((acc, s) => acc + Number(s.grandTotal || 0), 0);
     const totalReceivable = sales.reduce((acc, s) => acc + Number(s.dueAmount || 0), 0);
+
+    // কাস্টমার রিটার্নগুলোর মোট রিফান্ড অ্যামাউন্ট বের করা (নেট সেলস সঠিক রাখার জন্য)
+    const customerReturns = await prisma.customerReturn.findMany({
+      where: { shopId: numericShopId },
+      select: { refundAmount: true }
+    });
+    const totalCustomerReturns = customerReturns.reduce((acc, r) => acc + Number(r.refundAmount || 0), 0);
+
+    // নেট বিক্রি = মোট বিক্রি - মোট রিটার্ন
+    const totalSales = Math.max(0, rawTotalSales - totalCustomerReturns);
 
     // ৩. ক্রয় ও সাপ্লায়ার দেনা (Payable)
     const purchases = await prisma.purchase.findMany({
@@ -258,7 +269,9 @@ export const getAllTransactions = async (req, res) => {
   }
 };
 
-// শপের সকল অ্যাকাউন্ট ফেচ করা
+// =================================================================
+// ৫. শপের সকল অ্যাকাউন্ট ফেচ করা
+// =================================================================
 export const getShopAccounts = async (req, res) => {
   try {
     const shopId = req.query.shopId || req.user?.shopId;
