@@ -10,6 +10,7 @@ export const createSale = async (req, res) => {
     try {
         const {
             shopId,
+            accountId, // 👈 ফ্রন্টএন্ড থেকে আসা অ্যাকাউন্ট আইডি
             customerId,
             customerName,
             items,
@@ -64,9 +65,6 @@ export const createSale = async (req, res) => {
             });
             const productMap = new Map(products.map(p => [p.id, p]));
 
-            // ✅ একই productId একাধিক cart row-তে (একাধিক pack হিসেবে) থাকতে পারে,
-            // তাই স্টক চেক করার সময় সব row-এর deduction একসাথে যোগ করে দেখা হচ্ছে —
-            // নাহলে প্রতিটা row আলাদাভাবে চেক করলে মোট চাহিদা স্টকের চেয়ে বেশি হয়ে গেলেও ধরা পড়বে না।
             const totalNeededByProduct = new Map();
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
@@ -90,7 +88,6 @@ export const createSale = async (req, res) => {
                 }
             }
 
-            // ✅ প্যাক-লেভেল স্টকও একইভাবে row-ভিত্তিক না ধরে, প্যাক আইডি অনুযায়ী যোগ করে চেক করা হচ্ছে
             const totalNeededByPack = new Map();
             for (let item of items) {
                 const packId = item.packInfo?.id || item.packId;
@@ -186,13 +183,6 @@ export const createSale = async (req, res) => {
                 }
 
                 if (qtyNeeded > 0) {
-                    // ✅ মূল বাগ এখানে ছিল: item.purchasePrice pack-item এর ক্ষেত্রে
-                    // "পুরো প্যাকের ক্রয়মূল্য" (যেমন ৩০ ইউনিটের প্যাক কেনা হয়েছে ৳৩০০ দিয়ে)।
-                    // কিন্তু qtyNeeded থাকে individual UNIT সংখ্যায় (যেমন ৩০)।
-                    // আগে সরাসরি qtyNeeded * fallbackPrice করায় প্রতিটা ইউনিটের দাম
-                    // ভুলভাবে পুরো-প্যাক-দামের সমান ধরা হচ্ছিল (৩০ × ৩০০ = ৳৯,০০০,
-                    // যেখানে আসল কস্ট ছিল মাত্র ৳৩০০)। এখন pack হলে multiplier দিয়ে
-                    // ভাগ করে প্রকৃত প্রতি-ইউনিট ক্রয়মূল্য বের করা হচ্ছে।
                     const isPackItem = Boolean(item.packInfo?.id || item.packId);
                     const packMultiplier = Number(item.multiplier || item.packInfo?.multiplier || 1) || 1;
                     const rawPurchasePrice = Number(item.purchasePrice) || 0;
@@ -229,12 +219,6 @@ export const createSale = async (req, res) => {
 
                 saleItemsData.push(createdSaleItem);
 
-                // প্যাক স্টক আপডেট
-                // ✅ আগে packRecord আলাদা fetch করে তার stock থেকে বিয়োগ করে সরাসরি
-                // সংখ্যা বসানো হতো (`stock: newValue`)। একই পণ্যের ২টা আলাদা pack row
-                // ধারাবাহিকভাবে প্রসেস হলে এতে সমস্যা হতো না (যেহেতু প্যাক আইডি আলাদা),
-                // কিন্তু নিরাপত্তার জন্য (parallel/race-condition এড়াতে) atomic decrement
-                // ব্যবহার করা হচ্ছে, ঠিক প্রোডাক্টের মতোই।
                 if (item.packInfo?.id || item.packId) {
                     const targetPackId = Number(item.packInfo?.id || item.packId);
                     await tx.productPack.update({
@@ -245,23 +229,50 @@ export const createSale = async (req, res) => {
                     });
                 }
 
-                // মূল Product টেবিলের স্টক কমানো
-                // ✅ আগে এখানে ছিল মূল বাগ:
-                //   const productRecord = productMap.get(prodId);
-                //   const currentQty = Number(productRecord.quantity || 0);
-                //   quantity: Math.max(0, currentQty - totalDeductQty)
-                // productMap লোডেড হয়েছিল transaction শুরুতে, ট্রানজেকশন চলাকালীন
-                // আপডেট হয়নি। ফলে একই productId-এর ২য়/৩য় pack-row প্রসেস হওয়ার সময়ও
-                // currentQty সবসময় "অরিজিনাল" quantity-ই থাকত, এবং প্রতিটা update
-                // আগের deduction মুছে নতুন করে বিয়োগ করত (overwrite) — তাই একটা pack-এর
-                // deduction হারিয়ে যেত। atomic `decrement` ব্যবহার করায় প্রতিটা row
-                // নিজে নিজের deduction যোগ করে, কেউ কাউকে overwrite করে না।
                 await tx.product.update({
                     where: { id: prodId },
                     data: {
                         quantity: { decrement: totalDeductQty }
                     }
                 });
+            }
+
+            // ৪. পেমেন্ট রিসিভ হয়ে থাকলে নির্দিষ্ট অ্যাকাউন্টে ব্যালেন্স যোগ এবং ট্রানজাকশন লেজারে (IN) এন্ট্রি
+            if (paidAmountVal > 0) {
+                let targetAccountId = accountId ? Number(accountId) : null;
+
+                if (!targetAccountId) {
+                    const defaultAccount = await tx.account.findFirst({
+                        where: { shopId: Number(shopId), type: 'CASH', isDefault: true }
+                    }) || await tx.account.findFirst({
+                        where: { shopId: Number(shopId) }
+                    });
+
+                    if (defaultAccount) {
+                        targetAccountId = defaultAccount.id;
+                    }
+                }
+
+                if (targetAccountId) {
+                    await tx.account.update({
+                        where: { id: targetAccountId },
+                        data: { balance: { increment: paidAmountVal } }
+                    });
+
+                    await tx.transaction.create({
+                        data: {
+                            shopId: Number(shopId),
+                            accountId: targetAccountId,
+                            type: 'IN',
+                            amount: paidAmountVal,
+                            category: 'SALE',
+                            referenceId: newSale.id,
+                            note: `Sale Payment for Invoice: ${newSale.invoiceNo}`,
+                            date: new Date().toISOString().split('T')[0],
+                            createdById: Number(userId),
+                        }
+                    });
+                }
             }
 
             return {

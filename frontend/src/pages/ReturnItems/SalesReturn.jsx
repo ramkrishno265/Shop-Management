@@ -27,7 +27,11 @@ export default function SalesReturn() {
   
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15); // ডিফল্ট ১৫টি
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+
+  // অ্যাকাউন্টস স্টেট (রিফান্ডের টাকা কোন অ্যাকাউন্ট থেকে কাটবে)
+  const [accounts, setAccounts] = useState([]);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
 
   // রিটার্ন প্রসেস স্টেট
   const [invoiceQuery, setInvoiceQuery] = useState('');
@@ -44,10 +48,11 @@ export default function SalesReturn() {
   const [restockingFee, setRestockingFee] = useState(0);
   const [notes, setNotes] = useState('');
 
-  // সব সেলস ইনভয়েস ফেচ
+  // সব সেলস ইনভয়েস ও অ্যাকাউন্টস ফেচ
   useEffect(() => {
     if (currentShopId) {
       fetchSalesList();
+      fetchAccounts();
     }
   }, [currentShopId]);
 
@@ -67,10 +72,28 @@ export default function SalesReturn() {
     }
   };
 
+  const fetchAccounts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/accounts?shopId=${currentShopId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = await res.json();
+      const accList = result.data || (Array.isArray(result) ? result : []);
+      setAccounts(accList);
+      
+      // ডিফল্ট ক্যাশ অ্যাকাউন্ট সিলেক্ট করা
+      const defAcc = accList.find(a => a.isDefault || a.type === 'CASH');
+      if (defAcc) setSelectedAccountId(defAcc.id);
+      else if (accList.length > 0) setSelectedAccountId(accList[0].id);
+    } catch (err) {
+      console.error("Error fetching accounts:", err);
+    }
+  };
+
   // ইনভয়েস ফেচ লজিক
   const fetchInvoiceDetails = async (queryVal) => {
     if (!currentShopId) {
-      setErrorMsg('শপ আইডি পাওয়া যায়নি। পুনরায় লগইন করুন।');
+      setErrorMsg('শপ আইডি পাওয়া যায়নি। পুনরায় লগইন করুন।');
       return;
     }
 
@@ -98,7 +121,7 @@ export default function SalesReturn() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'ইনভয়েস পাওয়া যায়নি।');
+        throw new Error(data.message || 'ইনভয়েস পাওয়া যায়নি।');
       }
 
       const sale = data.data;
@@ -127,7 +150,7 @@ export default function SalesReturn() {
   const handleFetchInvoice = (e) => {
     e.preventDefault();
     if (!invoiceQuery.trim()) {
-      setErrorMsg('অনুগ্রহ করে ইনভয়েস নম্বর বা মোবাইল নম্বর লিখুন।');
+      setErrorMsg('অনুগ্রহ করে ইনভয়েস নম্বর বা মোবাইল নম্বর লিখুন।');
       return;
     }
     fetchInvoiceDetails(invoiceQuery);
@@ -195,6 +218,7 @@ export default function SalesReturn() {
       saleId: invoiceData.id,
       customerId: invoiceData.customerId,
       receivedById: currentUserId,
+      accountId: selectedAccountId ? Number(selectedAccountId) : undefined, // 👈 রিফান্ড অ্যাকাউন্ট আইডি পাস করা হলো
       items: selectedItems.map((item) => ({
         productId: item.productId,
         quantity: item.returnQty,
@@ -225,14 +249,14 @@ export default function SalesReturn() {
       const result = await res.json();
 
       if (!res.ok || !result.success) {
-        throw new Error(result.message || 'রিটার্ন সম্পন্ন করা যায়নি।');
+        throw new Error(result.message || 'রিটার্ন সম্পন্ন করা যায়নি।');
       }
 
       setSuccessData(result.data);
       fetchSalesList();
-      alert('রিটার্ন সফলভাবে সম্পন্ন হয়েছে!');
+      alert('রিটার্ন সফলভাবে সম্পন্ন হয়েছে!');
     } catch (err) {
-      setErrorMsg(err.message || 'সার্ভার এরর হয়েছে।');
+      setErrorMsg(err.message || 'সার্ভার এরর হয়েছে।');
     } finally {
       setSubmitting(false);
     }
@@ -277,7 +301,7 @@ export default function SalesReturn() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800">
-      <div className=" mx-auto space-y-6">
+      <div className="mx-auto space-y-6">
 
         {/* টপ হেডার ও ন্যাভিগেশন বার */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
@@ -325,27 +349,25 @@ export default function SalesReturn() {
 
         {/* -----------------------------------------------------------------
             ট্যাব ১: পেজিনেটেড সেলস ইনভয়েস লিস্ট
-           ----------------------------------------------------------------- */}
+            ----------------------------------------------------------------- */}
         {activeTab === 'invoices_list' && (
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between">
-            {/* কন্ট্রোল বার: সার্চ, ফিল্টার এবং পার-পেজ সিলেক্টর */}
             <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="relative w-full md:w-80">
                 <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
                 <input
                   type="text"
-                  placeholder="ইনভয়েস বা মোবাইল নম্বর খুঁজুন..."
+                  placeholder="ইনভয়েস বা মোবাইল নম্বর খুঁজুন..."
                   value={salesSearchQuery}
                   onChange={(e) => {
                     setSalesSearchQuery(e.target.value);
-                    setCurrentPage(1); // সার্চের সাথে সাথে পেজ ১-এ নেওয়া
+                    setCurrentPage(1);
                   }}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-medium"
                 />
               </div>
 
               <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                {/* স্ট্যাটাস ফিল্টার */}
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                   <Filter size={14} />
                   <select
@@ -363,7 +385,6 @@ export default function SalesReturn() {
                   </select>
                 </div>
 
-                {/* প্রতি পেজে কতগুলো আইটেম থাকবে */}
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <span>Show:</span>
                   <select
@@ -383,7 +404,6 @@ export default function SalesReturn() {
               </div>
             </div>
 
-            {/* টেবিল */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100 uppercase text-[11px] font-bold tracking-wider">
@@ -401,13 +421,13 @@ export default function SalesReturn() {
                   {loadingSales ? (
                     <tr>
                       <td colSpan="7" className="text-center py-12 text-slate-400">
-                        <Loader2 className="animate-spin inline mr-2" size={20} /> ইনভয়েস তালিকা লোড হচ্ছে...
+                        <Loader2 className="animate-spin inline mr-2" size={20} /> ইনভয়েস তালিকা লোড হচ্ছে...
                       </td>
                     </tr>
                   ) : currentInvoices.length === 0 ? (
                     <tr>
                       <td colSpan="7" className="text-center py-12 text-slate-400 font-medium">
-                        কোনো বিক্রয় ইনভয়েস রেকর্ড পাওয়া যায়নি।
+                        কোনো বিক্রয় ইনভয়েস রেকর্ড পাওয়া যায়নি।
                       </td>
                     </tr>
                   ) : (
@@ -455,7 +475,7 @@ export default function SalesReturn() {
                         <td className="py-3.5 px-5 text-right">
                           <button
                             onClick={() => handleInitiateReturnFromList(sale)}
-                            className="bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ml-auto border border-blue-200 hover:border-transparent shadow-2xs"
+                            className="bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ml-auto border border-blue-200 hover:border-transparent shadow-2xs cursor-pointer"
                           >
                             Return <ArrowRight size={13} />
                           </button>
@@ -467,7 +487,6 @@ export default function SalesReturn() {
               </table>
             </div>
 
-            {/* পেজিনেশন ফুটার বার */}
             <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
               <div>
                 দেখাচ্ছে <span className="font-bold text-slate-700">{filteredSales.length === 0 ? 0 : indexOfFirstItem + 1}</span> থেকে{' '}
@@ -479,12 +498,11 @@ export default function SalesReturn() {
                 <button
                   disabled={currentPage === 1}
                   onClick={() => handlePageChange(currentPage - 1)}
-                  className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white cursor-pointer disabled:cursor-not-allowed transition"
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-45 cursor-pointer disabled:cursor-not-allowed transition"
                 >
                   <ChevronLeft size={16} />
                 </button>
 
-                {/* ডাইনামিক পেজ নম্বর বাটন */}
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
                   .map((pageNum, idx, array) => {
@@ -494,7 +512,7 @@ export default function SalesReturn() {
                         {prev && pageNum - prev > 1 && <span className="px-1.5 text-slate-400">...</span>}
                         <button
                           onClick={() => handlePageChange(pageNum)}
-                          className={`min-w-8 h-8 rounded-lg font-bold transition ${
+                          className={`min-w-8 h-8 rounded-lg font-bold transition cursor-pointer ${
                             currentPage === pageNum
                               ? 'bg-blue-600 text-white shadow-xs'
                               : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
@@ -509,7 +527,7 @@ export default function SalesReturn() {
                 <button
                   disabled={currentPage === totalPages}
                   onClick={() => handlePageChange(currentPage + 1)}
-                  className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white cursor-pointer disabled:cursor-not-allowed transition"
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-45 cursor-pointer disabled:cursor-not-allowed transition"
                 >
                   <ChevronRight size={16} />
                 </button>
@@ -519,17 +537,16 @@ export default function SalesReturn() {
         )}
 
         {/* -----------------------------------------------------------------
-            ট্যাব ২: রিটার্ন প্রসেস ফর্ম (মূল সেলস রিটার্ন)
-           ----------------------------------------------------------------- */}
+            ট্যাব ২: রিটার্ন প্রসেস ফর্ম
+            ----------------------------------------------------------------- */}
         {activeTab === 'process_return' && (
           <div className="space-y-6">
-            {/* সাকসেস স্টেট */}
             {successData && (
               <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <h3 className="font-bold text-emerald-900 text-base flex items-center gap-2">
                     <CheckCircle2 size={20} className="text-emerald-600" />
-                    রিটার্ন ইনভয়েস: {successData.returnInvoiceNo}
+                    রিটার্ন ইনভয়েস: {successData.returnInvoiceNo}
                   </h3>
                   <p className="text-sm text-emerald-700 mt-1">
                     সর্বমোট ফেরত: ৳ {successData.refundAmount?.toLocaleString()} | মাধ্যম: {successData.refundMethod}
@@ -538,13 +555,13 @@ export default function SalesReturn() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => window.print()}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition shadow-sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer"
                   >
                     <Printer size={16} /> প্রিন্ট রশিদ
                   </button>
                   <button
                     onClick={handleReset}
-                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg text-sm font-semibold transition"
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg text-sm font-semibold transition cursor-pointer"
                   >
                     নতুন এন্ট্রি
                   </button>
@@ -555,7 +572,7 @@ export default function SalesReturn() {
             {/* Step 1: Search Form */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                ইনভয়েস বা কাস্টমার মোবাইল নাম্বার দিয়ে খুঁজুন
+                ইনভয়েস বা কাস্টমার মোবাইল নাম্বার দিয়ে খুঁজুন
               </label>
               <form onSubmit={handleFetchInvoice} className="flex gap-3">
                 <div className="relative flex-1">
@@ -563,7 +580,7 @@ export default function SalesReturn() {
                   <input
                     type="text"
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    placeholder="उदा: INV-1001 অথবা 017XXXXXXXX"
+                    placeholder="যেমন: INV-1001 অথবা 017XXXXXXXX"
                     value={invoiceQuery}
                     onChange={(e) => setInvoiceQuery(e.target.value)}
                   />
@@ -571,7 +588,7 @@ export default function SalesReturn() {
                 <button
                   type="submit"
                   disabled={loadingInvoice}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer"
                 >
                   {loadingInvoice ? <Loader2 size={18} className="animate-spin" /> : 'Fetch Bill'}
                 </button>
@@ -580,7 +597,7 @@ export default function SalesReturn() {
               {invoiceData && (
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-4 p-3.5 bg-blue-50/60 border border-blue-100 rounded-lg text-sm text-slate-700">
                   <div>
-                    <span className="text-slate-500">ইনভয়েস:</span>{' '}
+                    <span className="text-slate-500">ইনভয়েস:</span>{' '}
                     <span className="font-semibold text-blue-900">{invoiceData.invoiceNo}</span>
                   </div>
                   <div>
@@ -596,7 +613,7 @@ export default function SalesReturn() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500">বকেয়া ছিল:</span>{' '}
+                    <span className="text-slate-500">বকেয়া ছিল:</span>{' '}
                     <span className="font-bold text-rose-600">৳ {invoiceData.dueAmount || 0}</span>
                   </div>
                 </div>
@@ -610,7 +627,7 @@ export default function SalesReturn() {
                   <h2 className="font-bold text-slate-800 text-sm tracking-wide uppercase">
                     আইটেম নির্বাচন ও রিটার্ন কন্ডিশন
                   </h2>
-                  <span className="text-xs text-slate-500">ফেরত নেওয়ার আইটেম টিক দিন</span>
+                  <span className="text-xs text-slate-500">ফেরت নেওয়ার আইটেম টিক দিন</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
@@ -629,7 +646,7 @@ export default function SalesReturn() {
                       {items.map((item) => (
                         <tr
                           key={item.productId}
-                          className={item.selected ? 'bg-blue-50/30' : 'opacity-70 bg-white'}
+                          className={item.selected ? 'bg-blue-50/30' : 'opacity-75 bg-white'}
                         >
                           <td className="py-3 px-4 text-center">
                             <input
@@ -699,16 +716,16 @@ export default function SalesReturn() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">
-                        ফেরত দেওয়ার কারণ
+                        ফেরত দেওয়ার কারণ
                       </label>
                       <select
                         value={returnReason}
                         onChange={(e) => setReturnReason(e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                       >
-                        <option value="DEFECTIVE">পণ্য নষ্ট বা ছেঁড়া (Defective)</option>
+                        <option value="DEFECTIVE">পণ্য নষ্ট বা ত্রুটিপূর্ণ (Defective)</option>
                         <option value="WRONG_SIZE">সাইজ বা ফিটিং মিলছে না</option>
-                        <option value="NOT_MATCHED">পছন্দ হয়নি / অমিল</option>
+                        <option value="NOT_MATCHED">পছন্দ হয়নি / অমিল</option>
                         <option value="OTHER">অন্যান্য</option>
                       </select>
                     </div>
@@ -726,21 +743,40 @@ export default function SalesReturn() {
                     </div>
                   </div>
 
+                  {/* 👈 নতুন: ক্যাশ আউট অ্যাকাউন্ট সিলেক্টর */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      রিফান্ড সোর্স অ্যাকাউন্ট (যেখান থেকে টাকা কাটা হবে) <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedAccountId}
+                      onChange={(e) => setSelectedAccountId(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-700 cursor-pointer"
+                    >
+                      <option value="">অ্যাকাউন্ট সিলেক্ট করুন</option>
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-2">
-                      রিফান্ড দেওয়ার মাধ্যম
+                      রিফান্ড দেওয়ার মাধ্যম
                     </label>
                     <div className="grid grid-cols-3 gap-3">
                       {[
-                        { id: 'CASH', label: 'Cash Out', desc: 'ক্যাশ ড্রয়ার থেকে নগদ' },
-                        { id: 'STORE_CREDIT', label: 'Store Credit', desc: 'ভাউচার বা ওয়ালেট' },
+                        { id: 'CASH', label: 'Cash Out', desc: 'ক্যাশ ড্রয়ার থেকে নগদ' },
+                        { id: 'STORE_CREDIT', label: 'Store Credit', desc: 'ভাউচার বা ওয়ালেট' },
                         { id: 'ADJUST_DUE', label: 'Adjust Due', desc: 'আগের বাকি থেকে কর্তন' }
                       ].map((method) => (
                         <button
                           key={method.id}
                           type="button"
                           onClick={() => setRefundMethod(method.id)}
-                          className={`p-3 text-left border rounded-lg transition ${
+                          className={`p-3 text-left border rounded-lg transition cursor-pointer ${
                             refundMethod === method.id
                               ? 'border-blue-600 bg-blue-50/50 ring-1 ring-blue-500'
                               : 'border-slate-200 hover:border-slate-300'
@@ -795,7 +831,7 @@ export default function SalesReturn() {
                     <button
                       type="button"
                       onClick={handleReset}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-lg text-sm font-semibold transition"
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-lg text-sm font-semibold transition cursor-pointer"
                     >
                       ক্যান্সেল
                     </button>
@@ -803,7 +839,7 @@ export default function SalesReturn() {
                       type="button"
                       onClick={handleSubmitReturn}
                       disabled={subtotal === 0 || submitting}
-                      className="flex-[2] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 shadow transition"
+                      className="flex-[2] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 shadow transition cursor-pointer"
                     >
                       {submitting ? (
                         <>

@@ -8,7 +8,7 @@ export const findSaleForReturn = async (req, res) => {
     const { query, shopId } = req.query;
 
     if (!query || !shopId) {
-      return res.status(400).json({ success: false, message: "Query এবং Shop ID প্রয়োজন।" });
+      return res.status(400).json({ success: false, message: "Query এবং Shop ID প্রয়োজন।" });
     }
 
     const sale = await prisma.sale.findFirst({
@@ -31,7 +31,7 @@ export const findSaleForReturn = async (req, res) => {
     });
 
     if (!sale) {
-      return res.status(404).json({ success: false, message: "কোনো বিক্রয় ইনভয়েস পাওয়া যায়নি।" });
+      return res.status(404).json({ success: false, message: "কোনো বিক্রয় ইনভয়েস পাওয়া যায়নি।" });
     }
 
     return res.status(200).json({ success: true, data: sale });
@@ -49,6 +49,7 @@ export const createCustomerReturn = async (req, res) => {
       shopId,
       saleId,
       customerId,
+      accountId, 
       items,
       restockingFee = 0,
       refundMethod,
@@ -62,19 +63,16 @@ export const createCustomerReturn = async (req, res) => {
       return res.status(400).json({ success: false, message: "কমপক্ষে একটি পণ্য নির্বাচন করুন।" });
     }
 
-    // টাইমআউট অপশন যুক্ত করে ট্রানজ্যাকশন রান করা
     const result = await prisma.$transaction(
       async (tx) => {
-        // ১. ইনভয়েস ভ্যালিডেশন
         const sale = await tx.sale.findUnique({
           where: { id: Number(saleId) }
         });
 
         if (!sale) {
-          throw new Error("মূল বিক্রয় ইনভয়েস পাওয়া যায়নি।");
+          throw new Error("মূল বিক্রয় ইনভয়েস পাওয়া যায়নি।");
         }
 
-        // ২. মোট টাকা হিসাব
         const totalAmount = items.reduce(
           (sum, item) => sum + Number(item.quantity) * Number(item.unitPrice),
           0
@@ -82,7 +80,6 @@ export const createCustomerReturn = async (req, res) => {
         const refundAmount = Math.max(0, totalAmount - Number(restockingFee));
         const returnInvoiceNo = `RET-${Date.now().toString().slice(-6)}`;
 
-        // ৩. কাস্টমার রিটার্ন রেকর্ড তৈরি
         const customerReturn = await tx.customerReturn.create({
           data: {
             returnInvoiceNo,
@@ -109,7 +106,6 @@ export const createCustomerReturn = async (req, res) => {
           include: { items: true }
         });
 
-        // ৪. লুপের মাধ্যমে ইনভেন্টরি ও লগ আপডেট
         for (const item of items) {
           const prodId = Number(item.productId);
           const qty = Number(item.quantity);
@@ -119,16 +115,14 @@ export const createCustomerReturn = async (req, res) => {
             select: { id: true, quantity: true, damagedQuantity: true, purchasePrice: true }
           });
 
-          if (!product) throw new Error(`প্রোডাক্ট পাওয়া যায়নি: ID ${prodId}`);
+          if (!product) throw new Error(`প্রোডাক্ট পাওয়া যায়নি: ID ${prodId}`);
 
           if (item.condition === "GOOD") {
-            // ভালো স্টক আপডেট
             const updatedProduct = await tx.product.update({
               where: { id: prodId },
               data: { quantity: { increment: qty } }
             });
 
-            // FIFO লেয়ারে রিস্টোর
             await tx.inventoryLayer.create({
               data: {
                 shopId: Number(shopId),
@@ -139,7 +133,6 @@ export const createCustomerReturn = async (req, res) => {
               }
             });
 
-            // স্টক লগ
             await tx.stockLog.create({
               data: {
                 productId: prodId,
@@ -152,13 +145,11 @@ export const createCustomerReturn = async (req, res) => {
               }
             });
           } else {
-            // ড্যামেজ স্টক আপডেট
             const updatedProduct = await tx.product.update({
               where: { id: prodId },
               data: { damagedQuantity: { increment: qty } }
             });
 
-            // ড্যামেজ স্টক লগ
             await tx.stockLog.create({
               data: {
                 productId: prodId,
@@ -173,7 +164,6 @@ export const createCustomerReturn = async (req, res) => {
           }
         }
 
-        // ৫. বকেয়া সমন্বয়
         if (refundMethod === "ADJUST_DUE" && sale.dueAmount > 0) {
           const newDue = Math.max(0, sale.dueAmount - refundAmount);
           await tx.sale.update({
@@ -185,17 +175,55 @@ export const createCustomerReturn = async (req, res) => {
           });
         }
 
+        // 👈 ক্যাশ রিফান্ড হলে নির্দিষ্ট অ্যাকাউন্ট থেকে টাকা মাইনাস এবং ট্রানজাকশন লেজার এন্ট্রি তৈরি
+        if (refundMethod === "CASH" && refundAmount > 0) {
+          let targetAccountId = accountId ? Number(accountId) : null;
+
+          if (!targetAccountId) {
+            const defaultAccount = await tx.account.findFirst({
+              where: { shopId: Number(shopId), type: 'CASH', isDefault: true }
+            }) || await tx.account.findFirst({
+              where: { shopId: Number(shopId) }
+            });
+
+            if (defaultAccount) {
+              targetAccountId = defaultAccount.id;
+            }
+          }
+
+          if (targetAccountId) {
+            await tx.account.update({
+              where: { id: targetAccountId },
+              data: { balance: { decrement: refundAmount } }
+            });
+
+            await tx.transaction.create({
+              data: {
+                shopId: Number(shopId),
+                accountId: targetAccountId,
+                type: 'OUT',
+                amount: refundAmount,
+                category: 'CUSTOMER_RETURN',
+                referenceId: customerReturn.id,
+                note: `Refund for Customer Return Invoice: ${returnInvoiceNo}`,
+                date: new Date().toISOString().split('T')[0],
+                createdById: Number(receivedById),
+              }
+            });
+          }
+        }
+
         return customerReturn;
       },
       {
-        maxWait: 5000,  // ট্রানজ্যাকশন শুরু হতে সর্বোচ্চ ৫ সেকেন্ড অপেক্ষা করবে
-        timeout: 20000  // পুরো ট্রানজ্যাকশন সম্পন্ন হতে ২০ সেকেন্ড (20000 ms) সময় পাবে
+        maxWait: 5000,
+        timeout: 20000
       }
     );
 
     return res.status(201).json({
       success: true,
-      message: "কাস্টমার রিটার্ন সফলভাবে সম্পন্ন হয়েছে।",
+      message: "কাস্টমার রিটার্ন সফলভাবে সম্পন্ন হয়েছে।",
       data: result
     });
   } catch (error) {
@@ -203,9 +231,8 @@ export const createCustomerReturn = async (req, res) => {
   }
 };
 
-
 // =================================================================
-// ৩. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return) - Fixed & Optimized
+// ৩. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return)
 // =================================================================
 export const createPurchaseReturn = async (req, res) => {
   try {
@@ -229,7 +256,6 @@ export const createPurchaseReturn = async (req, res) => {
       const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitCost)), 0);
       const debitNoteNo = `DN-${Date.now().toString().slice(-6)}`;
 
-      // ১. পারচেজ রিটার্ন রেকর্ড বা ডেবিট নোট তৈরি
       const purchaseReturn = await tx.purchaseReturn.create({
         data: {
           debitNoteNo,
@@ -254,7 +280,6 @@ export const createPurchaseReturn = async (req, res) => {
         include: { items: true }
       });
 
-      // ২. ইনভেন্টরি, স্টক এবং FIFO লেয়ার আপডেট লজিক
       for (const item of items) {
         const prodId = Number(item.productId);
         const qty = Number(item.quantity);
@@ -276,13 +301,11 @@ export const createPurchaseReturn = async (req, res) => {
             throw new Error(`${product.name}-এর পর্যাপ্ত স্টক নেই।`);
           }
 
-          // মূল স্টক কমানো
           await tx.product.update({
             where: { id: prodId },
             data: { quantity: { decrement: qty } }
           });
 
-          // FIFO লেয়ার থেকে স্টক কাটছাট (Reverse FIFO)
           let qtyToDeduct = qty;
           const layers = await tx.inventoryLayer.findMany({
             where: { productId: prodId, remainingQty: { gt: 0 } },
@@ -299,7 +322,6 @@ export const createPurchaseReturn = async (req, res) => {
             qtyToDeduct -= take;
           }
 
-          // স্টক লগ তৈরি
           await tx.stockLog.create({
             data: {
               productId: prodId,
@@ -314,9 +336,7 @@ export const createPurchaseReturn = async (req, res) => {
         }
       }
 
-      // ৩. অ্যাকাউন্ট বা দেনা সমন্বয় লজিক (Settlement Adjustment)
       if (settlementType === "REDUCE_PAYABLE") {
-        // যদি নির্দিষ্ট কোনো ক্রয় বিল (purchaseId) সিলেক্ট করা থাকে
         if (purchaseId) {
           const purchase = await tx.purchase.findUnique({ where: { id: Number(purchaseId) } });
           if (purchase && purchase.due_amount > 0) {
@@ -329,18 +349,7 @@ export const createPurchaseReturn = async (req, res) => {
               }
             });
           }
-        } 
-        
-        // গ্লোবাল বা সাপ্লায়ারের লেজারে যদি কারেন্ট ব্যালেন্স ফিল্ড থাকে তা অ্যাডজাস্ট করার জন্য 
-        // আপনি যদি Supplier মডেলে currentBalance ফিল্ড ব্যবহার করে থাকেন তবে নিচের কোডটি এনাবল করে দিতে পারেন:
-        /*
-        await tx.supplier.update({
-          where: { id: Number(supplierId) },
-          data: {
-            currentBalance: { decrement: totalAmount }
-          }
-        });
-        */
+        }
       }
 
       return purchaseReturn;
@@ -352,7 +361,7 @@ export const createPurchaseReturn = async (req, res) => {
       data: result
     });
   } catch (error) {
-    console.error("Purchase Return Error:", error); // ডিবাগিং এর জন্য কনসোলে প্রিন্ট হবে
+    console.error("Purchase Return Error:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
