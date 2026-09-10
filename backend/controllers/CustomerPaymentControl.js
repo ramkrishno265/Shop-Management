@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 export const collectPayment = async (req, res) => {
   const customerId = Number(req.params.customerId);
-  const { amount, paymentMethod, notes } = req.body;
+  const { amount, paymentMethod, notes, accountId } = req.body; // 👈 accountId রিসিভ করা হলো
 
   // --- Auth/shop context ---
   const shopId = req.shopId || req.user?.shopId || Number(req.headers['x-shop-id']);
@@ -100,6 +100,48 @@ export const collectPayment = async (req, res) => {
         allocations.push(allocation);
         remaining -= applyAmount;
       }
+
+      // =================================================================
+      // ৫. 🚀 অ্যাকাউন্ট ব্যালেন্স ও সেন্ট্রাল ট্রানজাকশন লেজার আপডেট (নতুন যুক্ত করা হয়েছে)
+      // =================================================================
+      let targetAccountId = accountId ? Number(accountId) : null;
+
+      // যদি ফ্রন্টএন্ড থেকে accountId না পাঠানো হয়, তবে শপের ডিফল্ট ক্যাশ অ্যাকাউন্ট খুঁজে নেওয়া
+      if (!targetAccountId) {
+        const defaultAccount = await tx.account.findFirst({
+          where: { shopId, type: 'CASH', isDefault: true }
+        }) || await tx.account.findFirst({
+          where: { shopId }
+        });
+        
+        if (defaultAccount) {
+          targetAccountId = defaultAccount.id;
+        }
+      }
+
+      if (targetAccountId) {
+        // ক) নির্দিষ্ট অ্যাকাউন্টে টাকা যোগ করা (Increment)
+        await tx.account.update({
+          where: { id: targetAccountId },
+          data: { balance: { increment: amountNum } }
+        });
+
+        // খ) সেন্ট্রাল ট্রানজাকশন লেজারে 'IN' এন্ট্রি তৈরি করা
+        await tx.transaction.create({
+          data: {
+            shopId,
+            accountId: targetAccountId,
+            type: 'IN',
+            amount: amountNum,
+            category: 'DUE_COLLECTION',
+            referenceId: payment.id,
+            note: `Due Collection from Customer ID: ${customerId} (${customer.name})`,
+            date: new Date().toISOString().split('T')[0],
+            createdById: userId
+          }
+        });
+      }
+      // =================================================================
 
       const remainingDue = totalDue - amountNum;
 

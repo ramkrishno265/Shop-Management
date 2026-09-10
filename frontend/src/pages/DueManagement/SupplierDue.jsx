@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Phone,
   Building,
-  Calendar,
   CreditCard,
   Printer,
   Loader2,
@@ -26,6 +25,7 @@ export default function SupplierDue() {
 
   // ডেটা ও লোডিং স্টেট
   const [suppliers, setSuppliers] = useState([]);
+  const [accountsList, setAccountsList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("DUE_ONLY"); // "ALL" or "DUE_ONLY"
@@ -33,7 +33,7 @@ export default function SupplierDue() {
   // পেমেন্ট মডাল স্টেট
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [payAmount, setPayAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
@@ -41,12 +41,27 @@ export default function SupplierDue() {
   useEffect(() => {
     if (currentShopId) {
       fetchSupplierDues();
+      fetchShopAccounts();
     }
   }, [currentShopId]);
 
+  // শপের অ্যাকাউন্টসমূহ ফেচ করার ফাংশন
+  const fetchShopAccounts = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/accounts?shopId=${currentShopId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await res.json();
+      if (result.success && result.data.length > 0) {
+        setAccountsList(result.data);
+        setSelectedAccountId(result.data[0].id);
+      }
+    } catch (err) {
+      console.error("Error fetching accounts:", err);
+    }
+  };
+
   // সাপ্লায়ার লিস্ট লোড করে প্রতিটার জন্য due-ও ফেচ করে merge করা হয়
-  // (ব্যাকএন্ডের /suppliers এন্ডপয়েন্ট নিজে থেকে due দেয় না — সেটা
-  // /suppliers/:id/due থেকে আলাদাভাবে হিসাব করে আনতে হয়)
   const fetchSupplierDues = async () => {
     setLoading(true);
     try {
@@ -59,7 +74,6 @@ export default function SupplierDue() {
       const result = await res.json();
       const list = result.data || (Array.isArray(result) ? result : []);
 
-      // প্রতিটা সাপ্লায়ারের due সমান্তরালে (parallel) ফেচ করা হচ্ছে
       const withDue = await Promise.all(
         list.map(async (sup) => {
           try {
@@ -71,7 +85,6 @@ export default function SupplierDue() {
             const totalDue = dueResult?.data?.totalDue ?? 0;
             return { ...sup, currentPayable: totalDue };
           } catch {
-            // কোনো একটা সাপ্লায়ারের due ফেচ ব্যর্থ হলেও যেন পুরো লিস্ট ভেঙে না পড়ে
             return { ...sup, currentPayable: 0 };
           }
         })
@@ -114,10 +127,8 @@ export default function SupplierDue() {
           shopId: currentShopId,
           supplierId: selectedSupplier.id,
           amount,
-          paymentMethod,
+          accountId: selectedAccountId ? Number(selectedAccountId) : undefined,
           notes: paymentNote,
-          // allocations ইচ্ছাকৃতভাবে পাঠানো হচ্ছে না — ব্যাকএন্ড নিজে থেকে
-          // FIFO অনুযায়ী (সবচেয়ে পুরনো due আগে) allocate করে নেবে
         }),
       });
 
@@ -131,7 +142,8 @@ export default function SupplierDue() {
       setSelectedSupplier(null);
       setPayAmount("");
       setPaymentNote("");
-      fetchSupplierDues(); // রিফ্রেশ লিস্ট
+      fetchSupplierDues();
+      fetchShopAccounts();
     } catch (err) {
       alert(err.message || "সার্ভার এরর হয়েছে।");
     } finally {
@@ -153,7 +165,6 @@ export default function SupplierDue() {
     return matchesSearch;
   });
 
-  // টোটাল হিসাব
   const totalPayableAll = suppliers.reduce(
     (sum, s) => sum + Number(s.currentPayable || 0),
     0
@@ -163,7 +174,7 @@ export default function SupplierDue() {
   ).length;
 
   return (
-    <div className="space-y-6  mx-auto">
+    <div className="space-y-6 mx-auto">
       {/* ১. টপ হেডার ও অ্যালার্ট */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
@@ -209,7 +220,7 @@ export default function SupplierDue() {
         </div>
       )}
 
-      {/* ২. স্ট্যাটাস কার্ডস (KPI Summary) */}
+      {/* ২. স্ট্যাটাস কার্ডস */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-rose-100 shadow-xs flex items-center justify-between">
           <div>
@@ -354,7 +365,7 @@ export default function SupplierDue() {
                           disabled={payable <= 0}
                           onClick={() => {
                             setSelectedSupplier(sup);
-                            setPayAmount(payable.toString()); // ডিফল্ট পুরো টাকা বসিয়ে দেওয়া
+                            setPayAmount(payable.toString());
                           }}
                           className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ml-auto cursor-pointer ${
                             payable > 0
@@ -405,6 +416,24 @@ export default function SupplierDue() {
             <form onSubmit={handlePaymentSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  যে অ্যাকাউন্ট থেকে টাকা দেওয়া হবে <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs bg-white outline-none focus:ring-2 focus:ring-amber-500/20 font-semibold text-slate-800"
+                  required
+                >
+                  {accountsList.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.type}) - ব্যালেন্স: ৳ {Number(acc.balance || 0).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   পরিশোধের পরিমাণ (টাকা) <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -417,21 +446,6 @@ export default function SupplierDue() {
                   placeholder="0.00"
                   required
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  পেমেন্ট মাধ্যম
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs bg-white outline-none focus:ring-2 focus:ring-amber-500/20 font-semibold"
-                >
-                  <option value="CASH">ক্যাশ ড্রয়ার (Cash)</option>
-                  <option value="BANK">ব্যাংক একাউন্ট (Bank Transfer)</option>
-                  <option value="BKASH">বিকাশ / নগদ (Mobile Banking)</option>
-                </select>
               </div>
 
               <div>

@@ -12,6 +12,7 @@ import AddCustomer from './routes/customer.routes.js';
 import shopRoutes from './routes/shopProfileRouter.js';
 import FieldRouter from './routes/FieldRouter.js';
 import CustomerPaymentRoutes from './routes/CustomerPaymentRouter.js';
+import supplierPaymentRoutes from './routes/supplierPayment.routes.js';
 import ReturnRouter from './routes/ReturnRouter.js';
 import accountRoutes from './routes/accountRoutes.js'; // Import the account routes
 
@@ -34,7 +35,8 @@ app.use("/api/profit", profitRoutes);
 app.use('/api/add_customer', AddCustomer);
 app.use('/api/shops_profile', shopRoutes);
 app.use('/api/fields', FieldRouter);
-app.use('/api', CustomerPaymentRoutes); // Customer Payment Collection & History Routes
+app.use('/api', CustomerPaymentRoutes);
+app.use('/api', supplierPaymentRoutes); 
 app.use('/api/returns', ReturnRouter); 
 app.use('/api/accounts', accountRoutes); // Use the account routes
 

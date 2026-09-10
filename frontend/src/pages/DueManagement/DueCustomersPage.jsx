@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL;
-
 const PAGE_SIZE = 10;
 
 export default function DueCustomersPage() {
@@ -11,19 +10,20 @@ export default function DueCustomersPage() {
 
   const [loading, setLoading] = useState(true);
   const [allDueCustomers, setAllDueCustomers] = useState([]);
+  const [accountsList, setAccountsList] = useState([]); // শপের অ্যাকাউন্ট লিস্ট স্টেট
 
   // ---- Search / Filter / Sort / Pagination ----
   const [search, setSearch] = useState('');
-  const [overdueFilter, setOverdueFilter] = useState('all'); // all | fresh | mid | old
-  const [sortBy, setSortBy] = useState('amount_desc'); // amount_desc | amount_asc | overdue_desc | overdue_asc | name_asc
+  const [overdueFilter, setOverdueFilter] = useState('all'); 
+  const [sortBy, setSortBy] = useState('amount_desc'); 
   const [page, setPage] = useState(1);
 
   // ---- Collect payment modal ----
   const [currentCustomer, setCurrentCustomer] = useState(null);
   const [showCollectPayment, setShowCollectPayment] = useState(false);
   const [collectAmount, setCollectAmount] = useState('');
-  const [collectMethod, setCollectMethod] = useState('CASH');
   const [collectNote, setCollectNote] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState(''); // সিলেক্টেড অ্যাকাউন্ট আইডি স্টেট
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [collectError, setCollectError] = useState('');
 
@@ -31,6 +31,7 @@ export default function DueCustomersPage() {
 
   useEffect(() => {
     fetchDueCustomers();
+    fetchShopAccounts(); // পেজ লোড হওয়ার সময় অ্যাকাউন্ট লিস্ট ফেচ করা
   }, []);
 
   const fetchDueCustomers = async () => {
@@ -61,9 +62,6 @@ export default function DueCustomersPage() {
         const due = Number(s.dueAmount) || 0;
         if (due <= 0) return;
 
-        // customerId শুধু তখনই সেট থাকবে যদি এটা একজন registered Customer হয়।
-        // Walk-in Customer এর কোনো real customerId থাকে না — তাদের জন্য payment
-        // collection allow করা যাবে না (allocate করার মতো কোনো Customer রেকর্ড নেই)।
         const realCustomerId = s.customerId || s.customer?.id || null;
         const custId = realCustomerId || `walkin-${s.customerName || 'unknown'}`;
         const custName = s.customer ? s.customer.name : (s.customerName || 'Walk-in Customer');
@@ -72,7 +70,7 @@ export default function DueCustomersPage() {
 
         if (!dueMap[custId]) {
           dueMap[custId] = {
-            id: realCustomerId, // null হলে walk-in, payment collect করা যাবে না
+            id: realCustomerId, 
             customerName: custName,
             phone: custPhone,
             dueAmount: 0,
@@ -129,7 +127,24 @@ export default function DueCustomersPage() {
     }
   };
 
-  // ---- Derived summary stats ----
+  // শপের অ্যাকাউন্টসমূহ ফেচ করার ফাংশন
+  const fetchShopAccounts = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const shopId = user.shopId;
+      const headers = { Authorization: `Bearer ${token}`, ...(shopId && { 'x-shop-id': shopId }) };
+      
+      const res = await axios.get(`${API_URL}/accounts?shopId=${shopId}`, { headers });
+      if (res.data.success && res.data.data.length > 0) {
+        setAccountsList(res.data.data);
+        setSelectedAccountId(res.data.data[0].id); // প্রথম অ্যাকাউন্ট ডিফল্ট সিলেক্ট রাখা
+      }
+    } catch (err) {
+      console.error("Error fetching accounts:", err);
+    }
+  };
+
   const summary = useMemo(() => {
     const totalDue = allDueCustomers.reduce((acc, c) => acc + c.dueAmount, 0);
     const totalCustomers = allDueCustomers.length;
@@ -138,7 +153,6 @@ export default function DueCustomersPage() {
     return { totalDue, totalCustomers, criticalCount, avgDue };
   }, [allDueCustomers]);
 
-  // ---- Filter + search + sort pipeline ----
   const processedList = useMemo(() => {
     let list = [...allDueCustomers];
 
@@ -183,7 +197,6 @@ export default function DueCustomersPage() {
   const totalPages = Math.max(1, Math.ceil(processedList.length / PAGE_SIZE));
   const pagedList = processedList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Reset to page 1 whenever filters/search change
   useEffect(() => {
     setPage(1);
   }, [search, overdueFilter, sortBy]);
@@ -195,10 +208,9 @@ export default function DueCustomersPage() {
   };
 
   const openCollectModal = (cust) => {
-    if (!cust.id) return; // walk-in customer — collect করা যাবে না
+    if (!cust.id) return; 
     setCurrentCustomer(cust);
     setCollectAmount('');
-    setCollectMethod('CASH');
     setCollectNote('');
     setCollectError('');
     setShowCollectPayment(true);
@@ -229,18 +241,20 @@ export default function DueCustomersPage() {
         ...(shopId && { 'x-shop-id': shopId })
       };
 
+      // ব্যাকএন্ডে accountId পাঠানো হচ্ছে যাতে নির্দিষ্ট অ্যাকাউন্টে ব্যালেন্স বাড়ে
       await axios.post(
         `${API_URL}/customers/${currentCustomer.id}/collect-payment`,
         {
           amount: amountNum,
-          paymentMethod: collectMethod,
-          notes: collectNote || undefined
+          notes: collectNote || undefined,
+          accountId: selectedAccountId ? Number(selectedAccountId) : undefined
         },
         { headers }
       );
 
       setShowCollectPayment(false);
       fetchDueCustomers();
+      fetchShopAccounts();
     } catch (err) {
       const serverMsg = err?.response?.data?.message;
       console.error('Error collecting payment:', err);
@@ -317,7 +331,6 @@ export default function DueCustomersPage() {
 
         {/* Main card: search / filters / table */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-          {/* Toolbar */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-5">
             <div className="relative w-full lg:max-w-xs">
               <input
@@ -331,7 +344,6 @@ export default function DueCustomersPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Overdue filter pills */}
               <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-1">
                 {[
                   { key: 'all', label: 'সব' },
@@ -353,7 +365,6 @@ export default function DueCustomersPage() {
                 ))}
               </div>
 
-              {/* Sort dropdown */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
@@ -368,7 +379,6 @@ export default function DueCustomersPage() {
             </div>
           </div>
 
-          {/* Result count */}
           {!loading && (
             <p className="text-xs text-slate-400 mb-3">
               {processedList.length} জন কাস্টমার পাওয়া গেছে
@@ -376,7 +386,6 @@ export default function DueCustomersPage() {
             </p>
           )}
 
-          {/* Table */}
           <div className="overflow-x-auto">
             {loading ? (
               <div className="py-16 text-center text-slate-400 text-sm">Loading due customers...</div>
@@ -438,7 +447,6 @@ export default function DueCustomersPage() {
             )}
           </div>
 
-          {/* Pagination */}
           {!loading && processedList.length > PAGE_SIZE && (
             <div className="flex items-center justify-between pt-5 mt-2 border-t border-slate-100">
               <p className="text-xs text-slate-400">
@@ -493,6 +501,22 @@ export default function DueCustomersPage() {
                 <span className="text-lg font-bold text-red-600">৳{fmt(currentCustomer.dueAmount)}</span>
               </div>
 
+              {/* অ্যাকাউন্ট সিলেক্ট করার ড্রপডাউন */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 mb-1.5 block">টাকা জমা হবে যে অ্যাকাউন্টে</label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-800/10 focus:border-slate-300 transition"
+                >
+                  {accountsList.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.type}) - ব্যালেন্স: ৳{fmt(acc.balance)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Collection Amount</label>
                 <input
@@ -508,26 +532,6 @@ export default function DueCustomersPage() {
                 >
                   পুরো বকেয়া পরিমাণ বসাও (৳{fmt(currentCustomer.dueAmount)})
                 </button>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1.5 block">Payment Method</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {['CASH', 'BKASH', 'CARD'].map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setCollectMethod(m)}
-                      className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                        collectMethod === m
-                          ? 'bg-slate-900 text-white border-slate-900'
-                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div>
