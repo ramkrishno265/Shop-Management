@@ -5,7 +5,7 @@ import {
   ArrowDownLeft,
   Building2,
   Search,
-  Download,
+  RefreshCw,
   PiggyBank,
   ArrowUpRightSquare,
   Loader2,
@@ -194,11 +194,11 @@ export default function AccountsPage() {
 
   // ফিল্টারিং ও সার্চ লজিক
   const filteredTransactions = transactions.filter(tx => {
-    const matchesTab = 
+    const matchesTab =
       activeTab === 'all' ? true : tx.type === activeTab;
 
-    const matchesSearch = 
-      (tx.note || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch =
+      (tx.note || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (tx.category || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesTab && matchesSearch;
@@ -212,7 +212,7 @@ export default function AccountsPage() {
 
   return (
     <div className="min-h-screen bg-slate-100/60 text-slate-900 w-full p-4 sm:p-8 space-y-8 font-sans">
-      
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div className="space-y-1">
@@ -223,11 +223,11 @@ export default function AccountsPage() {
           <p className="text-xs text-slate-500 font-medium pl-9">মাল্টি-অ্যাকাউন্ট ব্যালেন্স, ক্যাশ ফ্লো, মূলধন এবং সেন্ট্রাল ট্রানজাকশন লেজার</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={fetchAccountData}
             className="px-4 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-2xs"
           >
-            <Download size={16} /> রিফ্রেশ ডেটা
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> রিফ্রেশ ডেটা
           </button>
         </div>
       </div>
@@ -308,7 +308,7 @@ export default function AccountsPage() {
 
       {/* ৩. ফরম সেকশন: মূলধন ও উত্তোলন */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
+
         {/* মূলধন ইনভেস্ট ফরম */}
         <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-5">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
@@ -354,8 +354,8 @@ export default function AccountsPage() {
                 className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none"
               />
             </div>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={submitting}
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
@@ -409,8 +409,8 @@ export default function AccountsPage() {
                 className="w-full border border-slate-300/80 rounded-2xl p-3 text-xs bg-slate-50/50 focus:bg-white outline-none"
               />
             </div>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={submitting}
               className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
             >
@@ -423,7 +423,7 @@ export default function AccountsPage() {
 
       {/* ৪. সেন্ট্রাল ট্রানজাকশন লেজার (Transaction Ledger Table) */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden space-y-4">
-        
+
         {/* Table Controls */}
         <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -452,8 +452,8 @@ export default function AccountsPage() {
             {/* Per Page Selector */}
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/60">
               <span>প্রতি পেজে:</span>
-              <select 
-                value={itemsPerPage} 
+              <select
+                value={itemsPerPage}
                 onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                 className="bg-transparent font-bold text-slate-900 outline-none cursor-pointer"
               >
@@ -499,15 +499,13 @@ export default function AccountsPage() {
                     <td className="py-4 px-6 font-semibold text-slate-800">{tx.category}</td>
                     <td className="py-4 px-6 text-slate-600">{tx.note || '—'}</td>
                     <td className="py-4 px-6 text-center">
-                      <span className={`inline-flex px-3 py-1 rounded-full font-extrabold text-[11px] ${
-                        tx.type === 'IN' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                      }`}>
+                      <span className={`inline-flex px-3 py-1 rounded-full font-extrabold text-[11px] ${tx.type === 'IN' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                        }`}>
                         {tx.type}
                       </span>
                     </td>
-                    <td className={`py-4 px-6 text-right font-black text-sm font-mono ${
-                      tx.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'
-                    }`}>
+                    <td className={`py-4 px-6 text-right font-black text-sm font-mono ${tx.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'
+                      }`}>
                       {tx.type === 'IN' ? '+' : '-'} ৳ {Number(tx.amount || 0).toLocaleString()}
                     </td>
                   </tr>
@@ -524,7 +522,7 @@ export default function AccountsPage() {
         {/* Pagination Controls */}
         <div className="p-5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-600">
           <div>
-            মোট লেনদেন: <span className="font-bold text-slate-900">{filteredTransactions.length}</span> টি 
+            মোট লেনদেন: <span className="font-bold text-slate-900">{filteredTransactions.length}</span> টি
             (পেজ <span className="font-bold text-slate-900">{currentPage}</span> / {totalPages})
           </div>
           <div className="flex items-center gap-2">
@@ -540,7 +538,7 @@ export default function AccountsPage() {
               disabled={currentPage === totalPages}
               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl disabled:opacity-40 flex items-center gap-1 font-bold cursor-pointer transition"
             >
-               পরবর্তী <ChevronRight size={16} />
+              পরবর্তী <ChevronRight size={16} />
             </button>
           </div>
         </div>

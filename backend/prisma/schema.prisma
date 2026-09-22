@@ -238,6 +238,7 @@ model SaleItemLayer {
 
   quantityTaken    Float          // এই লেয়ার থেকে কতটুকু পরিমাণ মাইনাস হয়েছে
   unitCost         Float          // ওই লেয়ারের ক্রয়মূল্য স্ন্যাপশট
+  returnedQty      Float          @default(0) 
 
   createdAt        DateTime       @default(now())
 

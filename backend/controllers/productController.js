@@ -698,7 +698,7 @@ export const bulkImportProducts = async (req, res) => {
           quantity = parseFloat(item.quantity) || 0;
         }
 
-        // ৪. ট্রানজেকশনের মাধ্যমে প্রোডাক্ট এবং প্যাক সেভ করা
+        // ৪. ট্রানজেকশনের মাধ্যমে প্রোডাক্ট, প্যাক এবং ইনভেন্টরি লেয়ার সেভ করা
         await prisma.$transaction(async (tx) => {
           const newProduct = await tx.product.create({
             data: {
@@ -711,8 +711,6 @@ export const bulkImportProducts = async (req, res) => {
               quantity: quantity,
               purchasePrice: purchasePrice,
               sellingPrice: sellingPrice,
-              // 👈 তোমার Excel/CSV টেমপ্লেটের কলাম নাম "expiryDate" (bulk import),
-              // কিন্তু single-add ফর্ম পাঠায় "expireDate" — দুটোই fallback হিসেবে চেক করা হচ্ছে
               expireDate: parseExpiryDate(item.expireDate ?? item.expiryDate) ?? null,
               lowStockLimit: item.lowStockLimit ? parseFloat(item.lowStockLimit) : 5,
               categoryId: categoryId,
@@ -736,6 +734,41 @@ export const bulkImportProducts = async (req, res) => {
             await tx.productPack.createMany({
               data: packDataToInsert,
             });
+          }
+
+          // 👇 এই অংশটাই মিসিং ছিল — createProduct-এর মতো InventoryLayer তৈরি করা
+          if (quantity > 0) {
+            if (inventoryType === 'standard') {
+              await tx.inventoryLayer.create({
+                data: {
+                  shopId: finalShopId,
+                  productId: newProduct.id,
+                  initialQty: quantity,
+                  remainingQty: quantity,
+                  unitCost: purchasePrice
+                }
+              });
+            } else if (inventoryType === 'pack' && parsedPacks.length > 0) {
+              for (const pack of parsedPacks) {
+                const packStock = parseFloat(pack.stock) || 0;
+                const multiplier = parseFloat(pack.multiplier) || 1;
+                const totalBaseUnits = packStock * multiplier;
+                const packPurchasePrice = parseFloat(pack.purchasePrice) || 0;
+                const unitCostPerBase = multiplier > 0 ? (packPurchasePrice / multiplier) : packPurchasePrice;
+
+                if (totalBaseUnits > 0) {
+                  await tx.inventoryLayer.create({
+                    data: {
+                      shopId: finalShopId,
+                      productId: newProduct.id,
+                      initialQty: totalBaseUnits,
+                      remainingQty: totalBaseUnits,
+                      unitCost: unitCostPerBase
+                    }
+                  });
+                }
+              }
+            }
           }
         });
 

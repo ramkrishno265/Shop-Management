@@ -49,7 +49,7 @@ export const createCustomerReturn = async (req, res) => {
       shopId,
       saleId,
       customerId,
-      accountId, 
+      accountId,
       items,
       restockingFee = 0,
       refundMethod,
@@ -123,15 +123,52 @@ export const createCustomerReturn = async (req, res) => {
               data: { quantity: { increment: qty } }
             });
 
-            await tx.inventoryLayer.create({
-              data: {
-                shopId: Number(shopId),
-                productId: prodId,
-                initialQty: qty,
-                remainingQty: qty,
-                unitCost: product.purchasePrice
+            // 👇 এই sale-এ এই প্রোডাক্টটা আসলে কোন কোন layer/দাম থেকে কাটা হয়েছিল সেটা বের করা
+            const saleItem = await tx.saleItem.findFirst({
+              where: { saleId: Number(saleId), productId: prodId },
+              include: {
+                layerDeductions: { orderBy: { id: "desc" } } // শেষে কাটা layer আগে ফেরত (LIFO)
               }
             });
+
+            let remainingToRestock = qty;
+
+            if (saleItem && saleItem.layerDeductions.length > 0) {
+              for (const deduction of saleItem.layerDeductions) {
+                if (remainingToRestock <= 0) break;
+
+                const availableToRestore = deduction.quantityTaken - deduction.returnedQty;
+                if (availableToRestore <= 0) continue;
+
+                const restoreQty = Math.min(remainingToRestock, availableToRestore);
+
+                // ওই একই original layer-এ, ওই একই unitCost-এ ফেরত যাচ্ছে
+                await tx.inventoryLayer.update({
+                  where: { id: deduction.inventoryLayerId },
+                  data: { remainingQty: { increment: restoreQty } }
+                });
+
+                await tx.saleItemLayer.update({
+                  where: { id: deduction.id },
+                  data: { returnedQty: { increment: restoreQty } }
+                });
+
+                remainingToRestock -= restoreQty;
+              }
+            }
+
+            // sale layer history না পাওয়া গেলে বা mismatch থাকলে fallback হিসেবে বর্তমান দামে নতুন layer
+            if (remainingToRestock > 0) {
+              await tx.inventoryLayer.create({
+                data: {
+                  shopId: Number(shopId),
+                  productId: prodId,
+                  initialQty: remainingToRestock,
+                  remainingQty: remainingToRestock,
+                  unitCost: product.purchasePrice
+                }
+              });
+            }
 
             await tx.stockLog.create({
               data: {
@@ -175,7 +212,7 @@ export const createCustomerReturn = async (req, res) => {
           });
         }
 
-        // 👈 ক্যাশ রিফান্ড হলে নির্দিষ্ট অ্যাকাউন্ট থেকে টাকা মাইনাস এবং ট্রানজাকশন লেজার এন্ট্রি তৈরি
+        // ক্যাশ রিফান্ড হলে নির্দিষ্ট অ্যাকাউন্ট থেকে টাকা মাইনাস এবং ট্রানজাকশন লেজার এন্ট্রি তৈরি
         if (refundMethod === "CASH" && refundAmount > 0) {
           let targetAccountId = accountId ? Number(accountId) : null;
 
@@ -232,7 +269,7 @@ export const createCustomerReturn = async (req, res) => {
 };
 
 // =================================================================
-// ৩. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return)
+// ৩. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return) — অপরিবর্তিত
 // =================================================================
 export const createPurchaseReturn = async (req, res) => {
   try {
@@ -307,9 +344,11 @@ export const createPurchaseReturn = async (req, res) => {
           });
 
           let qtyToDeduct = qty;
+
+          // 👇 FIX: LIFO ("desc") থেকে FIFO ("asc")-এ বদলানো হলো, sale controller-এর সাথে সামঞ্জস্যের জন্য
           const layers = await tx.inventoryLayer.findMany({
             where: { productId: prodId, remainingQty: { gt: 0 } },
-            orderBy: { createdAt: "desc" }
+            orderBy: { createdAt: "asc" }
           });
 
           for (const layer of layers) {
@@ -320,6 +359,13 @@ export const createPurchaseReturn = async (req, res) => {
               data: { remainingQty: { decrement: take } }
             });
             qtyToDeduct -= take;
+          }
+
+          // 👇 sale controller-এর মতো একই সেফটি-নেট: layer আর quantity সিঙ্কে না থাকলে silently এগিয়ে না গিয়ে থামা
+          if (qtyToDeduct > 0) {
+            throw new Error(
+              `"${product.name}" প্রোডাক্টের ইনভেন্টরি লেয়ারে পর্যাপ্ত স্টক নেই (ডেটা সিঙ্ক সমস্যা)। অনুগ্রহ করে স্টক এডজাস্ট করে আবার চেষ্টা করুন।`
+            );
           }
 
           await tx.stockLog.create({
@@ -367,7 +413,7 @@ export const createPurchaseReturn = async (req, res) => {
 };
 
 // =================================================================
-// ৪. রিটার্ন হিস্ট্রি দেখার মেথডসমূহ
+// ৪. রিটার্ন হিস্ট্রি দেখার মেথডসমূহ — অপরিবর্তিত
 // =================================================================
 export const getCustomerReturns = async (req, res) => {
   try {

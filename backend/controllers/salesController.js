@@ -10,7 +10,7 @@ export const createSale = async (req, res) => {
     try {
         const {
             shopId,
-            accountId, // 👈 ফ্রন্টএন্ড থেকে আসা অ্যাকাউন্ট আইডি
+            accountId,
             customerId,
             customerName,
             items,
@@ -58,7 +58,6 @@ export const createSale = async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
-            // ১. স্টক চেক করার জন্য একসাথে প্রোডাক্ট ফেচ করা
             const productIds = items.map(item => Number(item.productId || item.id));
             const products = await tx.product.findMany({
                 where: { id: { in: productIds } }
@@ -111,7 +110,6 @@ export const createSale = async (req, res) => {
                 }
             }
 
-            // ২. সেলস রেকর্ড তৈরি করা
             const newSale = await tx.sale.create({
                 data: {
                     invoiceNo: generateInvoiceNo(),
@@ -136,7 +134,6 @@ export const createSale = async (req, res) => {
 
             const saleItemsData = [];
 
-            // ৩. FIFO লজিক ও স্টক আপডেট
             for (let item of items) {
                 const prodId = Number(item.productId || item.id);
                 const cartQty = Number(item.quantity) || 1;
@@ -182,16 +179,13 @@ export const createSale = async (req, res) => {
                     qtyNeeded -= takeQty;
                 }
 
+                // 👇 FIX: silent fallback (client-এর পাঠানো দাম দিয়ে ঘোলাটে cost বানানো) এর বদলে
+                // এখন সরাসরি error throw করবে, যাতে layer/quantity sync সমস্যা silently লুকিয়ে না যায়
                 if (qtyNeeded > 0) {
-                    const isPackItem = Boolean(item.packInfo?.id || item.packId);
-                    const packMultiplier = Number(item.multiplier || item.packInfo?.multiplier || 1) || 1;
-                    const rawPurchasePrice = Number(item.purchasePrice) || 0;
-
-                    const perUnitPurchasePrice = isPackItem
-                        ? rawPurchasePrice / packMultiplier
-                        : rawPurchasePrice;
-
-                    itemTotalCost += (qtyNeeded * perUnitPurchasePrice);
+                    const productName = productMap.get(prodId)?.name || `ID ${prodId}`;
+                    throw new Error(
+                        `"${productName}" প্রোডাক্টের ইনভেন্টরি লেয়ারে পর্যাপ্ত স্টক নেই (ডেটা সিঙ্ক সমস্যা)। অনুগ্রহ করে স্টক এডজাস্ট করে আবার চেষ্টা করুন।`
+                    );
                 }
 
                 const avgCostPerUnit = totalDeductQty > 0 ? (itemTotalCost / totalDeductQty) : 0;
@@ -235,9 +229,21 @@ export const createSale = async (req, res) => {
                         quantity: { decrement: totalDeductQty }
                     }
                 });
+
+                // 👇 (optional, সমস্যা ৩) — Audit trail সম্পূর্ণ রাখতে StockLog এন্ট্রি
+                await tx.stockLog.create({
+                    data: {
+                        productId: prodId,
+                        userId: Number(userId),
+                        changeType: "SALE",
+                        quantityChanged: -totalDeductQty,
+                        previousStock: productMap.get(prodId)?.quantity ?? 0,
+                        newStock: (productMap.get(prodId)?.quantity ?? 0) - totalDeductQty,
+                        note: `Sale Invoice #${newSale.invoiceNo}`
+                    }
+                });
             }
 
-            // ৪. পেমেন্ট রিসিভ হয়ে থাকলে নির্দিষ্ট অ্যাকাউন্টে ব্যালেন্স যোগ এবং ট্রানজাকশন লেজারে (IN) এন্ট্রি
             if (paidAmountVal > 0) {
                 let targetAccountId = accountId ? Number(accountId) : null;
 
@@ -299,6 +305,8 @@ export const createSale = async (req, res) => {
         });
     }
 };
+
+// getSales এবং getSalesSummary অপরিবর্তিত — এখানে কোনো change লাগেনি
 
 export const getSales = async (req, res) => {
     try {
