@@ -2,6 +2,7 @@ import express from "express";
 import {
   findSaleForReturn,
   createCustomerReturn,
+  findPurchaseForReturn,
   createPurchaseReturn,
   getCustomerReturns,
   getPurchaseReturns
@@ -10,8 +11,11 @@ import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// ইনভয়েস সার্চ (GET /api/returns/find-sale?query=...&shopId=...)
+// ইনভয়েস সার্চ
+// GET /api/returns/find-sale?query=...&shopId=...
 router.get("/find-sale", protect, findSaleForReturn);
+// GET /api/returns/find-purchase?query=...&shopId=...
+router.get("/find-purchase", protect, findPurchaseForReturn);
 
 // কাস্টমার রিটার্ন রাউটস
 router.post("/customer", protect, createCustomerReturn);

@@ -41,7 +41,7 @@ export const findSaleForReturn = async (req, res) => {
 };
 
 // =================================================================
-// ২. কাস্টমার রিটার্ন তৈরি (Create Customer Return)
+// ২. কাস্টমার রিটার্ন তৈরি (Create Customer Return) — অপরিবর্তিত
 // =================================================================
 export const createCustomerReturn = async (req, res) => {
   try {
@@ -269,14 +269,104 @@ export const createCustomerReturn = async (req, res) => {
 };
 
 // =================================================================
-// ৩. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return) — অপরিবর্তিত
+// ৩. সাপ্লায়ার রিটার্ন (ইনভয়েস খোঁজা + ডেবিট নোট তৈরি)
+// =================================================================
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+// একটা পারচেজ ইনভয়েস থেকে প্রতিটা প্রোডাক্ট আগে কতটা ফেরত গেছে
+const getReturnedQtyMap = async (db, purchaseId) => {
+  const rows = await db.purchaseReturnItem.groupBy({
+    by: ["productId"],
+    where: { purchaseReturn: { purchaseId: Number(purchaseId) } },
+    _sum: { quantity: true }
+  });
+  const map = {};
+  rows.forEach((r) => {
+    map[r.productId] = r._sum.quantity || 0;
+  });
+  return map;
+};
+
+// ইনভয়েসের আইটেম প্রোডাক্ট অনুযায়ী যোগ করা (একই প্রোডাক্ট দুইবার থাকলে এক করে)
+const aggregatePurchasedItems = (purchaseItems = []) => {
+  const agg = {};
+  for (const pi of purchaseItems) {
+    if (!pi.productId) continue;
+    if (!agg[pi.productId]) {
+      agg[pi.productId] = {
+        productId: pi.productId,
+        name: pi.product?.name || pi.productName || `Product #${pi.productId}`,
+        purchasedQty: 0,
+        totalCost: 0,
+        mainStock: pi.product?.quantity ?? 0,
+        damagedStock: pi.product?.damagedQuantity ?? 0
+      };
+    }
+    agg[pi.productId].purchasedQty += Number(pi.quantity);
+    agg[pi.productId].totalCost += Number(pi.totalPrice);
+  }
+  return agg;
+};
+
+// =================================================================
+// ১. পারচেজ ইনভয়েস খোঁজা (Find Purchase Invoice for Return)
+// GET /returns/find-purchase?query=INV-xxx&shopId=1
+// =================================================================
+export const findPurchaseForReturn = async (req, res) => {
+  try {
+    const { query, shopId } = req.query;
+
+    if (!query || !shopId) {
+      return res.status(400).json({ success: false, message: "Query এবং Shop ID প্রয়োজন।" });
+    }
+
+    const purchase = await prisma.purchase.findFirst({
+      where: {
+        shopId: Number(shopId),
+        invoiceNo: { equals: query.trim(), mode: "insensitive" }
+      },
+      include: {
+        supplier: true,
+        purchaseItems: { include: { product: true } }
+      }
+    });
+
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: "কোনো ক্রয় ইনভয়েস পাওয়া যায়নি।" });
+    }
+
+    const returnedMap = await getReturnedQtyMap(prisma, purchase.id);
+    const aggregated = aggregatePurchasedItems(purchase.purchaseItems);
+
+    const returnableItems = Object.values(aggregated).map((a) => {
+      const returnedQty = returnedMap[a.productId] || 0;
+      return {
+        productId: a.productId,
+        name: a.name,
+        purchasedQty: a.purchasedQty,
+        returnedQty,
+        returnableQty: Math.max(0, a.purchasedQty - returnedQty),
+        unitCost: a.purchasedQty > 0 ? round2(a.totalCost / a.purchasedQty) : 0,
+        mainStock: a.mainStock,
+        damagedStock: a.damagedStock
+      };
+    });
+
+    return res.status(200).json({ success: true, data: { ...purchase, returnableItems } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// =================================================================
+// ২. সাপ্লায়ার রিটার্ন তৈরি (Create Purchase Return)
 // =================================================================
 export const createPurchaseReturn = async (req, res) => {
   try {
     const {
       shopId,
-      supplierId,
       purchaseId,
+      accountId,
       items,
       settlementType,
       reason,
@@ -288,118 +378,234 @@ export const createPurchaseReturn = async (req, res) => {
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: "কমপক্ষে একটি পণ্য নির্বাচন করুন।" });
     }
+    if (!["REDUCE_PAYABLE", "CASH_REFUND"].includes(settlementType)) {
+      return res.status(400).json({ success: false, message: "সেটেলমেন্ট পদ্ধতি সঠিক নয়।" });
+    }
+    if (!purchaseId) {
+      return res.status(400).json({ success: false, message: "ক্রয় ইনভয়েস নির্বাচন করুন।" });
+    }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitCost)), 0);
-      const debitNoteNo = `DN-${Date.now().toString().slice(-6)}`;
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // ---------- ১. ইনভয়েস লোড ও ভ্যালিডেশন ----------
+        const purchase = await tx.purchase.findFirst({
+          where: { id: Number(purchaseId), shopId: Number(shopId) },
+          include: { purchaseItems: { include: { product: true } } }
+        });
+        if (!purchase) throw new Error("মূল ক্রয় ইনভয়েস পাওয়া যায়নি।");
 
-      const purchaseReturn = await tx.purchaseReturn.create({
-        data: {
-          debitNoteNo,
-          shopId: Number(shopId),
-          supplierId: Number(supplierId),
-          purchaseId: purchaseId ? Number(purchaseId) : null,
-          createdById: Number(createdById),
-          totalAmount,
-          settlementType,
-          reason,
-          notes,
-          items: {
-            create: items.map(item => ({
-              productId: Number(item.productId),
-              quantity: Number(item.quantity),
-              unitCost: Number(item.unitCost),
-              totalCost: Number(item.quantity) * Number(item.unitCost),
-              sourceLocation: item.sourceLocation || "MAIN"
-            }))
-          }
-        },
-        include: { items: true }
-      });
+        const purchasedMap = aggregatePurchasedItems(purchase.purchaseItems);
+        const returnedMap = await getReturnedQtyMap(tx, purchase.id);
 
-      for (const item of items) {
-        const prodId = Number(item.productId);
-        const qty = Number(item.quantity);
+        // ক্লায়েন্টের দেওয়া দাম বিশ্বাস না করে ইনভয়েস থেকেই দাম নেওয়া হচ্ছে
+        const requestedPerProduct = {};
+        const cleanItems = items.map((item) => {
+          const productId = Number(item.productId);
+          const quantity = Number(item.quantity);
 
-        const product = await tx.product.findUnique({ where: { id: prodId } });
-        if (!product) throw new Error(`প্রোডাক্ট পাওয়া যায়নি: ID ${prodId}`);
+          if (!(quantity > 0)) throw new Error("ফেরত সংখ্যা ০-এর বেশি হতে হবে।");
 
-        if (item.sourceLocation === "DAMAGED") {
-          if (product.damagedQuantity < qty) {
-            throw new Error(`${product.name}-এর পর্যাপ্ত ড্যামেজ স্টক নেই।`);
+          const p = purchasedMap[productId];
+          if (!p) throw new Error("নির্বাচিত পণ্য এই ইনভয়েসে নেই।");
+
+          requestedPerProduct[productId] = (requestedPerProduct[productId] || 0) + quantity;
+          const returnable = p.purchasedQty - (returnedMap[productId] || 0);
+
+          if (requestedPerProduct[productId] > returnable) {
+            throw new Error(`"${p.name}"-এর সর্বোচ্চ ফেরতযোগ্য সংখ্যা ${returnable}।`);
           }
 
-          await tx.product.update({
-            where: { id: prodId },
-            data: { damagedQuantity: { decrement: qty } }
-          });
-        } else {
-          if (product.quantity < qty) {
-            throw new Error(`${product.name}-এর পর্যাপ্ত স্টক নেই।`);
-          }
+          return {
+            productId,
+            quantity,
+            unitCost: round2(p.totalCost / p.purchasedQty),
+            sourceLocation: item.sourceLocation === "DAMAGED" ? "DAMAGED" : "MAIN"
+          };
+        });
 
-          await tx.product.update({
-            where: { id: prodId },
-            data: { quantity: { decrement: qty } }
-          });
+        const totalAmount = round2(
+          cleanItems.reduce((sum, i) => sum + i.quantity * i.unitCost, 0)
+        );
 
-          let qtyToDeduct = qty;
-
-          // 👇 FIX: LIFO ("desc") থেকে FIFO ("asc")-এ বদলানো হলো, sale controller-এর সাথে সামঞ্জস্যের জন্য
-          const layers = await tx.inventoryLayer.findMany({
-            where: { productId: prodId, remainingQty: { gt: 0 } },
-            orderBy: { createdAt: "asc" }
-          });
-
-          for (const layer of layers) {
-            if (qtyToDeduct <= 0) break;
-            const take = Math.min(layer.remainingQty, qtyToDeduct);
-            await tx.inventoryLayer.update({
-              where: { id: layer.id },
-              data: { remainingQty: { decrement: take } }
-            });
-            qtyToDeduct -= take;
-          }
-
-          // 👇 sale controller-এর মতো একই সেফটি-নেট: layer আর quantity সিঙ্কে না থাকলে silently এগিয়ে না গিয়ে থামা
-          if (qtyToDeduct > 0) {
-            throw new Error(
-              `"${product.name}" প্রোডাক্টের ইনভেন্টরি লেয়ারে পর্যাপ্ত স্টক নেই (ডেটা সিঙ্ক সমস্যা)। অনুগ্রহ করে স্টক এডজাস্ট করে আবার চেষ্টা করুন।`
-            );
-          }
-
-          await tx.stockLog.create({
-            data: {
-              productId: prodId,
-              userId: Number(createdById),
-              changeType: "RETURN_OUTWARD",
-              quantityChanged: qty,
-              previousStock: product.quantity,
-              newStock: product.quantity - qty,
-              note: `Supplier Return Debit Note #${debitNoteNo}`
-            }
-          });
+        // ---------- ২. সেটেলমেন্ট ভ্যালিডেশন ----------
+        if (settlementType === "REDUCE_PAYABLE" && totalAmount > purchase.due_amount + 0.001) {
+          throw new Error(
+            `রিটার্ন মূল্য (৳${totalAmount}) ইনভয়েসের বকেয়া (৳${purchase.due_amount})-এর চেয়ে বেশি। Cash Refund বেছে নিন।`
+          );
         }
-      }
 
-      if (settlementType === "REDUCE_PAYABLE") {
-        if (purchaseId) {
-          const purchase = await tx.purchase.findUnique({ where: { id: Number(purchaseId) } });
-          if (purchase && purchase.due_amount > 0) {
-            const newDue = Math.max(0, purchase.due_amount - totalAmount);
-            await tx.purchase.update({
-              where: { id: Number(purchaseId) },
+        if (settlementType === "CASH_REFUND") {
+          const prevCash = await tx.purchaseReturn.aggregate({
+            where: { purchaseId: purchase.id, settlementType: "CASH_REFUND" },
+            _sum: { totalAmount: true }
+          });
+          const refundable = purchase.paid_amount - (prevCash._sum.totalAmount || 0);
+          if (totalAmount > refundable + 0.001) {
+            throw new Error(`নগদ ফেরতযোগ্য সর্বোচ্চ পরিমাণ ৳${Math.max(0, round2(refundable))} (পরিশোধিত টাকার মধ্যে)।`);
+          }
+        }
+
+        // ---------- ৩. ডেবিট নোট তৈরি ----------
+        const debitNoteNo = `DN-${Date.now().toString().slice(-6)}`;
+
+        const purchaseReturn = await tx.purchaseReturn.create({
+          data: {
+            debitNoteNo,
+            shopId: Number(shopId),
+            supplierId: purchase.supplier_id,
+            purchaseId: purchase.id,
+            createdById: Number(createdById),
+            totalAmount,
+            settlementType,
+            reason,
+            notes,
+            items: {
+              create: cleanItems.map((i) => ({
+                productId: i.productId,
+                quantity: i.quantity,
+                unitCost: i.unitCost,
+                totalCost: round2(i.quantity * i.unitCost),
+                sourceLocation: i.sourceLocation
+              }))
+            }
+          },
+          include: { items: true }
+        });
+
+        // ---------- ৪. স্টক ও ইনভেন্টরি লেয়ার আপডেট ----------
+        for (const item of cleanItems) {
+          const { productId, quantity: qty } = item;
+
+          const product = await tx.product.findUnique({ where: { id: productId } });
+          if (!product) throw new Error(`প্রোডাক্ট পাওয়া যায়নি: ID ${productId}`);
+
+          if (item.sourceLocation === "DAMAGED") {
+            if (product.damagedQuantity < qty) {
+              throw new Error(`${product.name}-এর পর্যাপ্ত ড্যামেজ স্টক নেই।`);
+            }
+
+            const updated = await tx.product.update({
+              where: { id: productId },
+              data: { damagedQuantity: { decrement: qty } }
+            });
+
+            await tx.stockLog.create({
               data: {
-                due_amount: newDue,
-                payment_status: newDue === 0 ? "Paid" : "Partial"
+                productId,
+                userId: Number(createdById),
+                changeType: "RETURN_OUTWARD",
+                quantityChanged: qty,
+                previousStock: product.damagedQuantity,
+                newStock: updated.damagedQuantity,
+                note: `Supplier Return Debit Note #${debitNoteNo} (Damaged Stock)`
+              }
+            });
+          } else {
+            if (product.quantity < qty) {
+              throw new Error(`${product.name}-এর পর্যাপ্ত স্টক নেই।`);
+            }
+
+            const updated = await tx.product.update({
+              where: { id: productId },
+              data: { quantity: { decrement: qty } }
+            });
+
+            // এই ইনভয়েসের নিজের লেয়ার আগে কাটা হবে, তারপর বাকিগুলো FIFO-তে
+            const layers = await tx.inventoryLayer.findMany({
+              where: { productId, remainingQty: { gt: 0 } },
+              orderBy: { createdAt: "asc" }
+            });
+            layers.sort(
+              (a, b) => (b.purchaseId === purchase.id ? 1 : 0) - (a.purchaseId === purchase.id ? 1 : 0)
+            );
+
+            let qtyToDeduct = qty;
+            for (const layer of layers) {
+              if (qtyToDeduct <= 0) break;
+              const take = Math.min(layer.remainingQty, qtyToDeduct);
+              await tx.inventoryLayer.update({
+                where: { id: layer.id },
+                data: { remainingQty: { decrement: take } }
+              });
+              qtyToDeduct -= take;
+            }
+
+            if (qtyToDeduct > 0) {
+              throw new Error(
+                `"${product.name}" প্রোডাক্টের ইনভেন্টরি লেয়ারে পর্যাপ্ত স্টক নেই (ডেটা সিঙ্ক সমস্যা)। অনুগ্রহ করে স্টক এডজাস্ট করে আবার চেষ্টা করুন।`
+              );
+            }
+
+            await tx.stockLog.create({
+              data: {
+                productId,
+                userId: Number(createdById),
+                changeType: "RETURN_OUTWARD",
+                quantityChanged: qty,
+                previousStock: product.quantity,
+                newStock: updated.quantity,
+                note: `Supplier Return Debit Note #${debitNoteNo}`
               }
             });
           }
         }
-      }
 
-      return purchaseReturn;
-    });
+        // ---------- ৫. হিসাব নিষ্পত্তি ----------
+        if (settlementType === "REDUCE_PAYABLE") {
+          const newDue = Math.max(0, round2(purchase.due_amount - totalAmount));
+          await tx.purchase.update({
+            where: { id: purchase.id },
+            data: {
+              due_amount: newDue,
+              payment_status: newDue === 0 ? "Paid" : purchase.paid_amount > 0 ? "Partial" : "Due"
+            }
+          });
+        }
+
+        if (settlementType === "CASH_REFUND" && totalAmount > 0) {
+          let account = null;
+
+          if (accountId) {
+            account = await tx.account.findFirst({
+              where: { id: Number(accountId), shopId: Number(shopId) }
+            });
+          }
+          if (!account) {
+            account =
+              (await tx.account.findFirst({
+                where: { shopId: Number(shopId), type: "CASH", isDefault: true }
+              })) || (await tx.account.findFirst({ where: { shopId: Number(shopId) } }));
+          }
+          if (!account) throw new Error("রিফান্ড গ্রহণের জন্য কোনো অ্যাকাউন্ট পাওয়া যায়নি।");
+
+          // সাপ্লায়ার টাকা ফেরত দিচ্ছে → অ্যাকাউন্টে জমা (IN)
+          await tx.account.update({
+            where: { id: account.id },
+            data: { balance: { increment: totalAmount } }
+          });
+
+          await tx.transaction.create({
+            data: {
+              shopId: Number(shopId),
+              accountId: account.id,
+              type: "IN",
+              amount: totalAmount,
+              category: "PURCHASE_RETURN",
+              referenceId: purchaseReturn.id,
+              note: `Refund from Supplier - Debit Note: ${debitNoteNo}`,
+              date: new Date().toISOString().split("T")[0],
+              createdById: Number(createdById)
+            }
+          });
+        }
+
+        return purchaseReturn;
+      },
+      {
+        maxWait: 5000,
+        timeout: 20000
+      }
+    );
 
     return res.status(201).json({
       success: true,

@@ -245,9 +245,9 @@ const ShopDashboard = () => {
                 নিট বিক্রি (Net Sales)
               </p>
               <h3 className="text-3xl font-extrabold text-slate-900 mt-2">
-                ৳ {salesData?.totalSales ? salesData.totalSales.toLocaleString() : 0}
+                ৳ {salesData?.cashSales?.toLocaleString() || 0}
               </h3>
-              <div className="flex flex-wrap items-center gap-2 mt-3">
+             {/* <div className="flex flex-wrap items-center gap-2 mt-3">
                 <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">
                   গ্রস: ৳ {salesData?.cashSales?.toLocaleString() || 0}
                 </span>
@@ -257,6 +257,7 @@ const ShopDashboard = () => {
                   </span>
                 )}
               </div>
+              */}
             </div>
             <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
               <ShoppingBag size={26} />
