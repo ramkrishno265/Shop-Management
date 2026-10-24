@@ -270,7 +270,6 @@ export const createProduct = async (req, res) => {
   }
 };
 
-// ৩. Delete Product
 // ৩. Delete Product (Single) — Updated
 export const deleteProduct = async (req, res) => {
   try {
@@ -601,7 +600,18 @@ export const bulkImportProducts = async (req, res) => {
         }
 
         const productName = String(item.name).trim();
-        const inventoryType = item.inventoryType === 'pack' ? 'pack' : 'standard';
+
+        // 🛑 inventoryType ভ্যালিডেশন (অবশ্যই 'standard' অথবা 'pack' হতে হবে)
+        const rawType = item.inventoryType ? String(item.inventoryType).trim().toLowerCase() : '';
+        if (rawType !== 'standard' && rawType !== 'pack') {
+          failedProducts.push({
+            item: item.name,
+            reason: "Invalid inventory type. Inventory type must be either 'standard' or 'pack'."
+          });
+          continue;
+        }
+
+        const inventoryType = rawType;
         const baseUnit = item.baseUnit ? String(item.baseUnit).trim() : 'Pcs';
         const brandValue = item.brand && String(item.brand).trim() !== "" ? String(item.brand).trim() : null;
 
@@ -643,7 +653,7 @@ export const bulkImportProducts = async (req, res) => {
           }
         }
 
-        // ৩. SKU হ্যান্ডলিং — SKU দেওয়া না থাকলে auto-generate, দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
+        // ৩. SKU হ্যান্ডলিং — SKU দেওয়া না থাকলে auto-generate, দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
         let skuValue = item.sku !== undefined && item.sku !== null && String(item.sku).trim() !== ""
           ? String(item.sku).trim()
           : null;
@@ -661,7 +671,7 @@ export const bulkImportProducts = async (req, res) => {
           }
         }
 
-        // বারকোড হ্যান্ডলিং — বারকোড দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
+        // বারকোড হ্যান্ডলিং — বারকোড দেওয়া থাকলে ও duplicate হলে PRODUCT ব্লক
         let barcodeValue = null;
         if (item.barcode !== undefined && item.barcode !== null && String(item.barcode).trim() !== "") {
           const rawBarcode = String(item.barcode).trim();
@@ -736,38 +746,34 @@ export const bulkImportProducts = async (req, res) => {
             });
           }
 
-          // 👇 এই অংশটাই মিসিং ছিল — createProduct-এর মতো InventoryLayer তৈরি করা
-          if (quantity > 0) {
-            if (inventoryType === 'standard') {
+          // ইনভেন্টরি লেয়ার তৈরি
+          if (inventoryType === 'standard') {
+            await tx.inventoryLayer.create({
+              data: {
+                shopId: finalShopId,
+                productId: newProduct.id,
+                initialQty: quantity,
+                remainingQty: quantity,
+                unitCost: purchasePrice
+              }
+            });
+          } else if (inventoryType === 'pack' && parsedPacks.length > 0) {
+            for (const pack of parsedPacks) {
+              const packStock = parseFloat(pack.stock) || 0;
+              const multiplier = parseFloat(pack.multiplier) || 1;
+              const totalBaseUnits = packStock * multiplier;
+              const packPurchasePrice = parseFloat(pack.purchasePrice) || 0;
+              const unitCostPerBase = multiplier > 0 ? (packPurchasePrice / multiplier) : packPurchasePrice;
+
               await tx.inventoryLayer.create({
                 data: {
                   shopId: finalShopId,
                   productId: newProduct.id,
-                  initialQty: quantity,
-                  remainingQty: quantity,
-                  unitCost: purchasePrice
+                  initialQty: totalBaseUnits,
+                  remainingQty: totalBaseUnits,
+                  unitCost: unitCostPerBase
                 }
               });
-            } else if (inventoryType === 'pack' && parsedPacks.length > 0) {
-              for (const pack of parsedPacks) {
-                const packStock = parseFloat(pack.stock) || 0;
-                const multiplier = parseFloat(pack.multiplier) || 1;
-                const totalBaseUnits = packStock * multiplier;
-                const packPurchasePrice = parseFloat(pack.purchasePrice) || 0;
-                const unitCostPerBase = multiplier > 0 ? (packPurchasePrice / multiplier) : packPurchasePrice;
-
-                if (totalBaseUnits > 0) {
-                  await tx.inventoryLayer.create({
-                    data: {
-                      shopId: finalShopId,
-                      productId: newProduct.id,
-                      initialQty: totalBaseUnits,
-                      remainingQty: totalBaseUnits,
-                      unitCost: unitCostPerBase
-                    }
-                  });
-                }
-              }
             }
           }
         });
